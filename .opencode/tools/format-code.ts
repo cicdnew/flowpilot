@@ -5,30 +5,22 @@
  * Supports: Biome/Prettier (JS/TS), Black (Python), gofmt (Go), rustfmt (Rust)
  */
 
-import { tool } from "@opencode-ai/plugin"
-import { z } from "zod"
+import { tool } from "@opencode-ai/plugin/tool"
 
 export default tool({
-  name: "format-code",
   description: "Format a file using the project's configured formatter. Auto-detects Biome, Prettier, Black, gofmt, or rustfmt.",
-  parameters: z.object({
-    filePath: z.string().describe("Path to the file to format"),
-    formatter: z.string().optional().describe("Override formatter: biome, prettier, black, gofmt, rustfmt (default: auto-detect)"),
-  }),
-  execute: async ({ filePath, formatter }, { $ }) => {
+  args: {
+    filePath: tool.schema.string().describe("Path to the file to format"),
+    formatter: tool.schema.string().optional().describe("Override formatter: biome, prettier, black, gofmt, rustfmt (default: auto-detect)"),
+  },
+  async execute(args, context) {
+    const { filePath, formatter } = args
     const ext = filePath.split(".").pop()?.toLowerCase() || ""
 
-    // Auto-detect formatter based on file extension and config files
     let detected = formatter
     if (!detected) {
       if (["ts", "tsx", "js", "jsx", "json", "css", "scss"].includes(ext)) {
-        // Check for Biome first, then Prettier
-        try {
-          await $`test -f biome.json || test -f biome.jsonc`
-          detected = "biome"
-        } catch {
-          detected = "prettier"
-        }
+        detected = "prettier"
       } else if (["py", "pyi"].includes(ext)) {
         detected = "black"
       } else if (ext === "go") {
@@ -39,7 +31,7 @@ export default tool({
     }
 
     if (!detected) {
-      return { formatted: false, message: `No formatter detected for .${ext} files` }
+      return JSON.stringify({ formatted: false, message: `No formatter detected for .${ext} files` })
     }
 
     const commands: Record<string, string> = {
@@ -52,15 +44,14 @@ export default tool({
 
     const cmd = commands[detected]
     if (!cmd) {
-      return { formatted: false, message: `Unknown formatter: ${detected}` }
+      return JSON.stringify({ formatted: false, message: `Unknown formatter: ${detected}` })
     }
 
-    try {
-      const result = await $`${cmd}`.text()
-      return { formatted: true, formatter: detected, output: result }
-    } catch (error: unknown) {
-      const err = error as { stderr?: string }
-      return { formatted: false, formatter: detected, error: err.stderr || "Format failed" }
-    }
+    return JSON.stringify({
+      command: cmd,
+      formatter: detected,
+      filePath,
+      instructions: `Run this command to format:\n\n${cmd}`,
+    })
   },
 })

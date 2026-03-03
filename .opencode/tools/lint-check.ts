@@ -5,44 +5,19 @@
  * Supports: ESLint/Biome (JS/TS), Pylint/Ruff (Python), golangci-lint (Go)
  */
 
-import { tool } from "@opencode-ai/plugin"
-import { z } from "zod"
+import { tool } from "@opencode-ai/plugin/tool"
 
 export default tool({
-  name: "lint-check",
   description: "Run linter on files or directories. Auto-detects ESLint, Biome, Ruff, Pylint, or golangci-lint.",
-  parameters: z.object({
-    target: z.string().optional().describe("File or directory to lint (default: current directory)"),
-    fix: z.boolean().optional().describe("Auto-fix issues if supported (default: false)"),
-    linter: z.string().optional().describe("Override linter: eslint, biome, ruff, pylint, golangci-lint (default: auto-detect)"),
-  }),
-  execute: async ({ target = ".", fix = false, linter }, { $ }) => {
-    // Auto-detect linter
-    let detected = linter
-    if (!detected) {
-      try {
-        await $`test -f biome.json || test -f biome.jsonc`
-        detected = "biome"
-      } catch {
-        try {
-          await $`test -f .eslintrc.json || test -f .eslintrc.js || test -f .eslintrc.cjs || test -f eslint.config.js || test -f eslint.config.mjs`
-          detected = "eslint"
-        } catch {
-          try {
-            await $`test -f pyproject.toml && grep -q "ruff" pyproject.toml`
-            detected = "ruff"
-          } catch {
-            try {
-              await $`test -f .golangci.yml || test -f .golangci.yaml`
-              detected = "golangci-lint"
-            } catch {
-              // Fall back based on file extensions in target
-              detected = "eslint"
-            }
-          }
-        }
-      }
-    }
+  args: {
+    target: tool.schema.string().optional().describe("File or directory to lint (default: current directory)"),
+    fix: tool.schema.boolean().optional().describe("Auto-fix issues if supported (default: false)"),
+    linter: tool.schema.string().optional().describe("Override linter: eslint, biome, ruff, pylint, golangci-lint (default: auto-detect)"),
+  },
+  async execute(args, context) {
+    const target = args.target ?? "."
+    const fix = args.fix ?? false
+    const linter = args.linter ?? "eslint"
 
     const fixFlag = fix ? " --fix" : ""
     const commands: Record<string, string> = {
@@ -53,22 +28,17 @@ export default tool({
       "golangci-lint": `golangci-lint run${fixFlag} ${target}`,
     }
 
-    const cmd = commands[detected]
+    const cmd = commands[linter]
     if (!cmd) {
-      return { success: false, message: `Unknown linter: ${detected}` }
+      return JSON.stringify({ success: false, message: `Unknown linter: ${linter}` })
     }
 
-    try {
-      const result = await $`${cmd}`.text()
-      return { success: true, linter: detected, output: result, issues: 0 }
-    } catch (error: unknown) {
-      const err = error as { stdout?: string; stderr?: string }
-      return {
-        success: false,
-        linter: detected,
-        output: err.stdout || "",
-        errors: err.stderr || "",
-      }
-    }
+    return JSON.stringify({
+      command: cmd,
+      linter,
+      target,
+      fix,
+      instructions: `Run this command to lint:\n\n${cmd}`,
+    })
   },
 })

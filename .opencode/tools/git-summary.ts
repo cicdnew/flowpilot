@@ -5,52 +5,34 @@
  * recent log, and diff against base branch.
  */
 
-import { tool } from "@opencode-ai/plugin"
-import { z } from "zod"
+import { tool } from "@opencode-ai/plugin/tool"
 
 export default tool({
-  name: "git-summary",
   description: "Get comprehensive git summary: branch, status, recent log, and diff against base branch.",
-  parameters: z.object({
-    depth: z.number().optional().describe("Number of recent commits to show (default: 5)"),
-    includeDiff: z.boolean().optional().describe("Include diff against base branch (default: true)"),
-    baseBranch: z.string().optional().describe("Base branch for comparison (default: main)"),
-  }),
-  execute: async ({ depth = 5, includeDiff = true, baseBranch = "main" }, { $ }) => {
-    const results: Record<string, string> = {}
+  args: {
+    depth: tool.schema.number().optional().describe("Number of recent commits to show (default: 5)"),
+    includeDiff: tool.schema.boolean().optional().describe("Include diff against base branch (default: true)"),
+    baseBranch: tool.schema.string().optional().describe("Base branch for comparison (default: main)"),
+  },
+  async execute(args, context) {
+    const depth = args.depth ?? 5
+    const includeDiff = args.includeDiff ?? true
+    const baseBranch = args.baseBranch ?? "main"
 
-    try {
-      results.branch = (await $`git branch --show-current`.text()).trim()
-    } catch {
-      results.branch = "unknown"
-    }
-
-    try {
-      results.status = (await $`git status --short`.text()).trim()
-    } catch {
-      results.status = "unable to get status"
-    }
-
-    try {
-      results.log = (await $`git log --oneline -${depth}`.text()).trim()
-    } catch {
-      results.log = "unable to get log"
-    }
+    const commands: string[] = [
+      `git branch --show-current`,
+      `git status --short`,
+      `git log --oneline -${depth}`,
+    ]
 
     if (includeDiff) {
-      try {
-        results.stagedDiff = (await $`git diff --cached --stat`.text()).trim()
-      } catch {
-        results.stagedDiff = ""
-      }
-
-      try {
-        results.branchDiff = (await $`git diff ${baseBranch}...HEAD --stat`.text()).trim()
-      } catch {
-        results.branchDiff = `unable to diff against ${baseBranch}`
-      }
+      commands.push(`git diff --cached --stat`)
+      commands.push(`git diff ${baseBranch}...HEAD --stat`)
     }
 
-    return results
+    return JSON.stringify({
+      commands,
+      instructions: `Run these git commands to get a comprehensive summary:\n\n${commands.join("\n")}`,
+    })
   },
 })

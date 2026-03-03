@@ -334,7 +334,7 @@
     },
     "cocoindex-code": {
       "type": "local",
-      "command": ["cocoindex-code"]
+      "command": ["/root/.local/bin/uvx", "--prerelease=allow", "cocoindex-code", "serve"]
     }
   },
   "permission": {

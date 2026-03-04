@@ -10,10 +10,12 @@ import (
 	"time"
 
 	"web-automation/internal/browser"
+	"web-automation/internal/crypto"
 	"web-automation/internal/database"
 	"web-automation/internal/models"
 	"web-automation/internal/proxy"
 	"web-automation/internal/queue"
+	"web-automation/internal/validation"
 
 	"github.com/google/uuid"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -50,6 +52,12 @@ func (a *App) startup(ctx context.Context) {
 		return
 	}
 
+	// Initialize encryption key
+	if err := crypto.InitKey(a.dataDir); err != nil {
+		wailsRuntime.LogFatalf(ctx, "Failed to init encryption: %v", err)
+		return
+	}
+
 	// Initialize database
 	dbPath := filepath.Join(a.dataDir, "tasks.db")
 	db, err := database.New(dbPath)
@@ -80,6 +88,7 @@ func (a *App) startup(ctx context.Context) {
 	a.queue = queue.New(db, runner, 100, func(event models.TaskEvent) {
 		wailsRuntime.EventsEmit(ctx, "task:event", event)
 	})
+	a.queue.SetProxyManager(a.proxyManager)
 
 	wailsRuntime.LogInfo(ctx, "Application started successfully")
 }
@@ -100,7 +109,11 @@ func (a *App) shutdown(ctx context.Context) {
 // --- Task API (bound to frontend) ---
 
 // CreateTask creates a new task and optionally starts it.
-func (a *App) CreateTask(name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority int, autoStart bool) (*models.Task, error) {
+func (a *App) CreateTask(name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority int, autoStart bool, tags []string) (*models.Task, error) {
+	if err := validation.ValidateTask(name, url, steps, models.TaskPriority(priority), false); err != nil {
+		return nil, fmt.Errorf("create task: %w", err)
+	}
+
 	task := models.Task{
 		ID:         uuid.New().String(),
 		Name:       name,
@@ -110,6 +123,7 @@ func (a *App) CreateTask(name, url string, steps []models.TaskStep, proxyConfig 
 		Priority:   models.TaskPriority(priority),
 		Status:     models.TaskStatusPending,
 		MaxRetries: 3,
+		Tags:       tags,
 		CreatedAt:  time.Now(),
 	}
 
@@ -164,8 +178,61 @@ func (a *App) CancelTask(id string) error {
 	return a.queue.Cancel(id)
 }
 
-// DeleteTask deletes a task.
+// UpdateTask updates an existing pending/failed task.
+func (a *App) UpdateTask(id, name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority int) error {
+	if err := validation.ValidateTask(name, url, steps, models.TaskPriority(priority), false); err != nil {
+		return fmt.Errorf("update task: %w", err)
+	}
+	return a.db.UpdateTask(id, name, url, steps, proxyConfig, models.TaskPriority(priority))
+}
+
+// CreateBatch creates multiple tasks at once. Validates all before creating any.
+func (a *App) CreateBatch(inputs []struct {
+	Name     string             `json:"name"`
+	URL      string             `json:"url"`
+	Steps    []models.TaskStep  `json:"steps"`
+	Proxy    models.ProxyConfig `json:"proxy"`
+	Priority int                `json:"priority"`
+}, autoStart bool) ([]models.Task, error) {
+	for i, input := range inputs {
+		if err := validation.ValidateTask(input.Name, input.URL, input.Steps, models.TaskPriority(input.Priority), false); err != nil {
+			return nil, fmt.Errorf("task %d: %w", i, err)
+		}
+	}
+
+	var created []models.Task
+	for _, input := range inputs {
+		task := models.Task{
+			ID:         uuid.New().String(),
+			Name:       input.Name,
+			URL:        input.URL,
+			Steps:      input.Steps,
+			Proxy:      input.Proxy,
+			Priority:   models.TaskPriority(input.Priority),
+			Status:     models.TaskStatusPending,
+			MaxRetries: 3,
+			CreatedAt:  time.Now(),
+		}
+		if err := a.db.CreateTask(task); err != nil {
+			return created, fmt.Errorf("create task %d: %w", len(created), err)
+		}
+		created = append(created, task)
+	}
+
+	if autoStart && a.queue != nil {
+		if err := a.queue.SubmitBatch(a.ctx, created); err != nil {
+			return created, fmt.Errorf("submit batch: %w", err)
+		}
+	}
+
+	return created, nil
+}
+
+// DeleteTask cancels a running task (if any) and deletes it.
 func (a *App) DeleteTask(id string) error {
+	if a.queue != nil {
+		_ = a.queue.Cancel(id)
+	}
 	return a.db.DeleteTask(id)
 }
 
@@ -183,6 +250,10 @@ func (a *App) GetRunningCount() int {
 
 // AddProxy adds a proxy to the pool.
 func (a *App) AddProxy(server, protocol, username, password, geo string) (*models.Proxy, error) {
+	if err := validation.ValidateProxy(server, models.ProxyProtocol(protocol)); err != nil {
+		return nil, fmt.Errorf("add proxy: %w", err)
+	}
+
 	p := models.Proxy{
 		ID:        uuid.New().String(),
 		Server:    server,
@@ -246,7 +317,6 @@ func (a *App) ExportResultsCSV() (string, error) {
 	defer file.Close()
 
 	writer := csv.NewWriter(file)
-	defer writer.Flush()
 
 	if err := writer.Write([]string{"ID", "Name", "URL", "Status", "Error", "Duration", "CreatedAt", "CompletedAt"}); err != nil {
 		return "", fmt.Errorf("write CSV header: %w", err)
@@ -267,6 +337,11 @@ func (a *App) ExportResultsCSV() (string, error) {
 		}); err != nil {
 			return "", fmt.Errorf("write CSV row: %w", err)
 		}
+	}
+
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return "", fmt.Errorf("flush CSV writer: %w", err)
 	}
 
 	return exportPath, nil

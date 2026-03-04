@@ -8,7 +8,7 @@
   const interval = setInterval(async () => {
     try {
       runningCount = await GetRunningCount();
-    } catch {}
+    } catch (_) { /* polling failure is non-critical */ }
   }, 2000);
 
   import { onDestroy } from 'svelte';

@@ -6,24 +6,32 @@
 
   const dispatch = createEventDispatcher();
 
+  let actionError = '';
+
   function selectTask(task: Task) {
     selectedTaskId.set(task.id);
   }
 
+  function clearError() {
+    actionError = '';
+  }
+
   async function startTask(id: string) {
     try {
+      clearError();
       await StartTask(id);
-    } catch (err) {
-      console.error('Failed to start task:', err);
+    } catch (err: any) {
+      actionError = `Start failed: ${err?.message || err}`;
     }
     dispatch('refresh');
   }
 
   async function cancelTask(id: string) {
     try {
+      clearError();
       await CancelTask(id);
-    } catch (err) {
-      console.error('Failed to cancel task:', err);
+    } catch (err: any) {
+      actionError = `Cancel failed: ${err?.message || err}`;
     }
     dispatch('refresh');
   }
@@ -31,9 +39,10 @@
   async function deleteTask(id: string) {
     if (!confirm('Delete this task?')) return;
     try {
+      clearError();
       await DeleteTask(id);
-    } catch (err) {
-      console.error('Failed to delete task:', err);
+    } catch (err: any) {
+      actionError = `Delete failed: ${err?.message || err}`;
     }
     dispatch('refresh');
   }
@@ -49,6 +58,9 @@
   }
 </script>
 
+{#if actionError}
+  <div class="action-error">{actionError}</div>
+{/if}
 <div class="table-container">
   <table>
     <thead>
@@ -57,6 +69,7 @@
         <th>Name</th>
         <th>URL</th>
         <th>Status</th>
+        <th>Tags</th>
         <th>Priority</th>
         <th>Retries</th>
         <th>Created</th>
@@ -74,6 +87,13 @@
           <td class="truncate text-muted" style="max-width: 250px">{task.url}</td>
           <td>
             <span class="badge badge-{task.status}">{task.status}</span>
+          </td>
+          <td>
+            <div class="tag-list">
+              {#each task.tags ?? [] as tag}
+                <span class="tag-badge">{tag}</span>
+              {/each}
+            </div>
           </td>
           <td>{task.priority}</td>
           <td>{task.retryCount}/{task.maxRetries}</td>
@@ -100,7 +120,7 @@
         </tr>
       {:else}
         <tr>
-          <td colspan="8" style="text-align: center; padding: 40px; color: var(--text-muted);">
+          <td colspan="9" style="text-align: center; padding: 40px; color: var(--text-muted);">
             No tasks found. Click "+ New Task" to get started.
           </td>
         </tr>
@@ -124,5 +144,26 @@
   }
   tbody tr {
     cursor: pointer;
+  }
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+  .tag-badge {
+    padding: 1px 6px;
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--accent);
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .action-error {
+    padding: 6px 12px;
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger, #ef4444);
+    font-size: 12px;
+    border-bottom: 1px solid rgba(239, 68, 68, 0.2);
   }
 </style>

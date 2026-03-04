@@ -6,11 +6,23 @@ import (
 	"testing"
 	"time"
 
+	"web-automation/internal/crypto"
 	"web-automation/internal/models"
 )
 
 func setupTestDB(t *testing.T) *DB {
 	t.Helper()
+
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	crypto.ResetForTest()
+	if err := crypto.InitKeyWithBytes(key); err != nil {
+		t.Fatalf("init crypto key: %v", err)
+	}
+	t.Cleanup(func() { crypto.ResetForTest() })
+
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "test.db")
 	db, err := New(dbPath)
@@ -561,5 +573,154 @@ func TestNewDatabasePermissions(t *testing.T) {
 	_, err := New(dbPath)
 	if err == nil {
 		t.Error("expected error for read-only directory")
+	}
+}
+
+func TestProxyCredentialsEncryptedAtRest(t *testing.T) {
+	db := setupTestDB(t)
+	p := makeProxy("enc-1", "proxy.example.com:8080", "US")
+	p.Username = "cleartext_user"
+	p.Password = "cleartext_pass"
+
+	if err := db.CreateProxy(p); err != nil {
+		t.Fatalf("CreateProxy: %v", err)
+	}
+
+	var rawUsername, rawPassword string
+	err := db.conn.QueryRow(`SELECT username, password FROM proxies WHERE id = ?`, "enc-1").Scan(&rawUsername, &rawPassword)
+	if err != nil {
+		t.Fatalf("raw query: %v", err)
+	}
+
+	if rawUsername == "cleartext_user" {
+		t.Error("username stored in plaintext — expected ciphertext")
+	}
+	if rawPassword == "cleartext_pass" {
+		t.Error("password stored in plaintext — expected ciphertext")
+	}
+
+	got, err := db.ListProxies()
+	if err != nil {
+		t.Fatalf("ListProxies: %v", err)
+	}
+	var found *models.Proxy
+	for i := range got {
+		if got[i].ID == "enc-1" {
+			found = &got[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("proxy not found")
+	}
+	if found.Username != "cleartext_user" {
+		t.Errorf("decrypted username: got %q, want %q", found.Username, "cleartext_user")
+	}
+	if found.Password != "cleartext_pass" {
+		t.Errorf("decrypted password: got %q, want %q", found.Password, "cleartext_pass")
+	}
+}
+
+func TestTaskProxyCredentialsEncryptedAtRest(t *testing.T) {
+	db := setupTestDB(t)
+	task := makeTask("enc-task-1", "Encrypted Task")
+	task.Proxy.Username = "task_user"
+	task.Proxy.Password = "task_pass"
+
+	if err := db.CreateTask(task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	var rawUsername, rawPassword string
+	err := db.conn.QueryRow(`SELECT proxy_username, proxy_password FROM tasks WHERE id = ?`, "enc-task-1").Scan(&rawUsername, &rawPassword)
+	if err != nil {
+		t.Fatalf("raw query: %v", err)
+	}
+
+	if rawUsername == "task_user" {
+		t.Error("proxy_username stored in plaintext — expected ciphertext")
+	}
+	if rawPassword == "task_pass" {
+		t.Error("proxy_password stored in plaintext — expected ciphertext")
+	}
+
+	got, err := db.GetTask("enc-task-1")
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Proxy.Username != "task_user" {
+		t.Errorf("decrypted proxy username: got %q, want %q", got.Proxy.Username, "task_user")
+	}
+	if got.Proxy.Password != "task_pass" {
+		t.Errorf("decrypted proxy password: got %q, want %q", got.Proxy.Password, "task_pass")
+	}
+}
+
+func TestUpdateTask(t *testing.T) {
+	db := setupTestDB(t)
+	task := makeTask("upd-1", "Original")
+	if err := db.CreateTask(task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	newSteps := []models.TaskStep{
+		{Action: models.ActionNavigate, Value: "https://updated.com"},
+	}
+	newProxy := models.ProxyConfig{Server: "new.proxy:9090", Username: "u2", Password: "p2"}
+
+	if err := db.UpdateTask("upd-1", "Updated", "https://updated.com", newSteps, newProxy, models.PriorityHigh); err != nil {
+		t.Fatalf("UpdateTask: %v", err)
+	}
+
+	got, err := db.GetTask("upd-1")
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Name != "Updated" {
+		t.Errorf("Name: got %q, want %q", got.Name, "Updated")
+	}
+	if got.URL != "https://updated.com" {
+		t.Errorf("URL: got %q, want %q", got.URL, "https://updated.com")
+	}
+	if got.Priority != models.PriorityHigh {
+		t.Errorf("Priority: got %d, want %d", got.Priority, models.PriorityHigh)
+	}
+	if len(got.Steps) != 1 || got.Steps[0].Value != "https://updated.com" {
+		t.Errorf("Steps not updated correctly: %v", got.Steps)
+	}
+	if got.Proxy.Server != "new.proxy:9090" {
+		t.Errorf("Proxy.Server: got %q, want %q", got.Proxy.Server, "new.proxy:9090")
+	}
+}
+
+func TestDeleteTaskNotFound(t *testing.T) {
+	db := setupTestDB(t)
+	err := db.DeleteTask("nonexistent-id")
+	if err == nil {
+		t.Fatal("expected error for nonexistent task ID")
+	}
+}
+
+func TestDeleteProxyNotFound(t *testing.T) {
+	db := setupTestDB(t)
+	err := db.DeleteProxy("nonexistent-id")
+	if err == nil {
+		t.Fatal("expected error for nonexistent proxy ID")
+	}
+}
+
+func TestUpdateTaskRejectsRunning(t *testing.T) {
+	db := setupTestDB(t)
+	task := makeTask("upd-run-1", "Running Task")
+	if err := db.CreateTask(task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	if err := db.UpdateTaskStatus("upd-run-1", models.TaskStatusRunning, ""); err != nil {
+		t.Fatalf("UpdateTaskStatus: %v", err)
+	}
+
+	err := db.UpdateTask("upd-run-1", "New Name", "https://x.com", nil, models.ProxyConfig{}, models.PriorityNormal)
+	if err == nil {
+		t.Fatal("expected error when updating running task")
 	}
 }

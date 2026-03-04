@@ -46,6 +46,16 @@ const (
 	RotationLowestLatency RotationStrategy = "lowest_latency"
 )
 
+// ToProxyConfig converts a pool Proxy to a task-level ProxyConfig.
+func (p *Proxy) ToProxyConfig() ProxyConfig {
+	return ProxyConfig{
+		Server:   p.Server,
+		Username: p.Username,
+		Password: p.Password,
+		Geo:      p.Geo,
+	}
+}
+
 // ProxyPoolConfig configures the proxy pool behavior.
 type ProxyPoolConfig struct {
 	Strategy            RotationStrategy `json:"strategy"`

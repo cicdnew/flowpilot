@@ -4,10 +4,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"web-automation/internal/models"
+
+	"github.com/chromedp/chromedp"
 )
 
 func TestNewRunner(t *testing.T) {
@@ -337,8 +340,7 @@ func TestCreateAllocatorWithProxy(t *testing.T) {
 func TestCreateAllocatorDoesNotMutateDefaults(t *testing.T) {
 	runner := &Runner{screenshotDir: t.TempDir()}
 
-	// Record the original default options length
-	originalLen := len(chromedpDefaultOpts())
+	originalLen := len(chromedp.DefaultExecAllocatorOptions)
 
 	ctx := context.Background()
 	for i := 0; i < 10; i++ {
@@ -348,22 +350,11 @@ func TestCreateAllocatorDoesNotMutateDefaults(t *testing.T) {
 		cancel()
 	}
 
-	// Default options should not have grown
-	if len(chromedpDefaultOpts()) != originalLen {
+	if len(chromedp.DefaultExecAllocatorOptions) != originalLen {
 		t.Errorf("DefaultExecAllocatorOptions mutated: original len %d, now %d",
-			originalLen, len(chromedpDefaultOpts()))
+			originalLen, len(chromedp.DefaultExecAllocatorOptions))
 	}
 }
-
-// chromedpDefaultOpts returns the current default options for testing.
-func chromedpDefaultOpts() []func(*chromedpAllocator) {
-	// This is a proxy to check the shared state isn't mutated.
-	// We can't directly import chromedp types, so we check the slice length.
-	return nil // placeholder - the real check is in createAllocator's copy logic
-}
-
-// chromedpAllocator is a placeholder type for testing.
-type chromedpAllocator struct{}
 
 func TestExecuteStepDispatchesCorrectly(t *testing.T) {
 	runner := &Runner{screenshotDir: t.TempDir()}
@@ -394,5 +385,99 @@ func TestExecuteStepDispatchesCorrectly(t *testing.T) {
 		if err != nil && err.Error() == "unknown action: "+string(action) {
 			t.Errorf("action %s was not dispatched correctly", action)
 		}
+	}
+}
+
+func TestSanitizeFilename(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"normal uuid", "550e8400-e29b-41d4-a716-446655440000"},
+		{"path traversal", "../../etc/cron.d/evil"},
+		{"backslash traversal", `..\..\windows\system32\evil`},
+		{"dotdot only", ".."},
+		{"slashes in middle", "foo/bar/baz"},
+		{"null byte", "task\x00id"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := sanitizeFilename(tc.input)
+			if strings.Contains(result, "/") || strings.Contains(result, "\\") || strings.Contains(result, "..") {
+				t.Errorf("sanitizeFilename(%q) = %q, still contains path components", tc.input, result)
+			}
+			if result == "" {
+				t.Errorf("sanitizeFilename(%q) returned empty string", tc.input)
+			}
+		})
+	}
+}
+
+func TestExecScreenshotPathTraversal(t *testing.T) {
+	dir := t.TempDir()
+	_ = &Runner{screenshotDir: dir}
+	result := &models.TaskResult{
+		TaskID:        "../../etc/cron.d/evil",
+		ExtractedData: make(map[string]string),
+	}
+
+	filename := sanitizeFilename(result.TaskID)
+	fullPath := filepath.Join(dir, filename+"_test.png")
+
+	if !strings.HasPrefix(fullPath, filepath.Clean(dir)+string(os.PathSeparator)) {
+		t.Fatal("sanitized path should stay within screenshot directory")
+	}
+	if strings.Contains(filename, "..") {
+		t.Errorf("sanitized filename still contains path traversal: %q", filename)
+	}
+}
+
+func TestExecEvalBlockedByDefault(t *testing.T) {
+	runner := &Runner{screenshotDir: t.TempDir()}
+
+	step := models.TaskStep{
+		Action: models.ActionEval,
+		Value:  "document.title",
+	}
+
+	err := runner.execEval(context.Background(), step)
+	if err == nil {
+		t.Fatal("expected error when eval is not allowed")
+	}
+	if err != ErrEvalNotAllowed {
+		t.Errorf("expected ErrEvalNotAllowed, got: %v", err)
+	}
+}
+
+func TestExecEvalAllowedWhenEnabled(t *testing.T) {
+	runner := &Runner{screenshotDir: t.TempDir()}
+	runner.allowEval.Store(true)
+
+	step := models.TaskStep{
+		Action: models.ActionEval,
+		Value:  "1 + 1",
+	}
+
+	err := runner.execEval(context.Background(), step)
+	if err == ErrEvalNotAllowed {
+		t.Fatal("eval should be allowed when allowEval is true")
+	}
+}
+
+func TestSetAllowEval(t *testing.T) {
+	runner := &Runner{screenshotDir: t.TempDir()}
+	if runner.allowEval.Load() {
+		t.Fatal("allowEval should default to false")
+	}
+
+	runner.SetAllowEval(true)
+	if !runner.allowEval.Load() {
+		t.Fatal("allowEval should be true after SetAllowEval(true)")
+	}
+
+	runner.SetAllowEval(false)
+	if runner.allowEval.Load() {
+		t.Fatal("allowEval should be false after SetAllowEval(false)")
 	}
 }

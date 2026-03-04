@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { proxies } from '../lib/store';
   import { AddProxy, ListProxies, DeleteProxy } from '../../wailsjs/go/main/App';
 
@@ -7,36 +8,46 @@
   let username = '';
   let password = '';
   let geo = '';
+  let errorMessage = '';
+
+  onMount(() => {
+    refresh();
+  });
+
+  let loadError = '';
 
   export async function refresh() {
     try {
+      loadError = '';
       const list = await ListProxies();
       proxies.set(list || []);
-    } catch (err) {
-      console.error('Failed to load proxies:', err);
+    } catch (err: any) {
+      loadError = `Failed to load proxies: ${err?.message || err}`;
     }
   }
 
   async function addProxy() {
     if (!server) return;
     try {
+      errorMessage = '';
       await AddProxy(server, protocol, username, password, geo);
       server = '';
       username = '';
       password = '';
       geo = '';
       await refresh();
-    } catch (err) {
-      console.error('Failed to add proxy:', err);
+    } catch (err: any) {
+      errorMessage = err?.message || String(err);
     }
   }
 
   async function removeProxy(id: string) {
     try {
+      loadError = '';
       await DeleteProxy(id);
       await refresh();
-    } catch (err) {
-      console.error('Failed to delete proxy:', err);
+    } catch (err: any) {
+      loadError = `Failed to delete proxy: ${err?.message || err}`;
     }
   }
 
@@ -49,6 +60,9 @@
 
 <div class="proxy-panel">
   <h3>Proxy Pool</h3>
+  {#if loadError}
+    <div class="error-text">{loadError}</div>
+  {/if}
 
   <div class="add-proxy">
     <div class="form-row">
@@ -65,6 +79,9 @@
       <input type="password" bind:value={password} placeholder="Password" />
       <button class="btn-primary btn-sm" on:click={addProxy} disabled={!server}>Add</button>
     </div>
+    {#if errorMessage}
+      <div class="error-text">{errorMessage}</div>
+    {/if}
   </div>
 
   <div class="proxy-list">
@@ -133,5 +150,10 @@
     font-size: 11px;
     color: var(--text-muted);
     margin-left: 8px;
+  }
+  .error-text {
+    color: var(--danger, #ef4444);
+    font-size: 12px;
+    margin-top: 8px;
   }
 </style>

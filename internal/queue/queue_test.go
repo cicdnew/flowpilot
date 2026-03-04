@@ -11,12 +11,24 @@ import (
 	"time"
 
 	"web-automation/internal/browser"
+	"web-automation/internal/crypto"
 	"web-automation/internal/database"
 	"web-automation/internal/models"
+	"web-automation/internal/proxy"
 )
 
 func setupTestQueue(t *testing.T, maxConcurrency int, events *[]models.TaskEvent, mu *sync.Mutex) (*Queue, *database.DB) {
 	t.Helper()
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	crypto.ResetForTest()
+	if err := crypto.InitKeyWithBytes(key); err != nil {
+		t.Fatalf("init crypto key: %v", err)
+	}
+	t.Cleanup(func() { crypto.ResetForTest() })
+
 	dir := t.TempDir()
 	db, err := database.New(filepath.Join(dir, "test.db"))
 	if err != nil {
@@ -349,4 +361,90 @@ func TestSubmitContextCancelled(t *testing.T) {
 	}
 
 	time.Sleep(200 * time.Millisecond)
+}
+
+func TestSetProxyManager(t *testing.T) {
+	q, db := setupTestQueue(t, 10, nil, nil)
+	defer q.Stop()
+
+	config := models.ProxyPoolConfig{
+		Strategy:            models.RotationRoundRobin,
+		HealthCheckInterval: 300,
+		MaxFailures:         3,
+	}
+	pm := proxy.NewManager(db, config)
+	defer pm.Stop()
+
+	q.SetProxyManager(pm)
+	if q.proxyManager == nil {
+		t.Fatal("proxyManager should be set")
+	}
+}
+
+func TestTaskTimeoutDefault(t *testing.T) {
+	q, db := setupTestQueue(t, 10, nil, nil)
+	defer q.Stop()
+
+	task := makeTestTask("timeout-default")
+	task.Timeout = 0
+	if err := db.CreateTask(task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := q.Submit(ctx, task); err != nil {
+		t.Fatalf("Submit: %v", err)
+	}
+
+	time.Sleep(200 * time.Millisecond)
+	got, err := db.GetTask("timeout-default")
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Status == models.TaskStatusPending {
+		t.Error("task should not still be pending")
+	}
+}
+
+func TestTaskTimeoutCustom(t *testing.T) {
+	task := makeTestTask("timeout-custom")
+	task.Timeout = 120
+	if task.Timeout != 120 {
+		t.Errorf("Timeout: got %d, want 120", task.Timeout)
+	}
+}
+
+func TestHandleSuccessPath(t *testing.T) {
+	q, db := setupTestQueue(t, 10, nil, nil)
+	defer q.Stop()
+
+	task := makeTestTask("success-1")
+	if err := db.CreateTask(task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	result := &models.TaskResult{
+		TaskID:  task.ID,
+		Success: true,
+		ExtractedData: map[string]string{
+			"title": "Test",
+		},
+		Duration: 1000000000,
+	}
+
+	q.handleSuccess(task, result)
+
+	got, err := db.GetTask(task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.Status != models.TaskStatusCompleted {
+		t.Errorf("Status: got %q, want %q", got.Status, models.TaskStatusCompleted)
+	}
+	if got.Result == nil {
+		t.Fatal("Result should be set")
+	}
+	if !got.Result.Success {
+		t.Error("Result.Success should be true")
+	}
 }

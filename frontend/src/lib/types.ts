@@ -40,6 +40,7 @@ export interface Task {
   status: TaskStatus;
   retryCount: number;
   maxRetries: number;
+  timeout?: number;
   error?: string;
   result?: TaskResult;
   createdAt: string;

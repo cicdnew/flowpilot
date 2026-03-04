@@ -6,10 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"web-automation/internal/models"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
@@ -20,14 +23,22 @@ const defaultTimeout = 30 * time.Second
 // Runner executes browser automation tasks using chromedp.
 type Runner struct {
 	screenshotDir string
+	allowEval     atomic.Bool
 }
 
-// NewRunner creates a new browser runner.
+// NewRunner creates a new browser runner. Eval steps are blocked by default.
 func NewRunner(screenshotDir string) (*Runner, error) {
 	if err := os.MkdirAll(screenshotDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create screenshot dir: %w", err)
 	}
-	return &Runner{screenshotDir: screenshotDir}, nil
+	r := &Runner{screenshotDir: screenshotDir}
+	r.allowEval.Store(false)
+	return r, nil
+}
+
+// SetAllowEval configures whether the runner permits eval step execution.
+func (r *Runner) SetAllowEval(allow bool) {
+	r.allowEval.Store(allow)
 }
 
 // RunTask executes a single task with its own browser context and proxy.
@@ -104,7 +115,7 @@ func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, r
 	return nil
 }
 
-func (r *Runner) setupProxyAuth(ctx context.Context, proxy models.ProxyConfig) {
+func (r *Runner) setupProxyAuth(ctx context.Context, proxyConfig models.ProxyConfig) {
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		switch e := ev.(type) {
 		case *fetch.EventAuthRequired:
@@ -113,11 +124,12 @@ func (r *Runner) setupProxyAuth(ctx context.Context, proxy models.ProxyConfig) {
 				if execCtx == nil || execCtx.Target == nil {
 					return
 				}
+				c := cdp.WithExecutor(ctx, execCtx.Target)
 				_ = fetch.ContinueWithAuth(e.RequestID, &fetch.AuthChallengeResponse{
 					Response: fetch.AuthChallengeResponseResponseProvideCredentials,
-					Username: proxy.Username,
-					Password: proxy.Password,
-				}).Do(context.WithValue(ctx, "cdp", execCtx.Target))
+					Username: proxyConfig.Username,
+					Password: proxyConfig.Password,
+				}).Do(c)
 			}()
 		case *fetch.EventRequestPaused:
 			go func() {
@@ -125,7 +137,8 @@ func (r *Runner) setupProxyAuth(ctx context.Context, proxy models.ProxyConfig) {
 				if execCtx == nil || execCtx.Target == nil {
 					return
 				}
-				_ = fetch.ContinueRequest(e.RequestID).Do(context.WithValue(ctx, "cdp", execCtx.Target))
+				c := cdp.WithExecutor(ctx, execCtx.Target)
+				_ = fetch.ContinueRequest(e.RequestID).Do(c)
 			}()
 		}
 	})
@@ -200,13 +213,27 @@ func (r *Runner) execScreenshot(ctx context.Context, result *models.TaskResult) 
 	if err := chromedp.Run(ctx, chromedp.FullScreenshot(&buf, 90)); err != nil {
 		return fmt.Errorf("capture screenshot: %w", err)
 	}
-	filename := fmt.Sprintf("%s_%d.png", result.TaskID, time.Now().UnixMilli())
+	sanitizedID := sanitizeFilename(result.TaskID)
+	filename := fmt.Sprintf("%s_%d.png", sanitizedID, time.Now().UnixMilli())
 	path := filepath.Join(r.screenshotDir, filename)
+	if !strings.HasPrefix(path, filepath.Clean(r.screenshotDir)+string(os.PathSeparator)) {
+		return fmt.Errorf("screenshot path escapes screenshot directory")
+	}
 	if err := os.WriteFile(path, buf, 0o644); err != nil {
 		return fmt.Errorf("save screenshot: %w", err)
 	}
 	result.Screenshots = append(result.Screenshots, path)
 	return nil
+}
+
+func sanitizeFilename(name string) string {
+	safe := strings.Map(func(r rune) rune {
+		if r == '/' || r == '\\' || r == '.' || r == '\x00' {
+			return '_'
+		}
+		return r
+	}, name)
+	return filepath.Base(safe)
 }
 
 func (r *Runner) execExtract(ctx context.Context, step models.TaskStep, result *models.TaskResult) error {
@@ -242,7 +269,12 @@ func (r *Runner) execSelect(ctx context.Context, step models.TaskStep) error {
 	)
 }
 
+var ErrEvalNotAllowed = fmt.Errorf("eval action is not allowed: runner has allowEval=false")
+
 func (r *Runner) execEval(ctx context.Context, step models.TaskStep) error {
+	if !r.allowEval.Load() {
+		return ErrEvalNotAllowed
+	}
 	var res interface{}
 	return chromedp.Run(ctx,
 		chromedp.Evaluate(step.Value, &res),

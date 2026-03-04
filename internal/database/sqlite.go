@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"web-automation/internal/crypto"
 	"web-automation/internal/models"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -103,11 +104,20 @@ func (db *DB) CreateTask(task models.Task) error {
 		return fmt.Errorf("marshal tags: %w", err)
 	}
 
+	encUsername, err := crypto.Encrypt(task.Proxy.Username)
+	if err != nil {
+		return fmt.Errorf("encrypt proxy username: %w", err)
+	}
+	encPassword, err := crypto.Encrypt(task.Proxy.Password)
+	if err != nil {
+		return fmt.Errorf("encrypt proxy password: %w", err)
+	}
+
 	_, err = db.conn.Exec(`
 		INSERT INTO tasks (id, name, url, steps, proxy_server, proxy_username, proxy_password, proxy_geo, priority, status, max_retries, tags, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.ID, task.Name, task.URL, string(stepsJSON),
-		task.Proxy.Server, task.Proxy.Username, task.Proxy.Password, task.Proxy.Geo,
+		task.Proxy.Server, encUsername, encPassword, task.Proxy.Geo,
 		task.Priority, task.Status, task.MaxRetries, string(tagsJSON), task.CreatedAt,
 	)
 	if err != nil {
@@ -216,11 +226,50 @@ func (db *DB) IncrementRetry(id string) error {
 	return nil
 }
 
+// UpdateTask updates editable fields of a task. Only allowed for pending/failed tasks.
+func (db *DB) UpdateTask(id, name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority models.TaskPriority) error {
+	task, err := db.GetTask(id)
+	if err != nil {
+		return fmt.Errorf("get task for update: %w", err)
+	}
+	if task.Status != models.TaskStatusPending && task.Status != models.TaskStatusFailed {
+		return fmt.Errorf("cannot edit task with status %s", task.Status)
+	}
+
+	stepsJSON, err := json.Marshal(steps)
+	if err != nil {
+		return fmt.Errorf("marshal steps: %w", err)
+	}
+
+	encUsername, err := crypto.Encrypt(proxyConfig.Username)
+	if err != nil {
+		return fmt.Errorf("encrypt proxy username: %w", err)
+	}
+	encPassword, err := crypto.Encrypt(proxyConfig.Password)
+	if err != nil {
+		return fmt.Errorf("encrypt proxy password: %w", err)
+	}
+
+	_, err = db.conn.Exec(`UPDATE tasks SET name = ?, url = ?, steps = ?, proxy_server = ?, proxy_username = ?, proxy_password = ?, proxy_geo = ?, priority = ? WHERE id = ?`,
+		name, url, string(stepsJSON), proxyConfig.Server, encUsername, encPassword, proxyConfig.Geo, priority, id)
+	if err != nil {
+		return fmt.Errorf("update task %s: %w", id, err)
+	}
+	return nil
+}
+
 // DeleteTask removes a task by ID.
 func (db *DB) DeleteTask(id string) error {
-	_, err := db.conn.Exec(`DELETE FROM tasks WHERE id = ?`, id)
+	res, err := db.conn.Exec(`DELETE FROM tasks WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete task %s: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check delete result for task %s: %w", id, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("task %s not found", id)
 	}
 	return nil
 }
@@ -229,10 +278,19 @@ func (db *DB) DeleteTask(id string) error {
 
 // CreateProxy inserts a new proxy.
 func (db *DB) CreateProxy(proxy models.Proxy) error {
-	_, err := db.conn.Exec(`
+	encUsername, err := crypto.Encrypt(proxy.Username)
+	if err != nil {
+		return fmt.Errorf("encrypt proxy username: %w", err)
+	}
+	encPassword, err := crypto.Encrypt(proxy.Password)
+	if err != nil {
+		return fmt.Errorf("encrypt proxy password: %w", err)
+	}
+
+	_, err = db.conn.Exec(`
 		INSERT INTO proxies (id, server, protocol, username, password, geo, status, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		proxy.ID, proxy.Server, proxy.Protocol, proxy.Username, proxy.Password,
+		proxy.ID, proxy.Server, proxy.Protocol, encUsername, encPassword,
 		proxy.Geo, proxy.Status, proxy.CreatedAt,
 	)
 	if err != nil {
@@ -316,9 +374,16 @@ func (db *DB) IncrementProxyUsage(id string, success bool) error {
 
 // DeleteProxy removes a proxy by ID.
 func (db *DB) DeleteProxy(id string) error {
-	_, err := db.conn.Exec(`DELETE FROM proxies WHERE id = ?`, id)
+	res, err := db.conn.Exec(`DELETE FROM proxies WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("delete proxy %s: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check delete result for proxy %s: %w", id, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("proxy %s not found", id)
 	}
 	return nil
 }
@@ -369,6 +434,13 @@ func (db *DB) scanTask(row scanner) (*models.Task, error) {
 		}
 	}
 
+	if decUser, err := crypto.Decrypt(t.Proxy.Username); err == nil {
+		t.Proxy.Username = decUser
+	}
+	if decPass, err := crypto.Decrypt(t.Proxy.Password); err == nil {
+		t.Proxy.Password = decPass
+	}
+
 	return &t, nil
 }
 
@@ -391,6 +463,14 @@ func (db *DB) scanProxyRow(rows *sql.Rows) (*models.Proxy, error) {
 	if lastChecked.Valid {
 		p.LastChecked = &lastChecked.Time
 	}
+
+	if decUser, err := crypto.Decrypt(p.Username); err == nil {
+		p.Username = decUser
+	}
+	if decPass, err := crypto.Decrypt(p.Password); err == nil {
+		p.Password = decPass
+	}
+
 	return &p, nil
 }
 

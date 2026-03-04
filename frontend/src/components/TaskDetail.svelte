@@ -1,5 +1,68 @@
 <script lang="ts">
-  import { selectedTask } from '../lib/store';
+  import { selectedTask, tasks } from '../lib/store';
+  import { UpdateTask, GetTask } from '../../wailsjs/go/main/App';
+  import type { TaskStep, ProxyConfig } from '../lib/types';
+
+  let editing = false;
+  let editName = '';
+  let editUrl = '';
+  let editPriority = 5;
+  let editSteps: TaskStep[] = [];
+  let editProxyServer = '';
+  let editProxyUsername = '';
+  let editProxyPassword = '';
+  let editProxyGeo = '';
+  let editError = '';
+
+  const actions = ['navigate', 'click', 'type', 'wait', 'screenshot', 'extract', 'scroll', 'select'];
+
+  function startEdit() {
+    if (!$selectedTask) return;
+    editName = $selectedTask.name;
+    editUrl = $selectedTask.url;
+    editPriority = $selectedTask.priority;
+    editSteps = ($selectedTask.steps || []).map(s => ({ ...s }));
+    editProxyServer = $selectedTask.proxy?.server || '';
+    editProxyUsername = $selectedTask.proxy?.username || '';
+    editProxyPassword = $selectedTask.proxy?.password || '';
+    editProxyGeo = $selectedTask.proxy?.geo || '';
+    editError = '';
+    editing = true;
+  }
+
+  function cancelEdit() {
+    editing = false;
+    editError = '';
+  }
+
+  function addEditStep() {
+    editSteps = [...editSteps, { action: 'click', selector: '', value: '' }];
+  }
+
+  function removeEditStep(i: number) {
+    editSteps = editSteps.filter((_, idx) => idx !== i);
+  }
+
+  async function saveEdit() {
+    if (!$selectedTask) return;
+    const proxyConfig: ProxyConfig = {
+      server: editProxyServer,
+      username: editProxyUsername,
+      password: editProxyPassword,
+      geo: editProxyGeo,
+    };
+    try {
+      editError = '';
+      await UpdateTask($selectedTask.id, editName, editUrl, editSteps, proxyConfig, editPriority);
+      const updated = await GetTask($selectedTask.id);
+      tasks.update(list => list.map(t => t.id === updated.id ? updated : t));
+      editing = false;
+    } catch (err: any) {
+      editError = err?.message || String(err);
+    }
+  }
+
+  $: canEdit = $selectedTask && ($selectedTask.status === 'pending' || $selectedTask.status === 'failed');
 
   function formatDuration(ns: number): string {
     if (!ns) return '-';
@@ -13,8 +76,64 @@
   {#if $selectedTask}
     <div class="detail-header">
       <h3>{$selectedTask.name}</h3>
-      <span class="badge badge-{$selectedTask.status}">{$selectedTask.status}</span>
+      <div class="detail-header-right">
+        <span class="badge badge-{$selectedTask.status}">{$selectedTask.status}</span>
+        {#if canEdit && !editing}
+          <button class="btn-secondary btn-sm" on:click={startEdit}>Edit</button>
+        {/if}
+      </div>
     </div>
+
+    {#if editing}
+      <div class="edit-form">
+        <div class="form-group">
+          <label>Name</label>
+          <input bind:value={editName} />
+        </div>
+        <div class="form-group">
+          <label>URL</label>
+          <input bind:value={editUrl} />
+        </div>
+        <div class="form-group">
+          <label>Priority</label>
+          <select bind:value={editPriority}>
+            <option value={1}>Low</option>
+            <option value={5}>Normal</option>
+            <option value={10}>High</option>
+          </select>
+        </div>
+        <h4>Proxy</h4>
+        <div class="form-group">
+          <input bind:value={editProxyServer} placeholder="host:port" />
+        </div>
+        <div class="form-row-sm">
+          <input bind:value={editProxyUsername} placeholder="Username" />
+          <input type="password" bind:value={editProxyPassword} placeholder="Password" />
+          <input bind:value={editProxyGeo} placeholder="Geo" style="width:50px" />
+        </div>
+        <h4>Steps</h4>
+        {#each editSteps as step, i}
+          <div class="step-row-edit">
+            <select bind:value={step.action}>
+              {#each actions as a}<option value={a}>{a}</option>{/each}
+            </select>
+            {#if step.action !== 'navigate' && step.action !== 'screenshot'}
+              <input bind:value={step.selector} placeholder="Selector" class="flex-1" />
+            {/if}
+            <input bind:value={step.value} placeholder="Value" class="flex-1" />
+            <button class="btn-danger btn-sm" on:click={() => removeEditStep(i)} disabled={editSteps.length <= 1}>-</button>
+          </div>
+        {/each}
+        <button class="btn-secondary btn-sm mt-2" on:click={addEditStep}>+ Step</button>
+        {#if editError}
+          <div class="error-text">{editError}</div>
+        {/if}
+        <div class="edit-actions">
+          <button class="btn-secondary btn-sm" on:click={cancelEdit}>Cancel</button>
+          <button class="btn-primary btn-sm" on:click={saveEdit} disabled={!editName || !editUrl}>Save</button>
+        </div>
+      </div>
+    {/if}
 
     <div class="detail-section">
       <h4>Info</h4>
@@ -43,6 +162,17 @@
         {/if}
       </div>
     </div>
+
+    {#if $selectedTask.tags?.length}
+      <div class="detail-section">
+        <h4>Tags</h4>
+        <div class="tag-list">
+          {#each $selectedTask.tags as tag}
+            <span class="tag-badge">{tag}</span>
+          {/each}
+        </div>
+      </div>
+    {/if}
 
     {#if $selectedTask.proxy?.server}
       <div class="detail-section">
@@ -145,6 +275,53 @@
     font-weight: 600;
     margin: 0;
   }
+  .detail-header-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .edit-form {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--bg-tertiary);
+    border-radius: var(--radius);
+  }
+  .edit-form .form-group { margin-bottom: 8px; }
+  .edit-form label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+  }
+  .edit-form input, .edit-form select { width: 100%; }
+  .edit-form h4 {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin: 8px 0 4px;
+  }
+  .form-row-sm { display: flex; gap: 4px; margin-bottom: 8px; }
+  .form-row-sm input { flex: 1; }
+  .step-row-edit {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .step-row-edit select { min-width: 90px; }
+  .edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 12px;
+  }
+  .error-text {
+    color: var(--danger, #ef4444);
+    font-size: 11px;
+    margin-top: 6px;
+  }
   .detail-section {
     margin-bottom: 16px;
   }
@@ -234,5 +411,18 @@
     justify-content: center;
     height: 100%;
     color: var(--text-muted);
+  }
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .tag-badge {
+    padding: 2px 8px;
+    background: rgba(59, 130, 246, 0.15);
+    color: var(--accent);
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
   }
 </style>

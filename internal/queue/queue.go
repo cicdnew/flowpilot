@@ -10,6 +10,7 @@ import (
 	"web-automation/internal/browser"
 	"web-automation/internal/database"
 	"web-automation/internal/models"
+	"web-automation/internal/proxy"
 
 	"golang.org/x/sync/semaphore"
 )
@@ -21,15 +22,16 @@ type EventCallback func(event models.TaskEvent)
 type Queue struct {
 	db             *database.DB
 	runner         *browser.Runner
+	proxyManager   *proxy.Manager
 	sem            *semaphore.Weighted
 	maxConcurrency int64
 	onEvent        EventCallback
 
-	mu      sync.Mutex
-	running map[string]context.CancelFunc // taskID -> cancel
-	stopped bool
+	mu       sync.Mutex
+	running  map[string]context.CancelFunc // taskID -> cancel
+	stopped  bool
 	stopOnce sync.Once
-	stopCh  chan struct{}
+	stopCh   chan struct{}
 }
 
 // New creates a new task queue.
@@ -43,6 +45,11 @@ func New(db *database.DB, runner *browser.Runner, maxConcurrency int, onEvent Ev
 		running:        make(map[string]context.CancelFunc),
 		stopCh:         make(chan struct{}),
 	}
+}
+
+// SetProxyManager attaches a proxy manager for pool-based proxy selection.
+func (q *Queue) SetProxyManager(pm *proxy.Manager) {
+	q.proxyManager = pm
 }
 
 // Submit adds a task to the queue and starts executing it.
@@ -117,7 +124,11 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task) {
 	}
 	defer q.sem.Release(1)
 
-	taskCtx, cancel := context.WithCancel(ctx)
+	taskTimeout := 5 * time.Minute
+	if task.Timeout > 0 {
+		taskTimeout = time.Duration(task.Timeout) * time.Second
+	}
+	taskCtx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
 	q.mu.Lock()
@@ -130,6 +141,12 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task) {
 		q.mu.Unlock()
 	}()
 
+	if task.Proxy.Server == "" && q.proxyManager != nil {
+		if p, err := q.proxyManager.SelectProxy(task.Proxy.Geo); err == nil {
+			task.Proxy = p.ToProxyConfig()
+		}
+	}
+
 	if err := q.db.UpdateTaskStatus(task.ID, models.TaskStatusRunning, ""); err != nil {
 		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
 		return
@@ -137,6 +154,11 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task) {
 	q.emitEvent(task.ID, models.TaskStatusRunning, "")
 
 	result, err := q.runner.RunTask(taskCtx, task)
+
+	if task.Proxy.Server != "" && q.proxyManager != nil {
+		_ = q.proxyManager.RecordUsage(task.ID, err == nil)
+	}
+
 	if err != nil {
 		q.handleFailure(ctx, taskCtx, task, err)
 		return
@@ -154,7 +176,11 @@ func (q *Queue) handleFailure(parentCtx, taskCtx context.Context, task models.Ta
 		}
 		q.emitEvent(task.ID, models.TaskStatusRetrying, execErr.Error())
 
-		backoff := time.Duration(math.Pow(2, float64(task.RetryCount))) * time.Second
+		backoffSec := math.Pow(2, float64(task.RetryCount))
+		if backoffSec > 60 {
+			backoffSec = 60
+		}
+		backoff := time.Duration(backoffSec) * time.Second
 
 		// Wait for backoff respecting context cancellation.
 		select {

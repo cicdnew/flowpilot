@@ -66,6 +66,7 @@ type Task struct {
 	Status      TaskStatus   `json:"status"`
 	RetryCount  int          `json:"retryCount"`
 	MaxRetries  int          `json:"maxRetries"`
+	Timeout     int          `json:"timeout,omitempty"` // total task timeout in seconds, 0 = default (5 min)
 	Error       string       `json:"error,omitempty"`
 	Result      *TaskResult  `json:"result,omitempty"`
 	CreatedAt   time.Time    `json:"createdAt"`

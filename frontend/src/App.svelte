@@ -5,38 +5,40 @@
   import TaskTable from './components/TaskTable.svelte';
   import TaskDetail from './components/TaskDetail.svelte';
   import CreateTaskModal from './components/CreateTaskModal.svelte';
+  import BatchCreateModal from './components/BatchCreateModal.svelte';
   import ProxyPanel from './components/ProxyPanel.svelte';
   import { tasks, activeTab, updateTaskInStore } from './lib/store';
   import { ListTasks } from '../wailsjs/go/main/App';
   import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime';
 
   let showCreateModal = false;
+  let showBatchModal = false;
+  let loadError = '';
 
   async function refreshTasks() {
     try {
+      loadError = '';
       const list = await ListTasks();
       tasks.set(list || []);
-    } catch (err) {
-      console.error('Failed to load tasks:', err);
+    } catch (err: any) {
+      loadError = `Failed to load tasks: ${err?.message || err}`;
     }
   }
 
   onMount(() => {
     refreshTasks();
 
-    // Listen for real-time task events from Go backend
     EventsOn('task:event', (event: any) => {
       updateTaskInStore(event);
+      if (['completed', 'failed', 'cancelled'].includes(event.status)) {
+        refreshTasks();
+      }
     });
   });
 
   onDestroy(() => {
     EventsOff('task:event');
   });
-
-  // Auto-refresh every 5 seconds
-  const interval = setInterval(refreshTasks, 5000);
-  onDestroy(() => clearInterval(interval));
 </script>
 
 <div class="app-layout">
@@ -59,8 +61,12 @@
     </button>
   </nav>
 
+  {#if loadError}
+    <div class="load-error">{loadError}</div>
+  {/if}
+
   {#if $activeTab === 'tasks'}
-    <TaskToolbar on:create={() => showCreateModal = true} />
+    <TaskToolbar on:create={() => showCreateModal = true} on:batchCreate={() => showBatchModal = true} />
     <div class="main-content">
       <TaskTable on:refresh={refreshTasks} />
       <TaskDetail />
@@ -73,6 +79,13 @@
 {#if showCreateModal}
   <CreateTaskModal
     on:close={() => showCreateModal = false}
+    on:created={refreshTasks}
+  />
+{/if}
+
+{#if showBatchModal}
+  <BatchCreateModal
+    on:close={() => showBatchModal = false}
     on:created={refreshTasks}
   />
 {/if}
@@ -114,5 +127,12 @@
     display: flex;
     flex: 1;
     overflow: hidden;
+  }
+  .load-error {
+    padding: 8px 20px;
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger, #ef4444);
+    font-size: 12px;
+    border-bottom: 1px solid rgba(239, 68, 68, 0.2);
   }
 </style>

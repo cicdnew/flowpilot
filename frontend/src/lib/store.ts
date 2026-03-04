@@ -4,8 +4,9 @@ import type { Task, Proxy, TaskEvent, TaskStatus } from './types';
 export const tasks = writable<Task[]>([]);
 export const proxies = writable<Proxy[]>([]);
 export const selectedTaskId = writable<string | null>(null);
-export const activeTab = writable<'tasks' | 'proxies' | 'logs'>('tasks');
+export const activeTab = writable<'tasks' | 'proxies'>('tasks');
 export const statusFilter = writable<TaskStatus | 'all'>('all');
+export const tagFilter = writable<string>('');
 
 export const selectedTask = derived(
   [tasks, selectedTaskId],
@@ -13,12 +14,28 @@ export const selectedTask = derived(
 );
 
 export const filteredTasks = derived(
-  [tasks, statusFilter],
-  ([$tasks, $statusFilter]) => {
-    if ($statusFilter === 'all') return $tasks;
-    return $tasks.filter(t => t.status === $statusFilter);
+  [tasks, statusFilter, tagFilter],
+  ([$tasks, $statusFilter, $tagFilter]) => {
+    let result = $tasks;
+    if ($statusFilter !== 'all') {
+      result = result.filter(t => t.status === $statusFilter);
+    }
+    if ($tagFilter) {
+      result = result.filter(t => t.tags?.includes($tagFilter));
+    }
+    return result;
   }
 );
+
+export const allTags = derived(tasks, ($tasks) => {
+  const tagSet = new Set<string>();
+  for (const t of $tasks) {
+    for (const tag of t.tags ?? []) {
+      tagSet.add(tag);
+    }
+  }
+  return [...tagSet].sort();
+});
 
 export const taskStats = derived(tasks, ($tasks) => {
   const stats: Record<string, number> = {

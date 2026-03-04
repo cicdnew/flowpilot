@@ -14,9 +14,11 @@
   let proxyPassword = '';
   let proxyGeo = '';
 
+  let tagsInput = '';
   let steps: TaskStep[] = [{ action: 'navigate', value: '', selector: '' }];
+  let errorMessage = '';
 
-  const actions = ['navigate', 'click', 'type', 'wait', 'screenshot', 'extract', 'scroll', 'select', 'eval'];
+  const actions = ['navigate', 'click', 'type', 'wait', 'screenshot', 'extract', 'scroll', 'select'];
 
   function addStep() {
     steps = [...steps, { action: 'click', selector: '', value: '' }];
@@ -44,12 +46,18 @@
       return s;
     });
 
+    const tags = tagsInput
+      .split(',')
+      .map(t => t.trim())
+      .filter(t => t.length > 0);
+
     try {
-      await CreateTask(name, url, taskSteps, proxyConfig, priority, autoStart);
+      errorMessage = '';
+      await CreateTask(name, url, taskSteps, proxyConfig, priority, autoStart, tags);
       dispatch('created');
       dispatch('close');
-    } catch (err) {
-      console.error('Failed to create task:', err);
+    } catch (err: any) {
+      errorMessage = err?.message || String(err);
     }
   }
 </script>
@@ -74,8 +82,12 @@
 
       <div class="form-row">
         <div class="form-group">
-          <label>Priority (1-10)</label>
-          <input type="number" bind:value={priority} min="1" max="10" />
+          <label>Priority</label>
+          <select bind:value={priority}>
+            <option value={1}>Low</option>
+            <option value={5}>Normal</option>
+            <option value={10}>High</option>
+          </select>
         </div>
         <div class="form-group">
           <label>Auto Start</label>
@@ -84,6 +96,12 @@
             Start immediately
           </label>
         </div>
+      </div>
+
+      <div class="form-group">
+        <label>Tags</label>
+        <input bind:value={tagsInput} placeholder="scraping, production, daily" />
+        <span class="hint">Comma-separated</span>
       </div>
 
       <h4>Proxy (Optional)</h4>
@@ -116,15 +134,19 @@
               <option value={action}>{action}</option>
             {/each}
           </select>
-          {#if step.action !== 'navigate' && step.action !== 'screenshot' && step.action !== 'eval'}
+          {#if step.action !== 'navigate' && step.action !== 'screenshot'}
             <input bind:value={step.selector} placeholder="CSS selector" class="flex-1" />
           {/if}
-          <input bind:value={step.value} placeholder={step.action === 'navigate' ? 'URL' : step.action === 'eval' ? 'JS code' : 'Value'} class="flex-1" />
+          <input bind:value={step.value} placeholder={step.action === 'navigate' ? 'URL' : 'Value'} class="flex-1" />
           <button class="btn-danger btn-sm" on:click={() => removeStep(i)} disabled={steps.length <= 1}>-</button>
         </div>
       {/each}
       <button class="btn-secondary btn-sm mt-2" on:click={addStep}>+ Add Step</button>
     </div>
+
+    {#if errorMessage}
+      <div class="error-banner">{errorMessage}</div>
+    {/if}
 
     <div class="modal-footer">
       <button class="btn-secondary" on:click={() => dispatch('close')}>Cancel</button>
@@ -218,5 +240,18 @@
   .checkbox input[type="checkbox"] {
     width: auto;
     padding: 0;
+  }
+  .hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    display: block;
+  }
+  .error-banner {
+    padding: 8px 20px;
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger, #ef4444);
+    font-size: 12px;
+    border-top: 1px solid rgba(239, 68, 68, 0.2);
   }
 </style>

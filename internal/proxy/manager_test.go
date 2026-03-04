@@ -6,12 +6,23 @@ import (
 	"testing"
 	"time"
 
+	"web-automation/internal/crypto"
 	"web-automation/internal/database"
 	"web-automation/internal/models"
 )
 
 func setupTestManager(t *testing.T, strategy models.RotationStrategy) (*Manager, *database.DB) {
 	t.Helper()
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(i)
+	}
+	crypto.ResetForTest()
+	if err := crypto.InitKeyWithBytes(key); err != nil {
+		t.Fatalf("init crypto key: %v", err)
+	}
+	t.Cleanup(func() { crypto.ResetForTest() })
+
 	dir := t.TempDir()
 	db, err := database.New(filepath.Join(dir, "test.db"))
 	if err != nil {
@@ -349,7 +360,7 @@ func TestStartHealthChecksRespondsToStop(t *testing.T) {
 
 	config := models.ProxyPoolConfig{
 		Strategy:            models.RotationRoundRobin,
-		HealthCheckInterval: 1, // 1 second for fast test
+		HealthCheckInterval: 1,                    // 1 second for fast test
 		HealthCheckURL:      "http://localhost:1", // Will fail fast
 	}
 	m := NewManager(db, config)

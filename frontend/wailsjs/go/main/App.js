@@ -10,8 +10,8 @@ export function CancelTask(arg1) {
   return window['go']['main']['App']['CancelTask'](arg1);
 }
 
-export function CreateTask(arg1, arg2, arg3, arg4, arg5, arg6) {
-  return window['go']['main']['App']['CreateTask'](arg1, arg2, arg3, arg4, arg5, arg6);
+export function CreateTask(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['main']['App']['CreateTask'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
 export function DeleteProxy(arg1) {
@@ -60,4 +60,12 @@ export function StartAllPending() {
 
 export function StartTask(arg1) {
   return window['go']['main']['App']['StartTask'](arg1);
+}
+
+export function UpdateTask(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['UpdateTask'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
+export function CreateBatch(arg1, arg2) {
+  return window['go']['main']['App']['CreateBatch'](arg1, arg2);
 }

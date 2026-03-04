@@ -6,6 +6,8 @@ export function AddProxy(arg1:string,arg2:string,arg3:string,arg4:string,arg5:st
 
 export function CancelTask(arg1:string):Promise<void>;
 
+export function CreateBatch(arg1:Array<models.BatchTaskInput>,arg2:boolean):Promise<Array<models.Task>>;
+
 export function CreateTask(arg1:string,arg2:string,arg3:Array<models.TaskStep>,arg4:models.ProxyConfig,arg5:number,arg6:boolean,arg7:Array<string>):Promise<models.Task>;
 
 export function DeleteProxy(arg1:string):Promise<void>;
@@ -33,5 +35,3 @@ export function StartAllPending():Promise<void>;
 export function StartTask(arg1:string):Promise<void>;
 
 export function UpdateTask(arg1:string,arg2:string,arg3:string,arg4:Array<models.TaskStep>,arg5:models.ProxyConfig,arg6:number):Promise<void>;
-
-export function CreateBatch(arg1:Array<any>,arg2:boolean):Promise<Array<models.Task>>;

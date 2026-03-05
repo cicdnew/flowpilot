@@ -2,6 +2,7 @@ export namespace models {
 	
 	export class ProxyConfig {
 	    server: string;
+	    protocol?: string;
 	    username?: string;
 	    password?: string;
 	    geo?: string;
@@ -13,6 +14,7 @@ export namespace models {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.server = source["server"];
+	        this.protocol = source["protocol"];
 	        this.username = source["username"];
 	        this.password = source["password"];
 	        this.geo = source["geo"];

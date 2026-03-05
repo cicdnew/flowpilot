@@ -47,7 +47,7 @@ func (a *App) startup(ctx context.Context) {
 		return
 	}
 	a.dataDir = filepath.Join(home, ".web-automation")
-	if err := os.MkdirAll(a.dataDir, 0o755); err != nil {
+	if err := os.MkdirAll(a.dataDir, 0o700); err != nil {
 		wailsRuntime.LogFatalf(ctx, "Failed to create data directory: %v", err)
 		return
 	}
@@ -111,6 +111,9 @@ func (a *App) shutdown(ctx context.Context) {
 // CreateTask creates a new task and optionally starts it.
 func (a *App) CreateTask(name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority int, autoStart bool, tags []string) (*models.Task, error) {
 	if err := validation.ValidateTask(name, url, steps, models.TaskPriority(priority), false); err != nil {
+		return nil, fmt.Errorf("create task: %w", err)
+	}
+	if err := validation.ValidateTags(tags); err != nil {
 		return nil, fmt.Errorf("create task: %w", err)
 	}
 
@@ -286,6 +289,9 @@ func (a *App) ExportResultsJSON() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("list completed tasks: %w", err)
 	}
+	if tasks == nil {
+		tasks = []models.Task{}
+	}
 
 	exportPath := filepath.Join(a.dataDir, fmt.Sprintf("export_%d.json", time.Now().Unix()))
 	data, err := json.MarshalIndent(tasks, "", "  ")
@@ -293,7 +299,7 @@ func (a *App) ExportResultsJSON() (string, error) {
 		return "", fmt.Errorf("marshal tasks to JSON: %w", err)
 	}
 
-	if err := os.WriteFile(exportPath, data, 0o644); err != nil {
+	if err := os.WriteFile(exportPath, data, 0o600); err != nil {
 		return "", fmt.Errorf("write export file: %w", err)
 	}
 	return exportPath, nil

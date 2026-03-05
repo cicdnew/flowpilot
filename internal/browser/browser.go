@@ -56,7 +56,12 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (*models.TaskRes
 	defer browserCancel()
 
 	if task.Proxy.Username != "" {
-		r.setupProxyAuth(browserCtx, task.Proxy)
+		if err := r.setupProxyAuth(browserCtx, task.Proxy); err != nil {
+			result.Duration = time.Since(start)
+			result.Error = fmt.Sprintf("proxy auth setup failed: %v", err)
+			r.addLog(result, "error", result.Error)
+			return result, err
+		}
 	}
 
 	if err := r.runSteps(browserCtx, task.Steps, result); err != nil {
@@ -84,7 +89,11 @@ func (r *Runner) createAllocator(ctx context.Context, proxyConfig models.ProxyCo
 	)
 
 	if proxyConfig.Server != "" {
-		opts = append(opts, chromedp.ProxyServer(proxyConfig.Server))
+		proxyAddr := proxyConfig.Server
+		if proxyConfig.Protocol != "" && proxyConfig.Protocol != "http" {
+			proxyAddr = proxyConfig.Protocol + "://" + proxyConfig.Server
+		}
+		opts = append(opts, chromedp.ProxyServer(proxyAddr))
 	}
 
 	return chromedp.NewExecAllocator(ctx, opts...)
@@ -115,7 +124,7 @@ func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, r
 	return nil
 }
 
-func (r *Runner) setupProxyAuth(ctx context.Context, proxyConfig models.ProxyConfig) {
+func (r *Runner) setupProxyAuth(ctx context.Context, proxyConfig models.ProxyConfig) error {
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		switch e := ev.(type) {
 		case *fetch.EventAuthRequired:
@@ -144,8 +153,9 @@ func (r *Runner) setupProxyAuth(ctx context.Context, proxyConfig models.ProxyCon
 	})
 
 	if err := chromedp.Run(ctx, fetch.Enable().WithHandleAuthRequests(true)); err != nil {
-		_ = err
+		return fmt.Errorf("enable fetch for proxy auth: %w", err)
 	}
+	return nil
 }
 
 // executeStep dispatches to the appropriate action handler.

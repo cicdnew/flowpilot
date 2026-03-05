@@ -189,17 +189,25 @@ func (db *DB) ListTasksByStatus(status models.TaskStatus) ([]models.Task, error)
 // UpdateTaskStatus updates the status of a task.
 func (db *DB) UpdateTaskStatus(id string, status models.TaskStatus, errMsg string) error {
 	now := time.Now()
+	var res sql.Result
 	var err error
 	switch status {
 	case models.TaskStatusRunning:
-		_, err = db.conn.Exec(`UPDATE tasks SET status = ?, started_at = ? WHERE id = ?`, status, now, id)
+		res, err = db.conn.Exec(`UPDATE tasks SET status = ?, started_at = ? WHERE id = ?`, status, now, id)
 	case models.TaskStatusCompleted, models.TaskStatusFailed:
-		_, err = db.conn.Exec(`UPDATE tasks SET status = ?, error = ?, completed_at = ? WHERE id = ?`, status, errMsg, now, id)
+		res, err = db.conn.Exec(`UPDATE tasks SET status = ?, error = ?, completed_at = ? WHERE id = ?`, status, errMsg, now, id)
 	default:
-		_, err = db.conn.Exec(`UPDATE tasks SET status = ?, error = ? WHERE id = ?`, status, errMsg, id)
+		res, err = db.conn.Exec(`UPDATE tasks SET status = ?, error = ? WHERE id = ?`, status, errMsg, id)
 	}
 	if err != nil {
 		return fmt.Errorf("update task %s status to %s: %w", id, status, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check update result for task %s: %w", id, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("task %s not found", id)
 	}
 	return nil
 }
@@ -227,15 +235,8 @@ func (db *DB) IncrementRetry(id string) error {
 }
 
 // UpdateTask updates editable fields of a task. Only allowed for pending/failed tasks.
+// Uses an atomic UPDATE with a status guard to prevent TOCTOU races.
 func (db *DB) UpdateTask(id, name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority models.TaskPriority) error {
-	task, err := db.GetTask(id)
-	if err != nil {
-		return fmt.Errorf("get task for update: %w", err)
-	}
-	if task.Status != models.TaskStatusPending && task.Status != models.TaskStatusFailed {
-		return fmt.Errorf("cannot edit task with status %s", task.Status)
-	}
-
 	stepsJSON, err := json.Marshal(steps)
 	if err != nil {
 		return fmt.Errorf("marshal steps: %w", err)
@@ -250,10 +251,23 @@ func (db *DB) UpdateTask(id, name, url string, steps []models.TaskStep, proxyCon
 		return fmt.Errorf("encrypt proxy password: %w", err)
 	}
 
-	_, err = db.conn.Exec(`UPDATE tasks SET name = ?, url = ?, steps = ?, proxy_server = ?, proxy_username = ?, proxy_password = ?, proxy_geo = ?, priority = ? WHERE id = ?`,
-		name, url, string(stepsJSON), proxyConfig.Server, encUsername, encPassword, proxyConfig.Geo, priority, id)
+	res, err := db.conn.Exec(`UPDATE tasks SET name = ?, url = ?, steps = ?, proxy_server = ?, proxy_username = ?, proxy_password = ?, proxy_geo = ?, priority = ? WHERE id = ? AND status IN (?, ?)`,
+		name, url, string(stepsJSON), proxyConfig.Server, encUsername, encPassword, proxyConfig.Geo, priority, id,
+		models.TaskStatusPending, models.TaskStatusFailed)
 	if err != nil {
 		return fmt.Errorf("update task %s: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check update result for task %s: %w", id, err)
+	}
+	if n == 0 {
+		// Distinguish between "not found" and "wrong status"
+		task, getErr := db.GetTask(id)
+		if getErr != nil {
+			return fmt.Errorf("task %s not found", id)
+		}
+		return fmt.Errorf("cannot edit task with status %s", task.Status)
 	}
 	return nil
 }

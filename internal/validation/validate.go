@@ -28,6 +28,10 @@ var (
 	ErrInvalidServer       = errors.New("proxy server must be in host:port format")
 	ErrInvalidPriority     = errors.New("priority must be 1, 5, or 10")
 	ErrInvalidProtocol     = errors.New("protocol must be http, https, or socks5")
+	ErrTooManyTags         = errors.New("too many tags (max 20)")
+	ErrTagTooLong          = errors.New("tag must not exceed 50 characters")
+	ErrTagEmpty            = errors.New("tag must not be empty")
+	ErrTagControlChars     = errors.New("tag must not contain control characters")
 )
 
 var validActions = map[models.StepAction]bool{
@@ -153,6 +157,28 @@ func ValidatePriority(priority models.TaskPriority) error {
 func ValidateProxyProtocol(protocol models.ProxyProtocol) error {
 	if !validProtocols[protocol] {
 		return ErrInvalidProtocol
+	}
+	return nil
+}
+
+// ValidateTags checks that tags are reasonable in length and content.
+func ValidateTags(tags []string) error {
+	if len(tags) > 20 {
+		return ErrTooManyTags
+	}
+	for i, tag := range tags {
+		trimmed := strings.TrimSpace(tag)
+		if trimmed == "" {
+			return fmt.Errorf("tag %d: %w", i, ErrTagEmpty)
+		}
+		if len(tag) > 50 {
+			return fmt.Errorf("tag %d: %w", i, ErrTagTooLong)
+		}
+		for _, r := range tag {
+			if unicode.IsControl(r) {
+				return fmt.Errorf("tag %d: %w", i, ErrTagControlChars)
+			}
+		}
 	}
 	return nil
 }

@@ -9,6 +9,7 @@ export interface TaskStep {
 
 export interface ProxyConfig {
   server: string;
+  protocol?: string;
   username?: string;
   password?: string;
   geo?: string;

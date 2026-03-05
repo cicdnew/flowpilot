@@ -68,6 +68,6 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "1.2.16"
+    "@opencode-ai/plugin": "1.2.17"
   }
 }

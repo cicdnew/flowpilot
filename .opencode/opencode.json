@@ -25,7 +25,7 @@
     },
     "planner": {
       "description": "Expert planning specialist for complex features and refactoring. Use for implementation planning, architectural changes, or complex refactoring.",
-      "mode": "subagent",
+      "mode": "primary",
       "model": "gitlab/duo-chat-opus-4-6",
       "prompt": "{file:prompts/agents/planner.txt}",
       "tools": {

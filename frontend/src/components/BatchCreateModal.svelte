@@ -14,6 +14,7 @@
 
   let autoStart = true;
   let errorMessage = '';
+  let submitting = false;
   let entries: BatchEntry[] = [
     { name: '', url: '', priority: 5, steps: [{ action: 'navigate', value: '', selector: '' }] },
   ];
@@ -32,6 +33,7 @@
 
   async function submit() {
     if (!canSubmit()) return;
+    submitting = true;
 
     const inputs = entries.map(e => ({
       name: e.name,
@@ -53,6 +55,8 @@
       dispatch('close');
     } catch (err: any) {
       errorMessage = err?.message || String(err);
+    } finally {
+      submitting = false;
     }
   }
 </script>
@@ -110,7 +114,7 @@
       <span class="text-muted text-sm">{entries.length} task{entries.length !== 1 ? 's' : ''}</span>
       <div class="footer-buttons">
         <button class="btn-secondary" on:click={() => dispatch('close')}>Cancel</button>
-        <button class="btn-primary" on:click={submit} disabled={!canSubmit()}>Create {entries.length} Task{entries.length !== 1 ? 's' : ''}</button>
+        <button class="btn-primary" on:click={submit} disabled={!canSubmit() || submitting}>{submitting ? "Creating..." : `Create ${entries.length} Task${entries.length !== 1 ? 's' : ''}`}</button>
       </div>
     </div>
   </div>

@@ -32,6 +32,7 @@ var (
 	ErrTagTooLong          = errors.New("tag must not exceed 50 characters")
 	ErrTagEmpty            = errors.New("tag must not be empty")
 	ErrTagControlChars     = errors.New("tag must not contain control characters")
+	ErrInvalidStatus       = errors.New("invalid task status")
 )
 
 var validActions = map[models.StepAction]bool{
@@ -208,6 +209,26 @@ func ValidateProxy(server string, protocol models.ProxyProtocol) error {
 	}
 	if err := ValidateProxyProtocol(protocol); err != nil {
 		return fmt.Errorf("validate proxy: %w", err)
+	}
+	return nil
+}
+
+
+// validStatuses defines the set of valid task status values.
+var validStatuses = map[string]bool{
+	"pending":   true,
+	"queued":    true,
+	"running":   true,
+	"completed": true,
+	"failed":    true,
+	"cancelled": true,
+	"retrying":  true,
+}
+
+// ValidateStatus checks that the status is a valid task status value.
+func ValidateStatus(status string) error {
+	if !validStatuses[status] {
+		return fmt.Errorf("%w: %s", ErrInvalidStatus, status)
 	}
 	return nil
 }

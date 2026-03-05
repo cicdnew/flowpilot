@@ -9,6 +9,7 @@
   let password = '';
   let geo = '';
   let errorMessage = '';
+  let adding = false;
 
   onMount(() => {
     refresh();
@@ -28,6 +29,7 @@
 
   async function addProxy() {
     if (!server) return;
+    adding = true;
     try {
       errorMessage = '';
       await AddProxy(server, protocol, username, password, geo);
@@ -38,6 +40,8 @@
       await refresh();
     } catch (err: any) {
       errorMessage = err?.message || String(err);
+    } finally {
+      adding = false;
     }
   }
 
@@ -77,7 +81,7 @@
     <div class="form-row mt-2">
       <input bind:value={username} placeholder="Username" />
       <input type="password" bind:value={password} placeholder="Password" />
-      <button class="btn-primary btn-sm" on:click={addProxy} disabled={!server}>Add</button>
+      <button class="btn-primary btn-sm" on:click={addProxy} disabled={!server || adding}>{adding ? "..." : "Add"}</button>
     </div>
     {#if errorMessage}
       <div class="error-text">{errorMessage}</div>

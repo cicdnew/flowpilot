@@ -14,6 +14,7 @@
   let editProxyGeo = '';
   let editTags = '';
   let editError = '';
+  let saving = false;
 
   const actions = ['navigate', 'click', 'type', 'wait', 'screenshot', 'extract', 'scroll', 'select'];
 
@@ -47,6 +48,7 @@
 
   async function saveEdit() {
     if (!$selectedTask) return;
+    saving = true;
     const proxyConfig: ProxyConfig = {
       server: editProxyServer,
       username: editProxyUsername,
@@ -62,6 +64,8 @@
       editing = false;
     } catch (err: any) {
       editError = err?.message || String(err);
+    } finally {
+      saving = false;
     }
   }
 
@@ -138,7 +142,7 @@
         {/if}
         <div class="edit-actions">
           <button class="btn-secondary btn-sm" on:click={cancelEdit}>Cancel</button>
-          <button class="btn-primary btn-sm" on:click={saveEdit} disabled={!editName || !editUrl}>Save</button>
+          <button class="btn-primary btn-sm" on:click={saveEdit} disabled={!editName || !editUrl || saving}>{saving ? "Saving..." : "Save"}</button>
         </div>
       </div>
     {/if}

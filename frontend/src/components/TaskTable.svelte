@@ -7,6 +7,17 @@
   const dispatch = createEventDispatcher();
 
   let actionError = '';
+  let busyTaskIds = new Set<string>();
+
+  function markBusy(id: string) {
+    busyTaskIds.add(id);
+    busyTaskIds = busyTaskIds; // trigger reactivity
+  }
+
+  function unmarkBusy(id: string) {
+    busyTaskIds.delete(id);
+    busyTaskIds = busyTaskIds; // trigger reactivity
+  }
 
   function selectTask(task: Task) {
     selectedTaskId.set(task.id);
@@ -17,32 +28,41 @@
   }
 
   async function startTask(id: string) {
+    markBusy(id);
     try {
       clearError();
       await StartTask(id);
     } catch (err: any) {
       actionError = `Start failed: ${err?.message || err}`;
+    } finally {
+      unmarkBusy(id);
     }
     dispatch('refresh');
   }
 
   async function cancelTask(id: string) {
+    markBusy(id);
     try {
       clearError();
       await CancelTask(id);
     } catch (err: any) {
       actionError = `Cancel failed: ${err?.message || err}`;
+    } finally {
+      unmarkBusy(id);
     }
     dispatch('refresh');
   }
 
   async function deleteTask(id: string) {
     if (!confirm('Delete this task?')) return;
+    markBusy(id);
     try {
       clearError();
       await DeleteTask(id);
     } catch (err: any) {
       actionError = `Delete failed: ${err?.message || err}`;
+    } finally {
+      unmarkBusy(id);
     }
     dispatch('refresh');
   }

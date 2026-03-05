@@ -17,12 +17,16 @@ import (
 
 type EventCallback func(event models.TaskEvent)
 
+// ErrQueueFull is returned when the pending queue has reached its maximum size.
+var ErrQueueFull = fmt.Errorf("queue is full: too many pending tasks")
+
 type Queue struct {
 	db             *database.DB
 	runner         *browser.Runner
 	proxyManager   *proxy.Manager
 	sem            *semaphore.Weighted
 	maxConcurrency int64
+	maxPending     int
 	onEvent        EventCallback
 
 	mu        sync.Mutex
@@ -40,6 +44,7 @@ func New(db *database.DB, runner *browser.Runner, maxConcurrency int, onEvent Ev
 		runner:         runner,
 		sem:            semaphore.NewWeighted(int64(maxConcurrency)),
 		maxConcurrency: int64(maxConcurrency),
+		maxPending:     maxConcurrency * 10, // default: 10x concurrency limit
 		onEvent:        onEvent,
 		running:        make(map[string]context.CancelFunc),
 		pending:        make(map[string]context.CancelFunc),
@@ -73,6 +78,10 @@ func (q *Queue) Submit(ctx context.Context, task models.Task) error {
 	if _, ok := q.pending[task.ID]; ok {
 		q.mu.Unlock()
 		return fmt.Errorf("task %s is already pending", task.ID)
+	}
+	if q.maxPending > 0 && len(q.pending) >= q.maxPending {
+		q.mu.Unlock()
+		return ErrQueueFull
 	}
 
 	taskCtx, cancel := context.WithCancel(ctx)
@@ -204,7 +213,9 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task) {
 
 	if selectedProxyID != "" {
 		if pm := q.getProxyManager(); pm != nil {
-			_ = pm.RecordUsage(selectedProxyID, err == nil)
+			if recordErr := pm.RecordUsage(selectedProxyID, err == nil); recordErr != nil {
+				q.emitEvent(task.ID, task.Status, fmt.Sprintf("proxy usage recording failed: %v", recordErr))
+			}
 		}
 	}
 

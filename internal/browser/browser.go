@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -134,11 +135,13 @@ func (r *Runner) setupProxyAuth(ctx context.Context, proxyConfig models.ProxyCon
 					return
 				}
 				c := cdp.WithExecutor(ctx, execCtx.Target)
-				_ = fetch.ContinueWithAuth(e.RequestID, &fetch.AuthChallengeResponse{
+				if err := fetch.ContinueWithAuth(e.RequestID, &fetch.AuthChallengeResponse{
 					Response: fetch.AuthChallengeResponseResponseProvideCredentials,
 					Username: proxyConfig.Username,
 					Password: proxyConfig.Password,
-				}).Do(c)
+				}).Do(c); err != nil {
+					log.Printf("proxy auth continue failed: %v", err)
+				}
 			}()
 		case *fetch.EventRequestPaused:
 			go func() {
@@ -147,7 +150,9 @@ func (r *Runner) setupProxyAuth(ctx context.Context, proxyConfig models.ProxyCon
 					return
 				}
 				c := cdp.WithExecutor(ctx, execCtx.Target)
-				_ = fetch.ContinueRequest(e.RequestID).Do(c)
+				if err := fetch.ContinueRequest(e.RequestID).Do(c); err != nil {
+					log.Printf("proxy request continue failed: %v", err)
+				}
 			}()
 		}
 	})

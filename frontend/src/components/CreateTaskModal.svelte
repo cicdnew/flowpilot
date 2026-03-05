@@ -17,6 +17,7 @@
   let tagsInput = '';
   let steps: TaskStep[] = [{ action: 'navigate', value: '', selector: '' }];
   let errorMessage = '';
+  let submitting = false;
 
   const actions = ['navigate', 'click', 'type', 'wait', 'screenshot', 'extract', 'scroll', 'select'];
 
@@ -30,6 +31,7 @@
 
   async function submit() {
     if (!name || !url) return;
+    submitting = true;
 
     const proxyConfig: ProxyConfig = {
       server: proxyServer,
@@ -58,6 +60,8 @@
       dispatch('close');
     } catch (err: any) {
       errorMessage = err?.message || String(err);
+    } finally {
+      submitting = false;
     }
   }
 </script>
@@ -150,7 +154,7 @@
 
     <div class="modal-footer">
       <button class="btn-secondary" on:click={() => dispatch('close')}>Cancel</button>
-      <button class="btn-primary" on:click={submit} disabled={!name || !url}>Create Task</button>
+      <button class="btn-primary" on:click={submit} disabled={!name || !url || submitting}>{submitting ? "Creating..." : "Create Task"}</button>
     </div>
   </div>
 </div>

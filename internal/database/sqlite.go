@@ -3,6 +3,7 @@ package database
 import (
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"fmt"
 	"time"
 
@@ -91,7 +92,15 @@ func (db *DB) migrate() error {
 	}
 
 	// Add proxy_protocol column for existing databases (idempotent).
-	_, _ = db.conn.Exec(`ALTER TABLE tasks ADD COLUMN proxy_protocol TEXT DEFAULT ''`)
+	// "duplicate column name" error is expected for new databases where the column
+	// already exists in the CREATE TABLE; all other errors should be reported.
+	_, alterErr := db.conn.Exec(`ALTER TABLE tasks ADD COLUMN proxy_protocol TEXT DEFAULT ''`)
+	if alterErr != nil {
+		// SQLite returns "duplicate column name" if column already exists — that's OK.
+		if !strings.Contains(alterErr.Error(), "duplicate column name") {
+			return fmt.Errorf("add proxy_protocol column: %w", alterErr)
+		}
+	}
 
 	return nil
 }

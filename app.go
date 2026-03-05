@@ -106,6 +106,19 @@ func (a *App) shutdown(ctx context.Context) {
 	}
 }
 
+// shutdownFromSignal is called from OS signal handler (no Wails context available).
+func (a *App) shutdownFromSignal() {
+	if a.queue != nil {
+		a.queue.Stop()
+	}
+	if a.proxyManager != nil {
+		a.proxyManager.Stop()
+	}
+	if a.db != nil {
+		a.db.Close()
+	}
+}
+
 // --- Task API (bound to frontend) ---
 
 // CreateTask creates a new task and optionally starts it.
@@ -145,6 +158,9 @@ func (a *App) CreateTask(name, url string, steps []models.TaskStep, proxyConfig 
 
 // GetTask returns a task by ID.
 func (a *App) GetTask(id string) (*models.Task, error) {
+	if id == "" {
+		return nil, fmt.Errorf("get task: id is required")
+	}
 	return a.db.GetTask(id)
 }
 
@@ -155,11 +171,17 @@ func (a *App) ListTasks() ([]models.Task, error) {
 
 // ListTasksByStatus returns tasks with a given status.
 func (a *App) ListTasksByStatus(status string) ([]models.Task, error) {
+	if err := validation.ValidateStatus(status); err != nil {
+		return nil, fmt.Errorf("list tasks by status: %w", err)
+	}
 	return a.db.ListTasksByStatus(models.TaskStatus(status))
 }
 
 // StartTask submits a pending task to the queue.
 func (a *App) StartTask(id string) error {
+	if id == "" {
+		return fmt.Errorf("start task: id is required")
+	}
 	task, err := a.db.GetTask(id)
 	if err != nil {
 		return fmt.Errorf("get task for start: %w", err)
@@ -178,6 +200,9 @@ func (a *App) StartAllPending() error {
 
 // CancelTask cancels a running task.
 func (a *App) CancelTask(id string) error {
+	if id == "" {
+		return fmt.Errorf("cancel task: id is required")
+	}
 	return a.queue.Cancel(id)
 }
 
@@ -230,8 +255,14 @@ func (a *App) CreateBatch(inputs []models.BatchTaskInput, autoStart bool) ([]mod
 
 // DeleteTask cancels a running task (if any) and deletes it.
 func (a *App) DeleteTask(id string) error {
+	if id == "" {
+		return fmt.Errorf("delete task: id is required")
+	}
 	if a.queue != nil {
-		_ = a.queue.Cancel(id)
+		if err := a.queue.Cancel(id); err != nil {
+			// Log but don't fail — task may not be running/queued, which is fine.
+			wailsRuntime.LogWarningf(a.ctx, "cancel before delete for task %s: %v", id, err)
+		}
 	}
 	return a.db.DeleteTask(id)
 }
@@ -281,6 +312,9 @@ func (a *App) ListProxies() ([]models.Proxy, error) {
 
 // DeleteProxy removes a proxy.
 func (a *App) DeleteProxy(id string) error {
+	if id == "" {
+		return fmt.Errorf("delete proxy: id is required")
+	}
 	return a.db.DeleteProxy(id)
 }
 

@@ -14,14 +14,18 @@
   let showCreateModal = false;
   let showBatchModal = false;
   let loadError = '';
+  let loading = false;
 
   async function refreshTasks() {
+    loading = true;
     try {
       loadError = '';
       const list = await ListTasks();
       tasks.set(list || []);
     } catch (err: any) {
       loadError = `Failed to load tasks: ${err?.message || err}`;
+    } finally {
+      loading = false;
     }
   }
 
@@ -61,6 +65,9 @@
     </button>
   </nav>
 
+  {#if loading}
+    <div class="loading-bar">Loading...</div>
+  {/if}
   {#if loadError}
     <div class="load-error">{loadError}</div>
   {/if}
@@ -127,6 +134,14 @@
     display: flex;
     flex: 1;
     overflow: hidden;
+  }
+  .loading-bar {
+    padding: 6px 20px;
+    background: rgba(59, 130, 246, 0.1);
+    color: var(--accent, #3b82f6);
+    font-size: 12px;
+    border-bottom: 1px solid rgba(59, 130, 246, 0.2);
+    text-align: center;
   }
   .load-error {
     padding: 8px 20px;

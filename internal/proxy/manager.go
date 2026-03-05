@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -169,7 +170,9 @@ func (m *Manager) checkAll(ctx context.Context) {
 func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 	proxyURL, err := url.Parse(fmt.Sprintf("%s://%s", proxy.Protocol, proxy.Server))
 	if err != nil {
-		_ = m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusUnhealthy, 0)
+		if dbErr := m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusUnhealthy, 0); dbErr != nil {
+			log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
+		}
 		return
 	}
 
@@ -185,7 +188,9 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 	start := time.Now()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.config.HealthCheckURL, nil)
 	if err != nil {
-		_ = m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusUnhealthy, 0)
+		if dbErr := m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusUnhealthy, 0); dbErr != nil {
+			log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
+		}
 		return
 	}
 
@@ -193,15 +198,21 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 	latency := int(time.Since(start).Milliseconds())
 
 	if err != nil {
-		_ = m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusUnhealthy, latency)
+		if dbErr := m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusUnhealthy, latency); dbErr != nil {
+			log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
+		}
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		_ = m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusUnhealthy, latency)
+		if dbErr := m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusUnhealthy, latency); dbErr != nil {
+			log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
+		}
 		return
 	}
 
-	_ = m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusHealthy, latency)
+	if dbErr := m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusHealthy, latency); dbErr != nil {
+		log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
+	}
 }

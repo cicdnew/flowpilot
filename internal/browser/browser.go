@@ -68,7 +68,7 @@ func validateEvalScript(script string) error {
 type Runner struct {
 	screenshotDir string
 	allowEval     atomic.Bool
-	forceHeadless bool
+	forceHeadless atomic.Bool
 }
 
 // NewRunner creates a new browser runner. Eval steps are blocked by default.
@@ -83,7 +83,7 @@ func NewRunner(screenshotDir string) (*Runner, error) {
 
 // SetForceHeadless enforces headless mode on all tasks when enabled.
 func (r *Runner) SetForceHeadless(force bool) {
-	r.forceHeadless = force
+	r.forceHeadless.Store(force)
 }
 
 // SetAllowEval configures whether the runner permits eval step execution.
@@ -134,7 +134,7 @@ func (r *Runner) createAllocator(ctx context.Context, proxyConfig models.ProxyCo
 
 	// Respect forceHeadless override; otherwise use the task's headless preference.
 	useHeadless := headless
-	if r.forceHeadless {
+	if r.forceHeadless.Load() {
 		useHeadless = true
 	}
 

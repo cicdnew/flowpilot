@@ -2,6 +2,7 @@ package logs
 
 import (
 	"encoding/json"
+	"sync"
 	"time"
 
 	"web-automation/internal/models"
@@ -11,6 +12,7 @@ import (
 
 // NetworkLogger captures HAR-like network timing logs.
 type NetworkLogger struct {
+	mu         sync.Mutex
 	taskID     string
 	stepIndex  int
 	startTimes map[network.RequestID]time.Time
@@ -32,22 +34,30 @@ func NewNetworkLogger(taskID string) *NetworkLogger {
 
 // SetStepIndex associates upcoming requests with a step.
 func (n *NetworkLogger) SetStepIndex(stepIndex int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.stepIndex = stepIndex
 }
 
 // HandleRequestWillBeSent records the start time of a request.
 func (n *NetworkLogger) HandleRequestWillBeSent(ev *network.EventRequestWillBeSent) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.startTimes[ev.RequestID] = time.Now()
 	n.requests[ev.RequestID] = ev.Request
 }
 
 // HandleResponseReceived stores response metadata for a request.
 func (n *NetworkLogger) HandleResponseReceived(ev *network.EventResponseReceived) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	n.responses[ev.RequestID] = ev.Response
 }
 
 // HandleLoadingFinished records completion and builds a network log entry.
 func (n *NetworkLogger) HandleLoadingFinished(ev *network.EventLoadingFinished, response *network.Response) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	start, ok := n.startTimes[ev.RequestID]
 	if !ok {
 		start = time.Now()
@@ -85,5 +95,9 @@ func (n *NetworkLogger) HandleLoadingFinished(ev *network.EventLoadingFinished, 
 
 // Logs returns accumulated network logs.
 func (n *NetworkLogger) Logs() []models.NetworkLog {
-	return n.logs
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	result := make([]models.NetworkLog, len(n.logs))
+	copy(result, n.logs)
+	return result
 }

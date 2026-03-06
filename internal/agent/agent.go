@@ -16,15 +16,18 @@ import (
 	"web-automation/internal/queue"
 )
 
+// Agent is a headless background service that polls for pending tasks and executes them.
 type Agent struct {
 	db           *database.DB
 	runner       *browser.Runner
 	queue        *queue.Queue
 	proxyManager *proxy.Manager
 	dataDir      string
+	pollInterval time.Duration
 	cancel       context.CancelFunc
 }
 
+// Config holds settings for creating a background Agent.
 type Config struct {
 	DataDir        string
 	MaxConcurrency int
@@ -85,6 +88,7 @@ func New(cfg Config) (*Agent, error) {
 		queue:        q,
 		proxyManager: pm,
 		dataDir:      cfg.DataDir,
+		pollInterval: cfg.PollInterval,
 	}, nil
 }
 
@@ -95,7 +99,7 @@ func (a *Agent) Run(ctx context.Context) error {
 
 	log.Println("[agent] started, polling for pending tasks...")
 
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(a.pollInterval)
 	defer ticker.Stop()
 
 	a.processPending(ctx)

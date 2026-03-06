@@ -587,7 +587,8 @@ func TestCreateAllocatorRespectsHeadless(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			runner := &Runner{screenshotDir: t.TempDir(), forceHeadless: tc.forceHeadless}
+			runner := &Runner{screenshotDir: t.TempDir()}
+			runner.forceHeadless.Store(tc.forceHeadless)
 
 			ctx := context.Background()
 			allocCtx, allocCancel := runner.createAllocator(ctx, models.ProxyConfig{}, tc.taskHeadless)
@@ -606,17 +607,17 @@ func TestCreateAllocatorRespectsHeadless(t *testing.T) {
 func TestSetForceHeadless(t *testing.T) {
 	runner := &Runner{screenshotDir: t.TempDir()}
 
-	if runner.forceHeadless {
+	if runner.forceHeadless.Load() {
 		t.Fatal("forceHeadless should default to false")
 	}
 
 	runner.SetForceHeadless(true)
-	if !runner.forceHeadless {
+	if !runner.forceHeadless.Load() {
 		t.Fatal("forceHeadless should be true after SetForceHeadless(true)")
 	}
 
 	runner.SetForceHeadless(false)
-	if runner.forceHeadless {
+	if runner.forceHeadless.Load() {
 		t.Fatal("forceHeadless should be false after SetForceHeadless(false)")
 	}
 }

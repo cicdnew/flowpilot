@@ -1,18 +1,18 @@
 package recorder
 
-import "web-automation/internal/models"
+import (
+	"sort"
+
+	"web-automation/internal/models"
+)
 
 // RankSelectors orders selector candidates by stability score.
 func RankSelectors(candidates []models.SelectorCandidate) []models.SelectorCandidate {
 	sorted := make([]models.SelectorCandidate, len(candidates))
 	copy(sorted, candidates)
-	for i := 0; i < len(sorted); i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if sorted[j].Score > sorted[i].Score {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
-	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].Score > sorted[j].Score
+	})
 	return sorted
 }
 

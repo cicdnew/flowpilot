@@ -3,6 +3,7 @@ package recorder
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"web-automation/internal/models"
@@ -16,9 +17,12 @@ import (
 	"web-automation/internal/logs"
 )
 
+// EventHandler is called when a new step is recorded during a browser session.
 type EventHandler func(step models.RecordedStep)
 
+// Recorder opens a headless=false Chrome session and captures user interactions via CDP.
 type Recorder struct {
+	mu            sync.Mutex
 	parentCtx     context.Context
 	handler       EventHandler
 	flowID        string
@@ -89,16 +93,23 @@ func (r *Recorder) registerListeners() {
 			if e.TargetInfo == nil || e.TargetInfo.Type != "page" {
 				return
 			}
+			r.mu.Lock()
 			if r.activeTabID != "" && e.TargetInfo.TargetID != r.activeTabID {
 				r.activeTabID = e.TargetInfo.TargetID
+				r.mu.Unlock()
 				r.RecordStep(models.ActionTabSwitch, "", e.TargetInfo.URL)
-			}
-			if r.activeTabID == "" {
-				r.activeTabID = e.TargetInfo.TargetID
+			} else {
+				if r.activeTabID == "" {
+					r.activeTabID = e.TargetInfo.TargetID
+				}
+				r.mu.Unlock()
 			}
 		case *network.EventRequestWillBeSent:
 			if r.netLogger != nil {
-				r.netLogger.SetStepIndex(r.stepIndex)
+				r.mu.Lock()
+				idx := r.stepIndex
+				r.mu.Unlock()
+				r.netLogger.SetStepIndex(idx)
 				r.netLogger.HandleRequestWillBeSent(e)
 			}
 		case *network.EventResponseReceived:
@@ -152,7 +163,7 @@ func (r *Recorder) handleBindingCall(payload string) {
 	r.RecordStep(action, selector, value)
 }
 
-func (r *Recorder) Stop() error {
+func (r *Recorder) Stop() {
 	if r.browserCancel != nil {
 		r.browserCancel()
 		r.browserCancel = nil
@@ -163,7 +174,6 @@ func (r *Recorder) Stop() error {
 	}
 	r.browserCtx = nil
 	r.allocCtx = nil
-	return nil
 }
 
 func (r *Recorder) BrowserCtx() context.Context {
@@ -189,18 +199,24 @@ func (r *Recorder) RecordStep(action models.StepAction, selector, value string) 
 	if r.handler == nil {
 		return
 	}
+	r.mu.Lock()
+	idx := r.stepIndex
+	r.stepIndex++
+	snapshotter := r.snapshotter
+	browserCtx := r.browserCtx
+	r.mu.Unlock()
+
 	step := models.RecordedStep{
-		Index:     r.stepIndex,
+		Index:     idx,
 		Action:    action,
 		Selector:  selector,
 		Value:     value,
 		Timestamp: time.Now(),
 	}
-	if r.snapshotter != nil && r.browserCtx != nil {
-		if snap, err := r.snapshotter.CaptureSnapshot(r.browserCtx, r.flowID, r.stepIndex); err == nil {
+	if snapshotter != nil && browserCtx != nil {
+		if snap, err := snapshotter.CaptureSnapshot(browserCtx, r.flowID, idx); err == nil {
 			step.SnapshotID = snap.ID
 		}
 	}
-	r.stepIndex++
 	r.handler(step)
 }

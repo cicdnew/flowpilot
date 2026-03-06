@@ -1038,8 +1038,9 @@ func (db *DB) ListTasksPaginated(page, pageSize int, status string, tag string) 
 		args = append(args, status)
 	}
 	if tag != "" {
-		where += " AND tags LIKE ?"
-		args = append(args, "%\""+tag+"\"%")
+		escapedTag := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(tag)
+		where += " AND tags LIKE ? ESCAPE '\\'"
+		args = append(args, "%\""+escapedTag+"\"%")
 	}
 
 	var total int
@@ -1054,7 +1055,9 @@ func (db *DB) ListTasksPaginated(page, pageSize int, status string, tag string) 
 	query := `SELECT id, name, url, steps, batch_id, flow_id, headless, proxy_server, proxy_username, proxy_password, proxy_geo, proxy_protocol,
 		priority, status, retry_count, max_retries, error, result, tags, created_at, started_at, completed_at
 		FROM tasks ` + where + ` ORDER BY priority DESC, created_at DESC LIMIT ? OFFSET ?`
-	queryArgs := append(args, pageSize, offset)
+	queryArgs := make([]any, 0, len(args)+2)
+	queryArgs = append(queryArgs, args...)
+	queryArgs = append(queryArgs, pageSize, offset)
 
 	rows, err := db.conn.Query(query, queryArgs...)
 	if err != nil {
@@ -1089,40 +1092,38 @@ func (db *DB) ListTasksPaginated(page, pageSize int, status string, tag string) 
 func (db *DB) PurgeOldRecords(retentionDays int) (int64, error) {
 	cutoff := time.Now().AddDate(0, 0, -retentionDays).Format("2006-01-02 15:04:05")
 
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("begin purge tx: %w", err)
+	}
+
+	subquery := `SELECT id FROM tasks WHERE completed_at < ? AND status IN ('completed', 'failed', 'cancelled')`
 	var total int64
 
-	res, err := db.conn.Exec(`DELETE FROM step_logs WHERE task_id IN (SELECT id FROM tasks WHERE completed_at < ? AND status IN ('completed', 'failed', 'cancelled'))`, cutoff)
-	if err != nil {
-		return 0, fmt.Errorf("purge step logs: %w", err)
-	}
-	if n, _ := res.RowsAffected(); n > 0 {
-		total += n
-	}
-
-	res, err = db.conn.Exec(`DELETE FROM network_logs WHERE task_id IN (SELECT id FROM tasks WHERE completed_at < ? AND status IN ('completed', 'failed', 'cancelled'))`, cutoff)
-	if err != nil {
-		return total, fmt.Errorf("purge network logs: %w", err)
-	}
-	if n, _ := res.RowsAffected(); n > 0 {
-		total += n
+	purgeQueries := []struct {
+		label string
+		query string
+	}{
+		{"step logs", `DELETE FROM step_logs WHERE task_id IN (` + subquery + `)`},
+		{"network logs", `DELETE FROM network_logs WHERE task_id IN (` + subquery + `)`},
+		{"task events", `DELETE FROM task_events WHERE task_id IN (` + subquery + `)`},
+		{"tasks", `DELETE FROM tasks WHERE completed_at < ? AND status IN ('completed', 'failed', 'cancelled')`},
 	}
 
-	res, err = db.conn.Exec(`DELETE FROM task_events WHERE task_id IN (SELECT id FROM tasks WHERE completed_at < ? AND status IN ('completed', 'failed', 'cancelled'))`, cutoff)
-	if err != nil {
-		return total, fmt.Errorf("purge task events: %w", err)
-	}
-	if n, _ := res.RowsAffected(); n > 0 {
-		total += n
-	}
-
-	res, err = db.conn.Exec(`DELETE FROM tasks WHERE completed_at < ? AND status IN ('completed', 'failed', 'cancelled')`, cutoff)
-	if err != nil {
-		return total, fmt.Errorf("purge old tasks: %w", err)
-	}
-	if n, _ := res.RowsAffected(); n > 0 {
-		total += n
+	for _, pq := range purgeQueries {
+		res, err := tx.Exec(pq.query, cutoff)
+		if err != nil {
+			_ = tx.Rollback()
+			return total, fmt.Errorf("purge %s: %w", pq.label, err)
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			total += n
+		}
 	}
 
+	if err := tx.Commit(); err != nil {
+		return total, fmt.Errorf("commit purge tx: %w", err)
+	}
 	return total, nil
 }
 

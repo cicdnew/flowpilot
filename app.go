@@ -633,7 +633,9 @@ func (a *App) StartRecording(url string) error {
 	a.recorderCancel = recCancel
 
 	snapshotDir := filepath.Join(a.dataDir, "snapshots", flowID)
-	if snapshotter, err := recorder.NewSnapshotter(snapshotDir); err == nil {
+	if snapshotter, err := recorder.NewSnapshotter(snapshotDir); err != nil {
+		wailsRuntime.LogWarningf(a.ctx, "snapshot init failed: %v", err)
+	} else {
 		a.activeRecorder.SetSnapshotter(snapshotter)
 	}
 

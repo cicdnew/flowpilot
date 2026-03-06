@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // StepLog captures detailed execution data for a single step within a task run.
 type StepLog struct {
@@ -64,9 +67,9 @@ func ClassifyError(err error) ErrorCode {
 		return ErrCodeNavFailed
 	case containsAny(msg, "proxy", "proxy auth"):
 		return ErrCodeProxyFailed
-	case containsAny(msg, "net::ERR_", "network"):
+	case containsAny(msg, "net::err_", "network"):
 		return ErrCodeNetworkError
-	case containsAny(msg, "eval", "allowEval"):
+	case containsAny(msg, "eval", "alloweval"):
 		return ErrCodeEvalBlocked
 	case containsAny(msg, "screenshot"):
 		return ErrCodeScreenshotFail
@@ -76,13 +79,10 @@ func ClassifyError(err error) ErrorCode {
 }
 
 func containsAny(s string, substrs ...string) bool {
+	lower := strings.ToLower(s)
 	for _, sub := range substrs {
-		if len(s) >= len(sub) {
-			for i := 0; i <= len(s)-len(sub); i++ {
-				if s[i:i+len(sub)] == sub {
-					return true
-				}
-			}
+		if strings.Contains(lower, sub) {
+			return true
 		}
 	}
 	return false

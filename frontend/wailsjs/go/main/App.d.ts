@@ -46,6 +46,8 @@ export function ListRecordedFlows():Promise<Array<models.RecordedFlow>>;
 
 export function ListTasksByBatch(arg1:string):Promise<Array<models.Task>>;
 
+export function RetryFailedBatch(arg1:string):Promise<Array<models.Task>>;
+
 export function ListDOMSnapshots(arg1:string):Promise<Array<models.DOMSnapshot>>;
 
 export function ListTasksByStatus(arg1:string):Promise<Array<models.Task>>;

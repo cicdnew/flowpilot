@@ -90,6 +90,10 @@ export function ListTasksByBatch(arg1) {
   return window['go']['main']['App']['ListTasksByBatch'](arg1);
 }
 
+export function RetryFailedBatch(arg1) {
+  return window['go']['main']['App']['RetryFailedBatch'](arg1);
+}
+
 export function ListDOMSnapshots(arg1) {
   return window['go']['main']['App']['ListDOMSnapshots'](arg1);
 }

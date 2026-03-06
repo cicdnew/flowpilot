@@ -1,12 +1,13 @@
 <script lang="ts">
   import type { Task, BatchProgress } from '../lib/types';
-  import { GetBatchProgress } from '../../wailsjs/go/main/App';
+  import { GetBatchProgress, RetryFailedBatch } from '../../wailsjs/go/main/App';
 
   export let task: Task | null = null;
 
   let progress: BatchProgress | null = null;
   let loading = false;
   let errorMessage = '';
+  let retrying = false;
 
   $: batchId = task?.batchId;
 
@@ -28,13 +29,43 @@
   } else {
     progress = null;
   }
+
+  let interval: ReturnType<typeof setInterval> | null = null;
+  $: if (batchId) {
+    if (interval) {
+      clearInterval(interval);
+    }
+    interval = setInterval(refresh, 5000);
+  } else if (interval) {
+    clearInterval(interval);
+    interval = null;
+  }
+
+  async function retryFailed() {
+    if (!batchId) return;
+    retrying = true;
+    try {
+      errorMessage = '';
+      await RetryFailedBatch(batchId);
+      await refresh();
+    } catch (err: any) {
+      errorMessage = err?.message || String(err);
+    } finally {
+      retrying = false;
+    }
+  }
 </script>
 
 {#if batchId}
   <div class="panel">
     <div class="panel-header">
       <h3>Batch Progress</h3>
-      <button class="btn-secondary btn-sm" on:click={refresh} disabled={loading}>Refresh</button>
+      <div class="actions">
+        <button class="btn-secondary btn-sm" on:click={refresh} disabled={loading}>Refresh</button>
+        <button class="btn-primary btn-sm" on:click={retryFailed} disabled={retrying || !progress || progress.failed === 0}>
+          {retrying ? 'Retrying...' : 'Retry Failed'}
+        </button>
+      </div>
     </div>
     {#if errorMessage}
       <div class="error-banner">{errorMessage}</div>
@@ -65,6 +96,10 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 8px;
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
   }
   .grid {
     display: grid;

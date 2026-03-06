@@ -364,6 +364,29 @@ func (a *App) ListTasksByBatch(batchID string) ([]models.Task, error) {
 	return a.db.ListTasksByBatch(batchID)
 }
 
+// RetryFailedBatch re-queues all failed tasks in a batch.
+func (a *App) RetryFailedBatch(batchID string) ([]models.Task, error) {
+	if batchID == "" {
+		return nil, fmt.Errorf("retry batch: batchID is required")
+	}
+	failed, err := a.db.ListTasksByBatchStatus(batchID, models.TaskStatusFailed)
+	if err != nil {
+		return nil, fmt.Errorf("retry batch: %w", err)
+	}
+	if len(failed) == 0 {
+		return failed, nil
+	}
+	for _, task := range failed {
+		if err := a.db.UpdateTaskStatus(task.ID, models.TaskStatusPending, "retry batch"); err != nil {
+			return failed, fmt.Errorf("retry batch update: %w", err)
+		}
+	}
+	if err := a.queue.SubmitBatch(a.ctx, failed); err != nil {
+		return failed, fmt.Errorf("retry batch submit: %w", err)
+	}
+	return failed, nil
+}
+
 // ExportTaskLogs exports logs for a task and returns file paths.
 func (a *App) ExportTaskLogs(taskID string) (string, string, error) {
 	if a.logExporter == nil {

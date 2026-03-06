@@ -853,6 +853,30 @@ func (db *DB) ListTasksByBatch(batchID string) ([]models.Task, error) {
 	return tasks, nil
 }
 
+// ListTasksByBatchStatus returns tasks in a batch with a specific status.
+func (db *DB) ListTasksByBatchStatus(batchID string, status models.TaskStatus) ([]models.Task, error) {
+	rows, err := db.conn.Query(`SELECT id, name, url, steps, batch_id, flow_id, headless, proxy_server, proxy_username, proxy_password, proxy_geo, proxy_protocol,
+		priority, status, retry_count, max_retries, error, result, tags, created_at, started_at, completed_at
+		FROM tasks WHERE batch_id = ? AND status = ? ORDER BY created_at ASC`, batchID, status)
+	if err != nil {
+		return nil, fmt.Errorf("query tasks by batch status %s: %w", batchID, err)
+	}
+	defer rows.Close()
+
+	var tasks []models.Task
+	for rows.Next() {
+		task, err := db.scanTaskRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan batch task row: %w", err)
+		}
+		tasks = append(tasks, *task)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate batch tasks: %w", err)
+	}
+	return tasks, nil
+}
+
 // --- Task Events ---
 
 // InsertTaskEvent records a task lifecycle event.

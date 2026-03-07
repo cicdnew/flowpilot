@@ -1,7 +1,7 @@
 <script lang="ts">
   import { selectedTask, tasks } from '../lib/store';
   import { UpdateTask, GetTask } from '../../wailsjs/go/main/App';
-  import type { TaskStep, ProxyConfig } from '../lib/types';
+  import type { Task, TaskStep, ProxyConfig } from '../lib/types';
 
   let editing = false;
   let editName = '';
@@ -59,7 +59,7 @@
       editError = '';
       const tags = editTags.split(',').map(t => t.trim()).filter(t => t.length > 0);
       await UpdateTask($selectedTask.id, editName, editUrl, editSteps, proxyConfig, editPriority, tags);
-      const updated = await GetTask($selectedTask.id);
+      const updated = await GetTask($selectedTask.id) as unknown as Task;
       tasks.update(list => list.map(t => t.id === updated.id ? updated : t));
       editing = false;
     } catch (err: any) {

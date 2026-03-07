@@ -64,7 +64,7 @@
     saving = true;
     try {
       errorMessage = '';
-      await CreateRecordedFlow(flowName, flowDescription, originUrl, $recordingSteps);
+      await CreateRecordedFlow(flowName, flowDescription, originUrl, $recordingSteps as any);
       dispatch('saved');
       flowName = '';
       flowDescription = '';

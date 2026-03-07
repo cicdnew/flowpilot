@@ -13,6 +13,7 @@
   import LogViewer from './components/LogViewer.svelte';
   import BatchProgressPanel from './components/BatchProgressPanel.svelte';
   import { tasks, activeTab, updateTaskInStore, selectedTask } from './lib/store';
+  import type { Task } from './lib/types';
   import { ListTasks } from '../wailsjs/go/main/App';
   import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime';
 
@@ -28,7 +29,7 @@
     try {
       loadError = '';
       const list = await ListTasks();
-      tasks.set(list || []);
+      tasks.set((list || []) as unknown as Task[]);
     } catch (err: any) {
       loadError = `Failed to load tasks: ${err?.message || err}`;
     } finally {

@@ -50,7 +50,7 @@
 
     try {
       errorMessage = '';
-      await CreateBatch(inputs, autoStart);
+      await CreateBatch(inputs as any, autoStart);
       dispatch('created');
       dispatch('close');
     } catch (err: any) {

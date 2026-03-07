@@ -35,7 +35,7 @@
         proxy: { server: '', username: '', password: '', geo: '' },
         tags: [],
         autoStart,
-      });
+      } as any);
       dispatch('created');
       dispatch('close');
     } catch (err: any) {

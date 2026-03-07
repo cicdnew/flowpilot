@@ -3,7 +3,7 @@ package logs
 import (
 	"time"
 
-	"web-automation/internal/models"
+	"flowpilot/internal/models"
 )
 
 // StepLogger accumulates step logs for a task execution.

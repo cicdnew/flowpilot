@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"web-automation/internal/browser"
-	"web-automation/internal/database"
-	"web-automation/internal/models"
-	"web-automation/internal/proxy"
+	"flowpilot/internal/browser"
+	"flowpilot/internal/database"
+	"flowpilot/internal/models"
+	"flowpilot/internal/proxy"
 
 	"golang.org/x/sync/semaphore"
 )

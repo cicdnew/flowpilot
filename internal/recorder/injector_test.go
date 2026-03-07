@@ -3,7 +3,7 @@ package recorder
 import (
 	"testing"
 
-	"web-automation/internal/models"
+	"flowpilot/internal/models"
 )
 
 func TestParseBindingPayloadClick(t *testing.T) {

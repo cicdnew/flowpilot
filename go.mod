@@ -1,4 +1,4 @@
-module web-automation
+module flowpilot
 
 go 1.24.0
 

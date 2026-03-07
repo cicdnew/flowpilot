@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"web-automation/internal/crypto"
-	"web-automation/internal/database"
-	"web-automation/internal/models"
+	"flowpilot/internal/crypto"
+	"flowpilot/internal/database"
+	"flowpilot/internal/models"
 )
 
 func TestWriteJSONLToWriter(t *testing.T) {

@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"web-automation/internal/database"
-	"web-automation/internal/models"
+	"flowpilot/internal/database"
+	"flowpilot/internal/models"
 )
 
 // Exporter handles JSONL/CSV log exports for tasks and batches.

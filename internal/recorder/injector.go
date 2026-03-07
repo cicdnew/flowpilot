@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"web-automation/internal/models"
+	"flowpilot/internal/models"
 )
 
 const bindingName = "__recordStep"

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"web-automation/internal/crypto"
-	"web-automation/internal/models"
+	"flowpilot/internal/crypto"
+	"flowpilot/internal/models"
 
 	_ "github.com/mattn/go-sqlite3"
 )

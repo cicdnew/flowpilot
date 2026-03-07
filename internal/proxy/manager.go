@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"web-automation/internal/database"
-	"web-automation/internal/models"
+	"flowpilot/internal/database"
+	"flowpilot/internal/models"
 )
 
 // Manager handles proxy pool selection, rotation, and health checks.

@@ -1,10 +1,10 @@
-# AGENTS.md — Web Automation Dashboard
+# AGENTS.md — FlowPilot
 
 Orients agentic coding tools working in this repository.
 
 ## Repository Overview
 
-- **Backend:** Go 1.24, Wails v2 desktop framework, module `web-automation`
+- **Backend:** Go 1.24, Wails v2 desktop framework, module `flowpilot`
 - **Frontend:** Svelte 3 + TypeScript (Vite), in `frontend/`
 - **Automation:** chromedp (Chrome DevTools Protocol)
 - **DB:** SQLite via go-sqlite3, encrypted proxy credentials (`internal/crypto`)
@@ -51,7 +51,7 @@ npm run test -- --run -t "store updates"      # single test by name
 **Imports** — three groups separated by blank lines:
 1. Standard library
 2. External (`github.com/...`)
-3. Internal (`web-automation/internal/...`)
+3. Internal (`flowpilot/internal/...`)
 
 **Naming:**
 - Exported: `CamelCase`; unexported: `camelCase`

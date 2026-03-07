@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"web-automation/internal/browser"
-	"web-automation/internal/crypto"
-	"web-automation/internal/database"
-	"web-automation/internal/models"
-	"web-automation/internal/queue"
+	"flowpilot/internal/browser"
+	"flowpilot/internal/crypto"
+	"flowpilot/internal/database"
+	"flowpilot/internal/models"
+	"flowpilot/internal/queue"
 )
 
 func initTestCrypto(t *testing.T) {

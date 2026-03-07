@@ -1,4 +1,4 @@
-# Project: Web Automation Dashboard
+# Project: FlowPilot
 
 ## Stack
 - **Backend**: Go 1.24, Wails v2 (desktop app framework)

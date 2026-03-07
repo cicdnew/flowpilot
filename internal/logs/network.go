@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"web-automation/internal/models"
+	"flowpilot/internal/models"
 
 	"github.com/chromedp/cdproto/network"
 )

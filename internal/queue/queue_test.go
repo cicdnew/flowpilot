@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"web-automation/internal/browser"
-	"web-automation/internal/crypto"
-	"web-automation/internal/database"
-	"web-automation/internal/models"
-	"web-automation/internal/proxy"
+	"flowpilot/internal/browser"
+	"flowpilot/internal/crypto"
+	"flowpilot/internal/database"
+	"flowpilot/internal/models"
+	"flowpilot/internal/proxy"
 )
 
 func setupTestQueue(t *testing.T, maxConcurrency int, events *[]models.TaskEvent, mu *sync.Mutex) (*Queue, *database.DB) {

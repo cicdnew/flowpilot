@@ -1,8 +1,8 @@
-# README
+# FlowPilot
 
 ## About
 
-This is the official Wails Svelte-TS template.
+A desktop browser automation dashboard built with Go, Wails, and Svelte. Record, replay, and batch-execute web browser flows with proxy management, task queuing, and network capture.
 
 ## Live Development
 

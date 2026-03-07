@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"web-automation/internal/models"
+	"flowpilot/internal/models"
 
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/fetch"

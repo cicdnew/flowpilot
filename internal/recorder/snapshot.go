@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"web-automation/internal/models"
+	"flowpilot/internal/models"
 
 	"github.com/chromedp/chromedp"
 )

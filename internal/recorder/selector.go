@@ -3,7 +3,7 @@ package recorder
 import (
 	"sort"
 
-	"web-automation/internal/models"
+	"flowpilot/internal/models"
 )
 
 // RankSelectors orders selector candidates by stability score.

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"web-automation/internal/crypto"
-	"web-automation/internal/models"
+	"flowpilot/internal/crypto"
+	"flowpilot/internal/models"
 )
 
 func TestNewWithTempDir(t *testing.T) {

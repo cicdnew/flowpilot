@@ -27,7 +27,7 @@ func main() {
 	}()
 
 	err := wails.Run(&options.App{
-		Title:     "Web Automation Dashboard",
+		Title:     "FlowPilot",
 		Width:     1400,
 		Height:    900,
 		MinWidth:  1024,

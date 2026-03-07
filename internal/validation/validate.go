@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode"
 
-	"web-automation/internal/models"
+	"flowpilot/internal/models"
 )
 
 var (

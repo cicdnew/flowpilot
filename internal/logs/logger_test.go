@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"web-automation/internal/models"
+	"flowpilot/internal/models"
 )
 
 func TestNewStepLogger(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 
-	"web-automation/internal/logs"
-	"web-automation/internal/models"
+	"flowpilot/internal/logs"
+	"flowpilot/internal/models"
 )
 
 func TestRecordStep(t *testing.T) {

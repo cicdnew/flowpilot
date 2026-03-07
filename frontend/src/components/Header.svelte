@@ -17,7 +17,7 @@
 
 <header>
   <div class="header-left">
-    <h1>Web Automation</h1>
+    <h1>FlowPilot</h1>
     <span class="subtitle">Go + Wails + chromedp</span>
   </div>
   <div class="header-stats">

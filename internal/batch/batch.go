@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"web-automation/internal/database"
-	"web-automation/internal/models"
-	"web-automation/internal/validation"
+	"flowpilot/internal/database"
+	"flowpilot/internal/models"
+	"flowpilot/internal/validation"
 
 	"github.com/google/uuid"
 )

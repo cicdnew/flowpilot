@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"web-automation/internal/crypto"
-	"web-automation/internal/models"
+	"flowpilot/internal/crypto"
+	"flowpilot/internal/models"
 )
 
 func setupTestDB(t *testing.T) *DB {

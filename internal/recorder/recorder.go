@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"web-automation/internal/models"
+	"flowpilot/internal/models"
 
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
@@ -14,7 +14,7 @@ import (
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 
-	"web-automation/internal/logs"
+	"flowpilot/internal/logs"
 )
 
 // EventHandler is called when a new step is recorded during a browser session.

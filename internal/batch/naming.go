@@ -1,6 +1,6 @@
 package batch
 
-import "web-automation/internal/models"
+import "flowpilot/internal/models"
 
 // DefaultNameTemplate returns the fallback naming template for batch tasks.
 func DefaultNameTemplate() string {

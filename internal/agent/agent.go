@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"web-automation/internal/browser"
-	"web-automation/internal/crypto"
-	"web-automation/internal/database"
-	"web-automation/internal/models"
-	"web-automation/internal/proxy"
-	"web-automation/internal/queue"
+	"flowpilot/internal/browser"
+	"flowpilot/internal/crypto"
+	"flowpilot/internal/database"
+	"flowpilot/internal/models"
+	"flowpilot/internal/proxy"
+	"flowpilot/internal/queue"
 )
 
 // Agent is a headless background service that polls for pending tasks and executes them.
@@ -40,7 +40,7 @@ func New(cfg Config) (*Agent, error) {
 		if err != nil {
 			return nil, fmt.Errorf("get home dir: %w", err)
 		}
-		cfg.DataDir = filepath.Join(home, ".web-automation")
+		cfg.DataDir = filepath.Join(home, ".flowpilot")
 	}
 	if cfg.MaxConcurrency <= 0 {
 		cfg.MaxConcurrency = 10

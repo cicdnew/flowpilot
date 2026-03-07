@@ -11,16 +11,16 @@ import (
 	"sync"
 	"time"
 
-	"web-automation/internal/batch"
-	"web-automation/internal/browser"
-	"web-automation/internal/crypto"
-	"web-automation/internal/database"
-	"web-automation/internal/logs"
-	"web-automation/internal/models"
-	"web-automation/internal/proxy"
-	"web-automation/internal/queue"
-	"web-automation/internal/recorder"
-	"web-automation/internal/validation"
+	"flowpilot/internal/batch"
+	"flowpilot/internal/browser"
+	"flowpilot/internal/crypto"
+	"flowpilot/internal/database"
+	"flowpilot/internal/logs"
+	"flowpilot/internal/models"
+	"flowpilot/internal/proxy"
+	"flowpilot/internal/queue"
+	"flowpilot/internal/recorder"
+	"flowpilot/internal/validation"
 
 	"github.com/google/uuid"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -59,7 +59,7 @@ func (a *App) startup(ctx context.Context) {
 		wailsRuntime.LogFatalf(ctx, "Failed to get home directory: %v", err)
 		return
 	}
-	a.dataDir = filepath.Join(home, ".web-automation")
+	a.dataDir = filepath.Join(home, ".flowpilot")
 	if err := os.MkdirAll(a.dataDir, 0o700); err != nil {
 		wailsRuntime.LogFatalf(ctx, "Failed to create data directory: %v", err)
 		return

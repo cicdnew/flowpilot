@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"web-automation/internal/models"
+	"flowpilot/internal/models"
 )
 
 func TestValidateTaskName(t *testing.T) {

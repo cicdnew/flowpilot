@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import type { Task, Proxy, TaskEvent, TaskStatus, RecordedFlow, RecordedStep } from './types';
+import type { Task, Proxy, TaskEvent, TaskStatus, RecordedFlow, RecordedStep, WebSocketLog } from './types';
 
 export const tasks = writable<Task[]>([]);
 export const proxies = writable<Proxy[]>([]);
@@ -10,6 +10,7 @@ export const tagFilter = writable<string>('');
 export const recordedFlows = writable<RecordedFlow[]>([]);
 export const isRecording = writable<boolean>(false);
 export const recordingSteps = writable<RecordedStep[]>([]);
+export const webSocketLogs = writable<WebSocketLog[]>([]);
 
 export const selectedTask = derived(
   [tasks, selectedTaskId],

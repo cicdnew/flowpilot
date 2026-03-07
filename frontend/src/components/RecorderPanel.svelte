@@ -1,8 +1,8 @@
 <script lang="ts">
   import { StartRecording, StopRecording, CreateRecordedFlow } from '../../wailsjs/go/main/App';
   import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime';
-  import { isRecording, recordingSteps } from '../lib/store';
-  import type { RecordedStep } from '../lib/types';
+  import { isRecording, recordingSteps, webSocketLogs } from '../lib/store';
+  import type { RecordedStep, WebSocketLog } from '../lib/types';
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 
   const dispatch = createEventDispatcher();
@@ -31,6 +31,7 @@
     starting = true;
     try {
       recordingSteps.set([]);
+      webSocketLogs.set([]);
       await StartRecording(originUrl);
       isRecording.set(true);
     } catch (err: any) {
@@ -54,6 +55,10 @@
     recordingSteps.update(list => [...list, step]);
   }
 
+  function handleWebSocketEvent(log: WebSocketLog) {
+    webSocketLogs.update(list => [...list, log]);
+  }
+
   async function saveFlow() {
     if (!flowName || $recordingSteps.length === 0) return;
     saving = true;
@@ -73,10 +78,12 @@
 
   onMount(() => {
     EventsOn('recorder:step', handleRecorderStep);
+    EventsOn('recorder:websocket', handleWebSocketEvent);
   });
 
   onDestroy(() => {
     EventsOff('recorder:step');
+    EventsOff('recorder:websocket');
   });
 </script>
 
@@ -135,6 +142,31 @@
               <strong>{step.action}</strong>
               {#if step.selector} <span class="muted">{step.selector}</span> {/if}
               {#if step.value} <span class="value">= {step.value}</span> {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
+
+    <div class="ws-logs">
+      <h4>WebSocket Events ({$webSocketLogs.length})</h4>
+      {#if $webSocketLogs.length === 0}
+        <div class="empty">No WebSocket activity captured.</div>
+      {:else}
+        <ul>
+          {#each $webSocketLogs as log}
+            <li class="ws-entry">
+              <span class="ws-badge ws-{log.eventType}">{log.eventType}</span>
+              {#if log.direction}
+                <span class="ws-direction">{log.direction}</span>
+              {/if}
+              <span class="muted ws-url">{log.url}</span>
+              {#if log.payloadSize > 0}
+                <span class="ws-size">{log.payloadSize}B</span>
+              {/if}
+              {#if log.errorMessage}
+                <span class="ws-error">{log.errorMessage}</span>
+              {/if}
             </li>
           {/each}
         </ul>
@@ -226,6 +258,57 @@
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+  }
+  .ws-logs {
+    margin-top: 16px;
+  }
+  .ws-logs ul {
+    list-style: none;
+    padding: 0;
+  }
+  .ws-entry {
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .ws-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #fff;
+    background: var(--text-muted, #888);
+  }
+  .ws-created { background: #3b82f6; }
+  .ws-handshake { background: #8b5cf6; }
+  .ws-frame_sent { background: #f59e0b; }
+  .ws-frame_received { background: #10b981; }
+  .ws-closed { background: #6b7280; }
+  .ws-error { background: var(--danger, #ef4444); }
+  .ws-direction {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary, #666);
+  }
+  .ws-url {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ws-size {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: monospace;
+  }
+  .ws-error {
+    font-size: 11px;
+    color: var(--danger, #ef4444);
   }
   .btn-danger {
     background: var(--danger, #ef4444) !important;

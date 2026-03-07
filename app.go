@@ -645,6 +645,10 @@ func (a *App) StartRecording(url string) error {
 		return fmt.Errorf("start recording: %w", err)
 	}
 
+	a.activeRecorder.SetWSCallback(func(log models.WebSocketLog) {
+		wailsRuntime.EventsEmit(a.ctx, "recorder:websocket", log)
+	})
+
 	wailsRuntime.LogInfof(a.ctx, "Recording started for flow %s at %s", flowID, url)
 	return nil
 }
@@ -659,6 +663,7 @@ func (a *App) StopRecording() ([]models.RecordedStep, error) {
 	}
 
 	netLogs := a.activeRecorder.NetworkLogs()
+	wsLogs := a.activeRecorder.WebSocketLogs()
 	flowID := a.activeRecorder.FlowID()
 
 	a.activeRecorder.Stop()
@@ -680,7 +685,13 @@ func (a *App) StopRecording() ([]models.RecordedStep, error) {
 		}
 	}
 
-	wailsRuntime.LogInfof(a.ctx, "Recording stopped, captured %d steps, %d network requests", len(steps), len(netLogs))
+	if len(wsLogs) > 0 && a.db != nil {
+		if err := a.db.InsertWebSocketLogs(flowID, wsLogs); err != nil {
+			wailsRuntime.LogWarningf(a.ctx, "failed to persist websocket logs: %v", err)
+		}
+	}
+
+	wailsRuntime.LogInfof(a.ctx, "Recording stopped, captured %d steps, %d network requests, %d websocket events", len(steps), len(netLogs), len(wsLogs))
 	return steps, nil
 }
 
@@ -731,6 +742,14 @@ func (a *App) PurgeOldData(retentionDays int) (int64, error) {
 		retentionDays = 90
 	}
 	return a.db.PurgeOldRecords(retentionDays)
+}
+
+// ListWebSocketLogs returns persisted WebSocket logs for a recorded flow.
+func (a *App) ListWebSocketLogs(flowID string) ([]models.WebSocketLog, error) {
+	if flowID == "" {
+		return nil, fmt.Errorf("list websocket logs: flowID is required")
+	}
+	return a.db.ListWebSocketLogs(flowID)
 }
 
 // IsRecording returns whether a recording session is active.

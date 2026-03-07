@@ -138,6 +138,23 @@ func (db *DB) migrate() error {
 		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
+	CREATE TABLE IF NOT EXISTS websocket_logs (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		flow_id TEXT NOT NULL,
+		step_index INTEGER NOT NULL,
+		request_id TEXT DEFAULT '',
+		url TEXT DEFAULT '',
+		event_type TEXT NOT NULL,
+		direction TEXT DEFAULT '',
+		opcode INTEGER DEFAULT 0,
+		payload_size INTEGER DEFAULT 0,
+		payload_snippet TEXT DEFAULT '',
+		close_code INTEGER DEFAULT 0,
+		close_reason TEXT DEFAULT '',
+		error_message TEXT DEFAULT '',
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
 	CREATE TABLE IF NOT EXISTS proxies (
 		id TEXT PRIMARY KEY,
 		server TEXT NOT NULL,
@@ -161,6 +178,7 @@ func (db *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_events_batch_id ON task_events(batch_id);
 	CREATE INDEX IF NOT EXISTS idx_step_logs_task_id ON step_logs(task_id);
 	CREATE INDEX IF NOT EXISTS idx_network_logs_task_id ON network_logs(task_id);
+	CREATE INDEX IF NOT EXISTS idx_websocket_logs_flow_id ON websocket_logs(flow_id);
 	CREATE INDEX IF NOT EXISTS idx_proxies_status ON proxies(status);
 	CREATE INDEX IF NOT EXISTS idx_proxies_geo ON proxies(geo);
 	`
@@ -1016,6 +1034,60 @@ func (db *DB) ListNetworkLogs(taskID string) ([]models.NetworkLog, error) {
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate network logs: %w", err)
+	}
+	return logs, nil
+}
+
+// --- WebSocket Logs ---
+
+// InsertWebSocketLogs inserts WebSocket logs for a recorded flow.
+func (db *DB) InsertWebSocketLogs(flowID string, logs []models.WebSocketLog) error {
+	if len(logs) == 0 {
+		return nil
+	}
+	tx, err := db.conn.Begin()
+	if err != nil {
+		return fmt.Errorf("begin websocket logs tx: %w", err)
+	}
+	stmt, err := tx.Prepare(`INSERT INTO websocket_logs (flow_id, step_index, request_id, url, event_type, direction, opcode, payload_size, payload_snippet, close_code, close_reason, error_message, timestamp)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("prepare websocket log insert: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, log := range logs {
+		if _, err := stmt.Exec(flowID, log.StepIndex, log.RequestID, log.URL, log.EventType, log.Direction, log.Opcode, log.PayloadSize, log.PayloadSnippet, log.CloseCode, log.CloseReason, log.ErrorMessage, log.Timestamp); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("insert websocket log: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit websocket logs: %w", err)
+	}
+	return nil
+}
+
+// ListWebSocketLogs returns WebSocket logs for a recorded flow.
+func (db *DB) ListWebSocketLogs(flowID string) ([]models.WebSocketLog, error) {
+	rows, err := db.conn.Query(`SELECT flow_id, step_index, request_id, url, event_type, direction, opcode, payload_size, payload_snippet, close_code, close_reason, error_message, timestamp
+		FROM websocket_logs WHERE flow_id = ? ORDER BY timestamp ASC`, flowID)
+	if err != nil {
+		return nil, fmt.Errorf("list websocket logs: %w", err)
+	}
+	defer rows.Close()
+
+	logs := []models.WebSocketLog{}
+	for rows.Next() {
+		var log models.WebSocketLog
+		if err := rows.Scan(&log.FlowID, &log.StepIndex, &log.RequestID, &log.URL, &log.EventType, &log.Direction, &log.Opcode, &log.PayloadSize, &log.PayloadSnippet, &log.CloseCode, &log.CloseReason, &log.ErrorMessage, &log.Timestamp); err != nil {
+			return nil, fmt.Errorf("scan websocket log: %w", err)
+		}
+		logs = append(logs, log)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate websocket logs: %w", err)
 	}
 	return logs, nil
 }

@@ -99,6 +99,24 @@ export interface Proxy {
   createdAt: string;
 }
 
+export type WebSocketEventType = 'created' | 'handshake' | 'frame_sent' | 'frame_received' | 'closed' | 'error';
+
+export interface WebSocketLog {
+  flowId: string;
+  stepIndex: number;
+  requestId: string;
+  url: string;
+  eventType: WebSocketEventType;
+  direction?: string;
+  opcode?: number;
+  payloadSize: number;
+  payloadSnippet?: string;
+  closeCode?: number;
+  closeReason?: string;
+  errorMessage?: string;
+  timestamp: string;
+}
+
 export interface TaskEvent {
   taskId: string;
   status: TaskStatus;

@@ -36,6 +36,46 @@ type NetworkLog struct {
 	Timestamp       time.Time `json:"timestamp"`
 }
 
+// WebSocketEventType categorizes WebSocket lifecycle events.
+type WebSocketEventType string
+
+const (
+	WSEventCreated       WebSocketEventType = "created"
+	WSEventHandshake     WebSocketEventType = "handshake"
+	WSEventFrameSent     WebSocketEventType = "frame_sent"
+	WSEventFrameReceived WebSocketEventType = "frame_received"
+	WSEventClosed        WebSocketEventType = "closed"
+	WSEventError         WebSocketEventType = "error"
+)
+
+// MaxWSPayloadSnippet is the maximum bytes stored for a WebSocket frame payload.
+const MaxWSPayloadSnippet = 512
+
+// WebSocketLog captures a single WebSocket event during recording.
+type WebSocketLog struct {
+	FlowID         string             `json:"flowId"`
+	StepIndex      int                `json:"stepIndex"`
+	RequestID      string             `json:"requestId"`
+	URL            string             `json:"url"`
+	EventType      WebSocketEventType `json:"eventType"`
+	Direction      string             `json:"direction,omitempty"`
+	Opcode         int                `json:"opcode,omitempty"`
+	PayloadSize    int64              `json:"payloadSize"`
+	PayloadSnippet string             `json:"payloadSnippet,omitempty"`
+	CloseCode      int                `json:"closeCode,omitempty"`
+	CloseReason    string             `json:"closeReason,omitempty"`
+	ErrorMessage   string             `json:"errorMessage,omitempty"`
+	Timestamp      time.Time          `json:"timestamp"`
+}
+
+// TruncatePayload returns a payload string truncated to MaxWSPayloadSnippet bytes.
+func TruncatePayload(payload string) string {
+	if len(payload) <= MaxWSPayloadSnippet {
+		return payload
+	}
+	return payload[:MaxWSPayloadSnippet]
+}
+
 // ErrorCode is a standardized automation failure code.
 type ErrorCode string
 

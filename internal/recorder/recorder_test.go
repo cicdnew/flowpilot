@@ -260,6 +260,27 @@ func TestNetworkLogsWithLogger(t *testing.T) {
 	}
 }
 
+func TestWebSocketLogsNilLogger(t *testing.T) {
+	r := &Recorder{flowID: "flow-nil-ws"}
+	wsLogs := r.WebSocketLogs()
+	if wsLogs != nil {
+		t.Errorf("expected nil, got %v", wsLogs)
+	}
+}
+
+func TestWebSocketLogsWithLogger(t *testing.T) {
+	r := New(context.Background(), "flow-ws", nil)
+	r.wsLogger = logs.NewWebSocketLogger("flow-ws")
+
+	wsLogs := r.WebSocketLogs()
+	if wsLogs == nil {
+		t.Fatal("expected non-nil ws logs slice")
+	}
+	if len(wsLogs) != 0 {
+		t.Errorf("expected empty ws logs, got %d", len(wsLogs))
+	}
+}
+
 func TestSetSnapshotter(t *testing.T) {
 	r := New(context.Background(), "flow-snap", nil)
 	if r.snapshotter != nil {

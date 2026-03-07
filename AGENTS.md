@@ -25,14 +25,14 @@ Key directories:
 wails dev                     # dev mode with hot-reload
 wails build                   # production binary
 
-# Go tests
-go test ./...                                          # all tests
-go test ./internal/queue -run TestQueueSubmit           # single test
-go test ./internal/queue -run TestQueueSubmit/ShouldCancel  # subtest
-go test -race -coverprofile=cover.out ./...            # with race + coverage
+# Go tests (use -tags=dev to skip the frontend/dist embed requirement)
+go test -tags=dev ./...                                # all tests
+go test -tags=dev ./internal/queue -run TestQueueSubmit           # single test
+go test -tags=dev ./internal/queue -run TestQueueSubmit/ShouldCancel  # subtest
+go test -tags=dev -race -coverprofile=cover.out ./...  # with race + coverage
 
 # Go lint / vet
-go vet ./...                  # only linter configured
+go vet -tags=dev ./...        # only linter configured
 gofmt -w <file.go>           # format a Go file
 
 # Frontend (run from frontend/ directory)

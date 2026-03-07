@@ -32,6 +32,7 @@ type Recorder struct {
 	browserCtx    context.Context
 	browserCancel context.CancelFunc
 	netLogger     *logs.NetworkLogger
+	wsLogger      *logs.WebSocketLogger
 	snapshotter   *Snapshotter
 	activeTabID   target.ID
 }
@@ -54,6 +55,7 @@ func (r *Recorder) Start(url string) error {
 	r.allocCtx, r.allocCancel = chromedp.NewExecAllocator(r.parentCtx, opts...)
 	r.browserCtx, r.browserCancel = chromedp.NewContext(r.allocCtx)
 	r.netLogger = logs.NewNetworkLogger(r.flowID)
+	r.wsLogger = logs.NewWebSocketLogger(r.flowID)
 
 	r.registerListeners()
 
@@ -119,6 +121,34 @@ func (r *Recorder) registerListeners() {
 		case *network.EventLoadingFinished:
 			if r.netLogger != nil {
 				r.netLogger.HandleLoadingFinished(e, nil)
+			}
+		case *network.EventWebSocketCreated:
+			if r.wsLogger != nil {
+				r.mu.Lock()
+				idx := r.stepIndex
+				r.mu.Unlock()
+				r.wsLogger.SetStepIndex(idx)
+				r.wsLogger.HandleCreated(e)
+			}
+		case *network.EventWebSocketHandshakeResponseReceived:
+			if r.wsLogger != nil {
+				r.wsLogger.HandleHandshake(e)
+			}
+		case *network.EventWebSocketFrameSent:
+			if r.wsLogger != nil {
+				r.wsLogger.HandleFrameSent(e)
+			}
+		case *network.EventWebSocketFrameReceived:
+			if r.wsLogger != nil {
+				r.wsLogger.HandleFrameReceived(e)
+			}
+		case *network.EventWebSocketClosed:
+			if r.wsLogger != nil {
+				r.wsLogger.HandleClosed(e)
+			}
+		case *network.EventWebSocketFrameError:
+			if r.wsLogger != nil {
+				r.wsLogger.HandleFrameError(e)
 			}
 		}
 	})
@@ -189,6 +219,19 @@ func (r *Recorder) NetworkLogs() []models.NetworkLog {
 		return nil
 	}
 	return r.netLogger.Logs()
+}
+
+func (r *Recorder) WebSocketLogs() []models.WebSocketLog {
+	if r.wsLogger == nil {
+		return nil
+	}
+	return r.wsLogger.Logs()
+}
+
+func (r *Recorder) SetWSCallback(cb logs.WSEventCallback) {
+	if r.wsLogger != nil {
+		r.wsLogger.SetCallback(cb)
+	}
 }
 
 func (r *Recorder) SetSnapshotter(s *Snapshotter) {

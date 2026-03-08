@@ -58,6 +58,10 @@ export function ExportTaskLogs(arg1) {
   return window['go']['main']['App']['ExportTaskLogs'](arg1);
 }
 
+export function GetAuditTrail(arg1, arg2) {
+  return window['go']['main']['App']['GetAuditTrail'](arg1, arg2);
+}
+
 export function GetBatchProgress(arg1) {
   return window['go']['main']['App']['GetBatchProgress'](arg1);
 }
@@ -82,6 +86,10 @@ export function GetTaskStats() {
   return window['go']['main']['App']['GetTaskStats']();
 }
 
+export function IsRecording() {
+  return window['go']['main']['App']['IsRecording']();
+}
+
 export function ListDOMSnapshots(arg1) {
   return window['go']['main']['App']['ListDOMSnapshots'](arg1);
 }
@@ -92,6 +100,10 @@ export function ListProxies() {
 
 export function ListRecordedFlows() {
   return window['go']['main']['App']['ListRecordedFlows']();
+}
+
+export function ListTaskEvents(arg1) {
+  return window['go']['main']['App']['ListTaskEvents'](arg1);
 }
 
 export function ListTasks() {
@@ -106,6 +118,26 @@ export function ListTasksByStatus(arg1) {
   return window['go']['main']['App']['ListTasksByStatus'](arg1);
 }
 
+export function ListTasksPaginated(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['ListTasksPaginated'](arg1, arg2, arg3, arg4);
+}
+
+export function ListWebSocketLogs(arg1) {
+  return window['go']['main']['App']['ListWebSocketLogs'](arg1);
+}
+
+export function ParseBatchURLs(arg1, arg2) {
+  return window['go']['main']['App']['ParseBatchURLs'](arg1, arg2);
+}
+
+export function PlayRecordedFlow(arg1, arg2, arg3) {
+  return window['go']['main']['App']['PlayRecordedFlow'](arg1, arg2, arg3);
+}
+
+export function PurgeOldData(arg1) {
+  return window['go']['main']['App']['PurgeOldData'](arg1);
+}
+
 export function RetryFailedBatch(arg1) {
   return window['go']['main']['App']['RetryFailedBatch'](arg1);
 }
@@ -118,54 +150,22 @@ export function StartAllPending() {
   return window['go']['main']['App']['StartAllPending']();
 }
 
-export function StartTask(arg1) {
-  return window['go']['main']['App']['StartTask'](arg1);
-}
-
-export function UpdateTask(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
-  return window['go']['main']['App']['UpdateTask'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
-}
-
-export function IsRecording() {
-  return window['go']['main']['App']['IsRecording']();
-}
-
 export function StartRecording(arg1) {
   return window['go']['main']['App']['StartRecording'](arg1);
+}
+
+export function StartTask(arg1) {
+  return window['go']['main']['App']['StartTask'](arg1);
 }
 
 export function StopRecording() {
   return window['go']['main']['App']['StopRecording']();
 }
 
-export function GetAuditTrail(arg1, arg2) {
-  return window['go']['main']['App']['GetAuditTrail'](arg1, arg2);
-}
-
-export function ListTasksPaginated(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['ListTasksPaginated'](arg1, arg2, arg3, arg4);
-}
-
-export function ListWebSocketLogs(arg1) {
-  return window['go']['main']['App']['ListWebSocketLogs'](arg1);
-}
-
-export function PlayRecordedFlow(arg1, arg2, arg3) {
-  return window['go']['main']['App']['PlayRecordedFlow'](arg1, arg2, arg3);
-}
-
-export function ParseBatchURLs(arg1, arg2) {
-  return window['go']['main']['App']['ParseBatchURLs'](arg1, arg2);
-}
-
-export function PurgeOldData(arg1) {
-  return window['go']['main']['App']['PurgeOldData'](arg1);
-}
-
 export function UpdateRecordedFlow(arg1) {
   return window['go']['main']['App']['UpdateRecordedFlow'](arg1);
 }
 
-export function ListTaskEvents(arg1) {
-  return window['go']['main']['App']['ListTaskEvents'](arg1);
+export function UpdateTask(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['main']['App']['UpdateTask'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }

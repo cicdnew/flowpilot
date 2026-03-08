@@ -271,6 +271,9 @@ func (a *App) ListTasksPaginated(page, pageSize int, status, tag string) (models
 	if err := a.ready(); err != nil {
 		return models.PaginatedTasks{}, err
 	}
+	if err := validation.ValidatePagination(page, pageSize, status, tag); err != nil {
+		return models.PaginatedTasks{}, fmt.Errorf("list tasks paginated: %w", err)
+	}
 	return a.db.ListTasksPaginated(page, pageSize, status, tag)
 }
 
@@ -518,10 +521,15 @@ func (a *App) RetryFailedBatch(batchID string) ([]models.Task, error) {
 	if len(failed) == 0 {
 		return failed, nil
 	}
-	for _, task := range failed {
+	for i, task := range failed {
+		if err := a.db.ResetRetryCount(task.ID); err != nil {
+			return failed, fmt.Errorf("retry batch reset retry: %w", err)
+		}
 		if err := a.db.UpdateTaskStatus(task.ID, models.TaskStatusPending, "retry batch"); err != nil {
 			return failed, fmt.Errorf("retry batch update: %w", err)
 		}
+		failed[i].RetryCount = 0
+		failed[i].Status = models.TaskStatusPending
 	}
 	if err := a.queue.SubmitBatch(a.ctx, failed); err != nil {
 		return failed, fmt.Errorf("retry batch submit: %w", err)

@@ -574,6 +574,48 @@ func TestValidateBatchInputWhitespaceFlowID(t *testing.T) {
 	}
 }
 
+func TestValidatePagination(t *testing.T) {
+	tests := []struct {
+		name     string
+		page     int
+		pageSize int
+		status   string
+		tag      string
+		wantErr  error
+	}{
+		{"valid defaults", 1, 20, "", "", nil},
+		{"valid with status", 1, 50, "running", "", nil},
+		{"valid with tag", 2, 10, "", "web", nil},
+		{"valid with both", 3, 100, "completed", "automation", nil},
+		{"status all", 1, 20, "all", "", nil},
+		{"max page size", 1, 200, "", "", nil},
+		{"min page size", 1, 1, "", "", nil},
+		{"page zero", 0, 20, "", "", ErrInvalidPage},
+		{"page negative", -1, 20, "", "", ErrInvalidPage},
+		{"pageSize zero", 1, 0, "", "", ErrInvalidPageSize},
+		{"pageSize negative", 1, -5, "", "", ErrInvalidPageSize},
+		{"pageSize too large", 1, 201, "", "", ErrInvalidPageSize},
+		{"invalid status", 1, 20, "bogus", "", ErrInvalidFilterStatus},
+		{"uppercase status", 1, 20, "RUNNING", "", ErrInvalidFilterStatus},
+		{"tag too long", 1, 20, "", strings.Repeat("x", 51), ErrTagFilterTooLong},
+		{"tag exactly 50", 1, 20, "", strings.Repeat("y", 50), nil},
+		{"tag control char", 1, 20, "", "bad\ttag", ErrTagFilterControl},
+		{"tag newline", 1, 20, "", "bad\ntag", ErrTagFilterControl},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidatePagination(tc.page, tc.pageSize, tc.status, tc.tag)
+			if tc.wantErr == nil && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+				t.Errorf("got error %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestValidateTaskURLWithQueryParams(t *testing.T) {
 	err := ValidateTaskURL("https://example.com/path?query=value&foo=bar")
 	if err != nil {

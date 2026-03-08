@@ -376,6 +376,22 @@ func (db *DB) IncrementRetry(id string) error {
 	return nil
 }
 
+// ResetRetryCount resets a task's retry_count to zero.
+func (db *DB) ResetRetryCount(id string) error {
+	res, err := db.conn.Exec(`UPDATE tasks SET retry_count = 0 WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("reset retry count for task %s: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("check reset retry result for task %s: %w", id, err)
+	}
+	if n == 0 {
+		return fmt.Errorf("task %s not found", id)
+	}
+	return nil
+}
+
 // UpdateTask updates editable fields of a task. Only allowed for pending/failed tasks.
 // Uses an atomic UPDATE with a status guard to prevent TOCTOU races.
 func (db *DB) UpdateTask(id, name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority models.TaskPriority, tags []string) error {

@@ -965,6 +965,60 @@ func TestExecuteTaskCancelledBeforeAcquire(t *testing.T) {
 	}
 }
 
+func TestCancelledMapCleanedAfterAcquireFailure(t *testing.T) {
+	q, db := setupTestQueue(t, 1, nil, nil)
+	defer q.Stop()
+
+	task := makeTestTask("cancel-leak-1")
+	if err := db.CreateTask(task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	q.mu.Lock()
+	q.cancelled[task.ID] = true
+	q.pending[task.ID] = func() {}
+	q.mu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	q.executeTask(ctx, task)
+
+	q.mu.Lock()
+	_, leaked := q.cancelled[task.ID]
+	q.mu.Unlock()
+
+	if leaked {
+		t.Error("cancelled map entry should be cleaned up after sem.Acquire failure")
+	}
+}
+
+func TestCancelledMapCleanedAfterStoppedEarlyExit(t *testing.T) {
+	q, db := setupTestQueue(t, 10, nil, nil)
+
+	task := makeTestTask("cancel-leak-2")
+	if err := db.CreateTask(task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	q.mu.Lock()
+	q.cancelled[task.ID] = true
+	q.pending[task.ID] = func() {}
+	q.mu.Unlock()
+
+	q.Stop()
+
+	q.executeTask(context.Background(), task)
+
+	q.mu.Lock()
+	_, leaked := q.cancelled[task.ID]
+	q.mu.Unlock()
+
+	if leaked {
+		t.Error("cancelled map entry should be cleaned up after stopped early exit")
+	}
+}
+
 func TestExecuteTaskStoppedBeforeRun(t *testing.T) {
 	q, db := setupTestQueue(t, 10, nil, nil)
 

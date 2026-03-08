@@ -1519,6 +1519,40 @@ func TestUpdateTaskResultNotFound(t *testing.T) {
 
 // --- IncrementRetry Not Found ---
 
+func TestResetRetryCount(t *testing.T) {
+	db := setupTestDB(t)
+	task := makeTask("reset-retry-1", "Reset Retry")
+	if err := db.CreateTask(task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	for i := 0; i < 3; i++ {
+		if err := db.IncrementRetry(task.ID); err != nil {
+			t.Fatalf("IncrementRetry: %v", err)
+		}
+	}
+
+	if err := db.ResetRetryCount(task.ID); err != nil {
+		t.Fatalf("ResetRetryCount: %v", err)
+	}
+
+	got, err := db.GetTask(task.ID)
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if got.RetryCount != 0 {
+		t.Errorf("RetryCount: got %d, want 0", got.RetryCount)
+	}
+}
+
+func TestResetRetryCountNotFound(t *testing.T) {
+	db := setupTestDB(t)
+	err := db.ResetRetryCount("nonexistent")
+	if err == nil {
+		t.Fatal("expected error for nonexistent task")
+	}
+}
+
 func TestIncrementRetryNotFound(t *testing.T) {
 	db := setupTestDB(t)
 	err := db.IncrementRetry("nonexistent")

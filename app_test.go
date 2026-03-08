@@ -757,6 +757,34 @@ func TestAppListTasksPaginated(t *testing.T) {
 	}
 }
 
+func TestAppListTasksPaginatedValidation(t *testing.T) {
+	app := setupTestApp(t)
+
+	tests := []struct {
+		name     string
+		page     int
+		pageSize int
+		status   string
+		tag      string
+	}{
+		{"page zero", 0, 20, "", ""},
+		{"page negative", -1, 20, "", ""},
+		{"pageSize zero", 1, 0, "", ""},
+		{"pageSize too large", 1, 201, "", ""},
+		{"invalid status", 1, 20, "bogus", ""},
+		{"tag control char", 1, 20, "", "bad\ttag"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := app.ListTasksPaginated(tc.page, tc.pageSize, tc.status, tc.tag)
+			if err == nil {
+				t.Error("expected validation error, got nil")
+			}
+		})
+	}
+}
+
 func TestAppGetAuditTrail(t *testing.T) {
 	app := setupTestApp(t)
 

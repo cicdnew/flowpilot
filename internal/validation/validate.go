@@ -35,6 +35,11 @@ var (
 	ErrInvalidStatus       = errors.New("invalid task status")
 	ErrInvalidBatchSize    = errors.New("batch size exceeds limit")
 	ErrInvalidTemplate     = errors.New("invalid naming template")
+	ErrInvalidPage         = errors.New("page must be a positive integer")
+	ErrInvalidPageSize     = errors.New("pageSize must be between 1 and 200")
+	ErrInvalidFilterStatus = errors.New("invalid filter status")
+	ErrTagFilterTooLong    = errors.New("tag filter must not exceed 50 characters")
+	ErrTagFilterControl    = errors.New("tag filter must not contain control characters")
 )
 
 var validActions = map[models.StepAction]bool{
@@ -67,6 +72,31 @@ var validProtocols = map[models.ProxyProtocol]bool{
 	models.ProxyHTTP:   true,
 	models.ProxyHTTPS:  true,
 	models.ProxySOCKS5: true,
+}
+
+func ValidatePagination(page, pageSize int, status, tag string) error {
+	if page < 1 {
+		return ErrInvalidPage
+	}
+	if pageSize < 1 || pageSize > 200 {
+		return ErrInvalidPageSize
+	}
+	if status != "" && status != "all" {
+		if !validStatuses[status] {
+			return fmt.Errorf("%w: %s", ErrInvalidFilterStatus, status)
+		}
+	}
+	if tag != "" {
+		if len(tag) > 50 {
+			return ErrTagFilterTooLong
+		}
+		for _, r := range tag {
+			if unicode.IsControl(r) {
+				return ErrTagFilterControl
+			}
+		}
+	}
+	return nil
 }
 
 // ValidateTaskName checks that the name is non-empty, within bounds, and has no control characters.

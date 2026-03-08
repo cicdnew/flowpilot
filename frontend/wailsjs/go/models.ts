@@ -28,6 +28,7 @@ export namespace models {
 	    proxy: ProxyConfig;
 	    tags?: string[];
 	    autoStart: boolean;
+	    headless?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new AdvancedBatchInput(source);
@@ -42,6 +43,7 @@ export namespace models {
 	        this.proxy = this.convertValues(source["proxy"], ProxyConfig);
 	        this.tags = source["tags"];
 	        this.autoStart = source["autoStart"];
+	        this.headless = source["headless"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -222,6 +224,206 @@ export namespace models {
 	        this.timestamp = this.convertValues(source["timestamp"], null);
 	        this.level = source["level"];
 	        this.message = source["message"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class StepLog {
+	    taskId: string;
+	    stepIndex: number;
+	    action: string;
+	    selector?: string;
+	    value?: string;
+	    snapshotId?: string;
+	    errorCode?: string;
+	    errorMsg?: string;
+	    durationMs: number;
+	    // Go type: time
+	    startedAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new StepLog(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.taskId = source["taskId"];
+	        this.stepIndex = source["stepIndex"];
+	        this.action = source["action"];
+	        this.selector = source["selector"];
+	        this.value = source["value"];
+	        this.snapshotId = source["snapshotId"];
+	        this.errorCode = source["errorCode"];
+	        this.errorMsg = source["errorMsg"];
+	        this.durationMs = source["durationMs"];
+	        this.startedAt = this.convertValues(source["startedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TaskResult {
+	    taskId: string;
+	    success: boolean;
+	    extractedData?: Record<string, string>;
+	    screenshots?: string[];
+	    logs: LogEntry[];
+	    stepLogs?: StepLog[];
+	    duration: number;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TaskResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.taskId = source["taskId"];
+	        this.success = source["success"];
+	        this.extractedData = source["extractedData"];
+	        this.screenshots = source["screenshots"];
+	        this.logs = this.convertValues(source["logs"], LogEntry);
+	        this.stepLogs = this.convertValues(source["stepLogs"], StepLog);
+	        this.duration = source["duration"];
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Task {
+	    id: string;
+	    name: string;
+	    url: string;
+	    steps: TaskStep[];
+	    proxy: ProxyConfig;
+	    priority: number;
+	    status: string;
+	    retryCount: number;
+	    maxRetries: number;
+	    timeout?: number;
+	    error?: string;
+	    result?: TaskResult;
+	    // Go type: time
+	    createdAt: any;
+	    // Go type: time
+	    startedAt?: any;
+	    // Go type: time
+	    completedAt?: any;
+	    tags?: string[];
+	    batchId?: string;
+	    flowId?: string;
+	    headless: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Task(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.url = source["url"];
+	        this.steps = this.convertValues(source["steps"], TaskStep);
+	        this.proxy = this.convertValues(source["proxy"], ProxyConfig);
+	        this.priority = source["priority"];
+	        this.status = source["status"];
+	        this.retryCount = source["retryCount"];
+	        this.maxRetries = source["maxRetries"];
+	        this.timeout = source["timeout"];
+	        this.error = source["error"];
+	        this.result = this.convertValues(source["result"], TaskResult);
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.startedAt = this.convertValues(source["startedAt"], null);
+	        this.completedAt = this.convertValues(source["completedAt"], null);
+	        this.tags = source["tags"];
+	        this.batchId = source["batchId"];
+	        this.flowId = source["flowId"];
+	        this.headless = source["headless"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PaginatedTasks {
+	    tasks: Task[];
+	    total: number;
+	    page: number;
+	    pageSize: number;
+	    totalPages: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PaginatedTasks(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tasks = this.convertValues(source["tasks"], Task);
+	        this.total = source["total"];
+	        this.page = source["page"];
+	        this.pageSize = source["pageSize"];
+	        this.totalPages = source["totalPages"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -426,158 +628,8 @@ export namespace models {
 	}
 	
 	
-	export class TaskResult {
-	    taskId: string;
-	    success: boolean;
-	    extractedData?: Record<string, string>;
-	    screenshots?: string[];
-	    logs: LogEntry[];
-	    duration: number;
-	    error?: string;
 	
-	    static createFrom(source: any = {}) {
-	        return new TaskResult(source);
-	    }
 	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.taskId = source["taskId"];
-	        this.success = source["success"];
-	        this.extractedData = source["extractedData"];
-	        this.screenshots = source["screenshots"];
-	        this.logs = this.convertValues(source["logs"], LogEntry);
-	        this.duration = source["duration"];
-	        this.error = source["error"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	export class Task {
-	    id: string;
-	    name: string;
-	    url: string;
-	    steps: TaskStep[];
-	    proxy: ProxyConfig;
-	    priority: number;
-	    status: string;
-	    retryCount: number;
-	    maxRetries: number;
-	    timeout?: number;
-	    error?: string;
-	    result?: TaskResult;
-	    // Go type: time
-	    createdAt: any;
-	    // Go type: time
-	    startedAt?: any;
-	    // Go type: time
-	    completedAt?: any;
-	    tags?: string[];
-	    batchId?: string;
-	    flowId?: string;
-	    headless: boolean;
-	
-	    static createFrom(source: any = {}) {
-	        return new Task(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.name = source["name"];
-	        this.url = source["url"];
-	        this.steps = this.convertValues(source["steps"], TaskStep);
-	        this.proxy = this.convertValues(source["proxy"], ProxyConfig);
-	        this.priority = source["priority"];
-	        this.status = source["status"];
-	        this.retryCount = source["retryCount"];
-	        this.maxRetries = source["maxRetries"];
-	        this.timeout = source["timeout"];
-	        this.error = source["error"];
-	        this.result = this.convertValues(source["result"], TaskResult);
-	        this.createdAt = this.convertValues(source["createdAt"], null);
-	        this.startedAt = this.convertValues(source["startedAt"], null);
-	        this.completedAt = this.convertValues(source["completedAt"], null);
-	        this.tags = source["tags"];
-	        this.batchId = source["batchId"];
-	        this.flowId = source["flowId"];
-	        this.headless = source["headless"];
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
-	
-
-
-	export class PaginatedTasks {
-	    tasks: Task[];
-	    total: number;
-	    page: number;
-	    pageSize: number;
-	    totalPages: number;
-
-	    static createFrom(source: any = {}) {
-	        return new PaginatedTasks(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.tasks = this.convertValues(source["tasks"], Task);
-	        this.total = source["total"];
-	        this.page = source["page"];
-	        this.pageSize = source["pageSize"];
-	        this.totalPages = source["totalPages"];
-	    }
-
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class TaskLifecycleEvent {
 	    id: string;
 	    taskId: string;
@@ -587,11 +639,11 @@ export namespace models {
 	    error?: string;
 	    // Go type: time
 	    timestamp: any;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new TaskLifecycleEvent(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -602,7 +654,7 @@ export namespace models {
 	        this.error = source["error"];
 	        this.timestamp = this.convertValues(source["timestamp"], null);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -621,6 +673,8 @@ export namespace models {
 		    return a;
 		}
 	}
+	
+	
 	export class WebSocketLog {
 	    flowId: string;
 	    stepIndex: number;
@@ -636,11 +690,11 @@ export namespace models {
 	    errorMessage?: string;
 	    // Go type: time
 	    timestamp: any;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new WebSocketLog(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.flowId = source["flowId"];
@@ -657,7 +711,7 @@ export namespace models {
 	        this.errorMessage = source["errorMessage"];
 	        this.timestamp = this.convertValues(source["timestamp"], null);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -678,3 +732,4 @@ export namespace models {
 	}
 
 }
+

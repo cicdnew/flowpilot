@@ -189,6 +189,7 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task) {
 		q.mu.Lock()
 		delete(q.pending, task.ID)
 		wasCancelled := q.cancelled[task.ID]
+		delete(q.cancelled, task.ID)
 		q.metrics.TotalFailed++
 		q.mu.Unlock()
 		if !wasCancelled {
@@ -202,6 +203,7 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task) {
 	q.mu.Lock()
 	delete(q.pending, task.ID)
 	if q.stopped || q.cancelled[task.ID] {
+		delete(q.cancelled, task.ID)
 		q.mu.Unlock()
 		return
 	}

@@ -47,7 +47,7 @@ func setupTestManager(t *testing.T, strategy models.RotationStrategy) (*Manager,
 
 func getProxy(t *testing.T, db *database.DB, id string) models.Proxy {
 	t.Helper()
-	proxies, err := db.ListProxies()
+	proxies, err := db.ListProxies(context.Background())
 	if err != nil {
 		t.Fatalf("ListProxies: %v", err)
 	}
@@ -70,15 +70,15 @@ func addHealthyProxy(t *testing.T, db *database.DB, id, server, geo string, late
 		Status:    models.ProxyStatusHealthy,
 		CreatedAt: time.Now(),
 	}
-	if err := db.CreateProxy(p); err != nil {
+	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy %s: %v", id, err)
 	}
-	if err := db.UpdateProxyHealth(id, models.ProxyStatusHealthy, latency); err != nil {
+	if err := db.UpdateProxyHealth(context.Background(), id, models.ProxyStatusHealthy, latency); err != nil {
 		t.Fatalf("UpdateProxyHealth %s: %v", id, err)
 	}
 	// Simulate usage by incrementing the counter
 	for i := 0; i < totalUsed; i++ {
-		if err := db.IncrementProxyUsage(id, true); err != nil {
+		if err := db.IncrementProxyUsage(context.Background(), id, true); err != nil {
 			t.Fatalf("IncrementProxyUsage %s: %v", id, err)
 		}
 	}
@@ -233,10 +233,10 @@ func TestSelectProxyLowestLatencyIgnoresZero(t *testing.T) {
 		Latency:   0,
 		CreatedAt: time.Now(),
 	}
-	if err := db.CreateProxy(p); err != nil {
+	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
-	if err := db.UpdateProxyHealth("lz-2", models.ProxyStatusHealthy, 0); err != nil {
+	if err := db.UpdateProxyHealth(context.Background(), "lz-2", models.ProxyStatusHealthy, 0); err != nil {
 		t.Fatalf("UpdateProxyHealth: %v", err)
 	}
 
@@ -294,7 +294,7 @@ func TestSelectProxyNoHealthyProxies(t *testing.T) {
 		Status:    models.ProxyStatusUnhealthy,
 		CreatedAt: time.Now(),
 	}
-	if err := db.CreateProxy(p); err != nil {
+	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
 
@@ -538,7 +538,7 @@ func TestCheckProxyHealthy(t *testing.T) {
 		Status:    models.ProxyStatusUnhealthy,
 		CreatedAt: time.Now(),
 	}
-	if err := db.CreateProxy(p); err != nil {
+	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
 
@@ -569,7 +569,7 @@ func TestCheckProxyUnhealthyBadStatus(t *testing.T) {
 		Status:    models.ProxyStatusHealthy,
 		CreatedAt: time.Now(),
 	}
-	if err := db.CreateProxy(p); err != nil {
+	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
 
@@ -592,7 +592,7 @@ func TestCheckProxyUnhealthyConnectionRefused(t *testing.T) {
 		Status:    models.ProxyStatusHealthy,
 		CreatedAt: time.Now(),
 	}
-	if err := db.CreateProxy(p); err != nil {
+	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
 
@@ -623,7 +623,7 @@ func TestCheckProxyWithAuth(t *testing.T) {
 		Status:    models.ProxyStatusUnhealthy,
 		CreatedAt: time.Now(),
 	}
-	if err := db.CreateProxy(p); err != nil {
+	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
 
@@ -652,7 +652,7 @@ func TestCheckProxyCancelledContext(t *testing.T) {
 		Status:    models.ProxyStatusHealthy,
 		CreatedAt: time.Now(),
 	}
-	if err := db.CreateProxy(p); err != nil {
+	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
 
@@ -685,7 +685,7 @@ func TestCheckAllWithProxies(t *testing.T) {
 			Status:    models.ProxyStatusUnhealthy,
 			CreatedAt: time.Now(),
 		}
-		if err := db.CreateProxy(p); err != nil {
+		if err := db.CreateProxy(context.Background(), p); err != nil {
 			t.Fatalf("CreateProxy %d: %v", i, err)
 		}
 	}

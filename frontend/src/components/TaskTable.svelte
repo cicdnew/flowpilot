@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { filteredTasks, selectedTaskId } from '../lib/store';
+  import { tasks, selectedTaskId } from '../lib/store';
   import { StartTask, CancelTask, DeleteTask } from '../../wailsjs/go/main/App';
   import type { Task } from '../lib/types';
   import { createEventDispatcher } from 'svelte';
@@ -99,7 +99,7 @@
       </tr>
     </thead>
     <tbody>
-      {#each $filteredTasks as task (task.id)}
+      {#each $tasks as task (task.id)}
         <tr
           class:selected={$selectedTaskId === task.id}
           on:click={() => selectTask(task)}

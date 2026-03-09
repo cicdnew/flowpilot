@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"flowpilot/internal/logs"
 	"flowpilot/internal/models"
 
 	"github.com/chromedp/cdproto/target"
@@ -261,12 +262,13 @@ func TestRunStepsEmptySteps(t *testing.T) {
 		ExtractedData: make(map[string]string),
 	}
 
-	err := runner.runSteps(context.Background(), nil, result)
+	nl := logs.NewNetworkLogger(result.TaskID)
+	err := runner.runSteps(context.Background(), nil, result, nl)
 	if err != nil {
 		t.Fatalf("runSteps with nil steps: %v", err)
 	}
 
-	err = runner.runSteps(context.Background(), []models.TaskStep{}, result)
+	err = runner.runSteps(context.Background(), []models.TaskStep{}, result, nl)
 	if err != nil {
 		t.Fatalf("runSteps with empty steps: %v", err)
 	}
@@ -284,7 +286,7 @@ func TestRunStepsStopsOnError(t *testing.T) {
 		{Action: "invalid_action_2"},
 	}
 
-	err := runner.runSteps(context.Background(), steps, result)
+	err := runner.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID))
 	if err == nil {
 		t.Fatal("expected error from invalid steps")
 	}
@@ -963,7 +965,7 @@ func TestRunStepsWithMockSuccess(t *testing.T) {
 		{Action: models.ActionType, Selector: "#input", Value: "hello"},
 	}
 
-	err := r.runSteps(context.Background(), steps, result)
+	err := r.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -986,7 +988,7 @@ func TestRunStepsWithMockStopsOnError(t *testing.T) {
 		{Action: models.ActionClick, Selector: "#btn"},
 	}
 
-	err := r.runSteps(context.Background(), steps, result)
+	err := r.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID))
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -1004,7 +1006,7 @@ func TestRunStepsCustomTimeout(t *testing.T) {
 		{Action: models.ActionNavigate, Value: "https://example.com", Timeout: 5000},
 	}
 
-	err := r.runSteps(context.Background(), steps, result)
+	err := r.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

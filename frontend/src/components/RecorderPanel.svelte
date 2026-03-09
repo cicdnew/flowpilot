@@ -179,7 +179,7 @@
   {/if}
 
   <div class="panel-footer">
-    <button class="btn-secondary" on:click={() => dispatch('close')}>Close</button>
+    <button class="btn-secondary" on:click={() => recordingSteps.set([])} disabled={$isRecording || $recordingSteps.length === 0}>Clear Steps</button>
     <button
       class="btn-primary"
       disabled={!flowName || $recordingSteps.length === 0 || saving || $isRecording}

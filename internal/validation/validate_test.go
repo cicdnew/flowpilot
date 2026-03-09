@@ -629,3 +629,35 @@ func TestValidateTaskURLWithFragment(t *testing.T) {
 		t.Errorf("URL with fragment should be valid: %v", err)
 	}
 }
+
+// --- ValidateTimeout Tests ---
+
+func TestValidateTimeout(t *testing.T) {
+	tests := []struct {
+		name    string
+		timeout int
+		wantErr error
+	}{
+		{"zero (default)", 0, nil},
+		{"valid 60 seconds", 60, nil},
+		{"valid 300 seconds", 300, nil},
+		{"valid max 3600", 3600, nil},
+		{"valid 1 second", 1, nil},
+		{"negative", -1, ErrInvalidTimeout},
+		{"negative large", -100, ErrInvalidTimeout},
+		{"too large", 3601, ErrInvalidTimeout},
+		{"way too large", 99999, ErrInvalidTimeout},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateTimeout(tc.timeout)
+			if tc.wantErr == nil && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+				t.Errorf("got error %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+}

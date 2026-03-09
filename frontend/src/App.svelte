@@ -13,7 +13,7 @@
   import LogViewer from './components/LogViewer.svelte';
   import BatchProgressPanel from './components/BatchProgressPanel.svelte';
   import { tasks, activeTab, updateTaskInStore, replaceTaskInStore, selectedTask, statusFilter, tagFilter, isRecording, recordedFlows } from './lib/store';
-  import type { Task } from './lib/types';
+  import type { Task, RecordedFlow } from './lib/types';
   import { ListTasksPaginated, GetTask, IsRecording, ListRecordedFlows } from '../wailsjs/go/main/App';
   import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime';
 
@@ -21,11 +21,12 @@
   let showBatchModal = false;
   let loadError = '';
   let loading = false;
-  let selectedFlow: any = null;
+  let selectedFlow: RecordedFlow | null = null;
   let showBatchFromFlow = false;
   let currentPage = 1;
   let pageSize = 50;
-
+  let totalPages = 1;
+  let totalItems = 0;
 
   async function refreshTasks() {
     loading = true;
@@ -33,12 +34,29 @@
       loadError = '';
       const result = await ListTasksPaginated(currentPage, pageSize, $statusFilter === 'all' ? 'all' : $statusFilter, $tagFilter);
       tasks.set((result.tasks || []) as Task[]);
-
+      totalPages = result.totalPages || 1;
+      totalItems = result.total || 0;
     } catch (err: any) {
       loadError = `Failed to load tasks: ${err?.message || err}`;
     } finally {
       loading = false;
     }
+  }
+
+  $: if ($statusFilter || $statusFilter === 'all') {
+    currentPage = 1;
+    refreshTasks();
+  }
+
+  $: if ($tagFilter !== undefined) {
+    currentPage = 1;
+    refreshTasks();
+  }
+
+  function goToPage(page: number) {
+    if (page < 1 || page > totalPages) return;
+    currentPage = page;
+    refreshTasks();
   }
 
   async function refreshFlows() {
@@ -110,7 +128,28 @@
   {#if $activeTab === 'tasks'}
     <TaskToolbar on:create={() => showCreateModal = true} on:batchCreate={() => showBatchModal = true} />
     <div class="main-content">
-      <TaskTable on:refresh={refreshTasks} />
+      <div class="task-list-area">
+        <TaskTable on:refresh={refreshTasks} />
+        <div class="pagination">
+          <button
+            class="pagination-btn"
+            disabled={currentPage <= 1}
+            on:click={() => goToPage(currentPage - 1)}
+          >
+            ← Prev
+          </button>
+          <span class="pagination-info">
+            Page {currentPage} of {totalPages} ({totalItems} total)
+          </span>
+          <button
+            class="pagination-btn"
+            disabled={currentPage >= totalPages}
+            on:click={() => goToPage(currentPage + 1)}
+          >
+            Next →
+          </button>
+        </div>
+      </div>
       <div class="side-panel">
         <TaskDetail />
         <BatchProgressPanel task={$selectedTask} />
@@ -189,6 +228,12 @@
     flex: 1;
     overflow: hidden;
   }
+  .task-list-area {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+  }
   .side-panel {
     display: flex;
     flex-direction: column;
@@ -212,5 +257,39 @@
     color: var(--danger, #ef4444);
     font-size: 12px;
     border-bottom: 1px solid rgba(239, 68, 68, 0.2);
+  }
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+  }
+  .pagination-btn {
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .pagination-btn:hover:not(:disabled) {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .pagination-info {
+    font-size: 12px;
+    color: var(--text-muted);
   }
 </style>

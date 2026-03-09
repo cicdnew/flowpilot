@@ -9,10 +9,12 @@
   let editPriority = 5;
   let editSteps: TaskStep[] = [];
   let editProxyServer = '';
+  let editProxyProtocol = 'http';
   let editProxyUsername = '';
   let editProxyPassword = '';
   let editProxyGeo = '';
   let editTags = '';
+  let editTimeout = 0;
   let editError = '';
   let saving = false;
   let auditEvents: TaskLifecycleEvent[] = [];
@@ -27,10 +29,12 @@
     editPriority = $selectedTask.priority;
     editSteps = ($selectedTask.steps || []).map(s => ({ ...s }));
     editProxyServer = $selectedTask.proxy?.server || '';
+    editProxyProtocol = $selectedTask.proxy?.protocol || 'http';
     editProxyUsername = $selectedTask.proxy?.username || '';
     editProxyPassword = $selectedTask.proxy?.password || '';
     editProxyGeo = $selectedTask.proxy?.geo || '';
     editTags = ($selectedTask.tags ?? []).join(', ');
+    editTimeout = $selectedTask.timeout ?? 0;
     editError = '';
     editing = true;
   }
@@ -53,6 +57,7 @@
     saving = true;
     const proxyConfig: ProxyConfig = {
       server: editProxyServer,
+      protocol: editProxyProtocol,
       username: editProxyUsername,
       password: editProxyPassword,
       geo: editProxyGeo,
@@ -60,7 +65,7 @@
     try {
       editError = '';
       const tags = editTags.split(',').map(t => t.trim()).filter(t => t.length > 0);
-      await UpdateTask($selectedTask.id, editName, editUrl, editSteps, proxyConfig, editPriority, tags);
+      await UpdateTask($selectedTask.id, editName, editUrl, editSteps, proxyConfig, editPriority, tags, editTimeout);
       const updated = await GetTask($selectedTask.id) as Task;
       tasks.update(list => list.map(t => t.id === updated.id ? updated : t));
       editing = false;
@@ -131,7 +136,12 @@
           </select>
         </div>
         <h4>Proxy</h4>
-        <div class="form-group">
+        <div class="form-row-sm">
+          <select bind:value={editProxyProtocol} style="min-width:80px">
+            <option value="http">http</option>
+            <option value="https">https</option>
+            <option value="socks5">socks5</option>
+          </select>
           <input bind:value={editProxyServer} placeholder="host:port" />
         </div>
         <div class="form-row-sm">
@@ -143,6 +153,11 @@
           <label for="edit-tags">Tags</label>
           <input id="edit-tags" bind:value={editTags} placeholder="tag1, tag2, tag3" />
           <span style="font-size:11px;color:var(--text-muted)">Comma-separated</span>
+        </div>
+        <div class="form-group">
+          <label for="edit-timeout">Timeout (seconds)</label>
+          <input id="edit-timeout" type="number" bind:value={editTimeout} min="0" max="3600" placeholder="0 = default (5 min)" />
+          <span style="font-size:11px;color:var(--text-muted)">0 = use default (5 min). Max 3600s.</span>
         </div>
         <h4>Steps</h4>
         {#each editSteps as step, i}
@@ -186,6 +201,10 @@
         <div class="detail-item">
           <span class="label">Retries</span>
           <span class="value">{$selectedTask.retryCount} / {$selectedTask.maxRetries}</span>
+        </div>
+        <div class="detail-item">
+          <span class="label">Timeout</span>
+          <span class="value">{$selectedTask.timeout ? `${$selectedTask.timeout}s` : 'default (5 min)'}</span>
         </div>
         {#if $selectedTask.error}
           <div class="detail-item error">

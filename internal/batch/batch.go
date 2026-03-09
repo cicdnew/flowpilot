@@ -39,6 +39,12 @@ func (e *Engine) CreateBatchFromFlow(ctx context.Context, flow models.RecordedFl
 		return models.BatchGroup{}, nil, fmt.Errorf("invalid naming template")
 	}
 
+	tx, err := e.db.BeginTx(ctx)
+	if err != nil {
+		return models.BatchGroup{}, nil, fmt.Errorf("begin batch tx: %w", err)
+	}
+	defer tx.Rollback()
+
 	created := make([]models.Task, 0, len(input.URLs))
 	for i, rawURL := range input.URLs {
 		index := i + 1
@@ -78,8 +84,8 @@ func (e *Engine) CreateBatchFromFlow(ctx context.Context, flow models.RecordedFl
 			Headless:   input.BatchHeadless(),
 		}
 
-		if err := e.db.CreateTask(task); err != nil {
-			return models.BatchGroup{}, created, fmt.Errorf("create task %d: %w", len(created), err)
+		if err := e.db.CreateTaskTx(ctx, tx, task); err != nil {
+			return models.BatchGroup{}, nil, fmt.Errorf("create task %d: %w", i, err)
 		}
 		created = append(created, task)
 	}
@@ -91,8 +97,12 @@ func (e *Engine) CreateBatchFromFlow(ctx context.Context, flow models.RecordedFl
 		Total:   len(created),
 		Name:    flow.Name,
 	}
-	if err := e.db.CreateBatchGroup(group); err != nil {
-		return group, created, fmt.Errorf("create batch group: %w", err)
+	if err := e.db.CreateBatchGroupTx(ctx, tx, group); err != nil {
+		return models.BatchGroup{}, nil, fmt.Errorf("create batch group: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return models.BatchGroup{}, nil, fmt.Errorf("commit batch tx: %w", err)
 	}
 
 	return group, created, nil

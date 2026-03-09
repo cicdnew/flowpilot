@@ -34,6 +34,15 @@ export interface RecordedFlow {
   updatedAt: string;
 }
 
+export interface BatchGroup {
+  id: string;
+  flowId: string;
+  name: string;
+  total: number;
+  taskIds?: string[];
+  createdAt: string;
+}
+
 export interface BatchProgress {
   batchId: string;
   total: number;
@@ -59,6 +68,22 @@ export interface LogEntry {
   message: string;
 }
 
+export interface NetworkLog {
+  taskId: string;
+  stepIndex: number;
+  requestUrl: string;
+  method: string;
+  statusCode: number;
+  mimeType?: string;
+  requestHeaders?: string;
+  responseHeaders?: string;
+  requestSize: number;
+  responseSize: number;
+  durationMs: number;
+  error?: string;
+  timestamp: string;
+}
+
 export interface TaskResult {
   taskId: string;
   success: boolean;
@@ -66,6 +91,7 @@ export interface TaskResult {
   screenshots?: string[];
   logs: LogEntry[];
   stepLogs?: StepLog[];
+  networkLogs?: NetworkLog[];
   duration: number;
   error?: string;
 }

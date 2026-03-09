@@ -7,3 +7,9 @@ frontend/dist
 /root/tmp/
 .env
 .env.*
+
+# Test artifacts
+cover.out
+
+# Session files
+session-*.md

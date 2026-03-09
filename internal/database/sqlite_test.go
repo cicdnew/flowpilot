@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -76,11 +77,11 @@ func TestCreateAndGetTask(t *testing.T) {
 	db := setupTestDB(t)
 	task := makeTask("task-1", "Test Task")
 
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	got, err := db.GetTask("task-1")
+	got, err := db.GetTask(context.Background(), "task-1")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -113,7 +114,7 @@ func TestCreateAndGetTask(t *testing.T) {
 
 func TestGetTaskNotFound(t *testing.T) {
 	db := setupTestDB(t)
-	_, err := db.GetTask("nonexistent")
+	_, err := db.GetTask(context.Background(), "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for nonexistent task, got nil")
 	}
@@ -122,11 +123,11 @@ func TestGetTaskNotFound(t *testing.T) {
 func TestCreateTaskDuplicateID(t *testing.T) {
 	db := setupTestDB(t)
 	task := makeTask("dup-1", "First")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("first CreateTask: %v", err)
 	}
 	task2 := makeTask("dup-1", "Second")
-	err := db.CreateTask(task2)
+	err := db.CreateTask(context.Background(), task2)
 	if err == nil {
 		t.Fatal("expected error for duplicate ID, got nil")
 	}
@@ -141,12 +142,12 @@ func TestListTasks(t *testing.T) {
 			"Task "+string(rune('A'+i)),
 		)
 		task.Priority = models.TaskPriority(i + 1)
-		if err := db.CreateTask(task); err != nil {
+		if err := db.CreateTask(context.Background(), task); err != nil {
 			t.Fatalf("CreateTask %d: %v", i, err)
 		}
 	}
 
-	tasks, err := db.ListTasks()
+	tasks, err := db.ListTasks(context.Background())
 	if err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}
@@ -174,12 +175,12 @@ func TestListTasksByStatus(t *testing.T) {
 	task3.Status = models.TaskStatusPending
 
 	for _, task := range []models.Task{task1, task2, task3} {
-		if err := db.CreateTask(task); err != nil {
+		if err := db.CreateTask(context.Background(), task); err != nil {
 			t.Fatalf("CreateTask %s: %v", task.ID, err)
 		}
 	}
 
-	pending, err := db.ListTasksByStatus(models.TaskStatusPending)
+	pending, err := db.ListTasksByStatus(context.Background(), models.TaskStatusPending)
 	if err != nil {
 		t.Fatalf("ListTasksByStatus(pending): %v", err)
 	}
@@ -187,7 +188,7 @@ func TestListTasksByStatus(t *testing.T) {
 		t.Errorf("pending count: got %d, want 2", len(pending))
 	}
 
-	running, err := db.ListTasksByStatus(models.TaskStatusRunning)
+	running, err := db.ListTasksByStatus(context.Background(), models.TaskStatusRunning)
 	if err != nil {
 		t.Fatalf("ListTasksByStatus(running): %v", err)
 	}
@@ -199,7 +200,7 @@ func TestListTasksByStatus(t *testing.T) {
 func TestUpdateTaskStatus(t *testing.T) {
 	db := setupTestDB(t)
 	task := makeTask("upd-status-1", "Update Status Test")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -216,10 +217,10 @@ func TestUpdateTaskStatus(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := db.UpdateTaskStatus(task.ID, tc.status, tc.errMsg); err != nil {
+			if err := db.UpdateTaskStatus(context.Background(), task.ID, tc.status, tc.errMsg); err != nil {
 				t.Fatalf("UpdateTaskStatus: %v", err)
 			}
-			got, err := db.GetTask(task.ID)
+			got, err := db.GetTask(context.Background(), task.ID)
 			if err != nil {
 				t.Fatalf("GetTask: %v", err)
 			}
@@ -233,24 +234,24 @@ func TestUpdateTaskStatus(t *testing.T) {
 func TestUpdateTaskStatusSetsTimestamps(t *testing.T) {
 	db := setupTestDB(t)
 	task := makeTask("ts-1", "Timestamp Test")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
 	// Running should set started_at
-	if err := db.UpdateTaskStatus(task.ID, models.TaskStatusRunning, ""); err != nil {
+	if err := db.UpdateTaskStatus(context.Background(), task.ID, models.TaskStatusRunning, ""); err != nil {
 		t.Fatalf("UpdateTaskStatus(running): %v", err)
 	}
-	got, _ := db.GetTask(task.ID)
+	got, _ := db.GetTask(context.Background(), task.ID)
 	if got.StartedAt == nil {
 		t.Error("StartedAt should be set after running")
 	}
 
 	// Completed should set completed_at
-	if err := db.UpdateTaskStatus(task.ID, models.TaskStatusCompleted, ""); err != nil {
+	if err := db.UpdateTaskStatus(context.Background(), task.ID, models.TaskStatusCompleted, ""); err != nil {
 		t.Fatalf("UpdateTaskStatus(completed): %v", err)
 	}
-	got, _ = db.GetTask(task.ID)
+	got, _ = db.GetTask(context.Background(), task.ID)
 	if got.CompletedAt == nil {
 		t.Error("CompletedAt should be set after completed")
 	}
@@ -259,7 +260,7 @@ func TestUpdateTaskStatusSetsTimestamps(t *testing.T) {
 func TestUpdateTaskResult(t *testing.T) {
 	db := setupTestDB(t)
 	task := makeTask("result-1", "Result Test")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -273,11 +274,11 @@ func TestUpdateTaskResult(t *testing.T) {
 		Duration:    5 * time.Second,
 	}
 
-	if err := db.UpdateTaskResult(task.ID, result); err != nil {
+	if err := db.UpdateTaskResult(context.Background(), task.ID, result); err != nil {
 		t.Fatalf("UpdateTaskResult: %v", err)
 	}
 
-	got, err := db.GetTask(task.ID)
+	got, err := db.GetTask(context.Background(), task.ID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -295,17 +296,17 @@ func TestUpdateTaskResult(t *testing.T) {
 func TestIncrementRetry(t *testing.T) {
 	db := setupTestDB(t)
 	task := makeTask("retry-1", "Retry Test")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
 	for i := 0; i < 3; i++ {
-		if err := db.IncrementRetry(task.ID); err != nil {
+		if err := db.IncrementRetry(context.Background(), task.ID); err != nil {
 			t.Fatalf("IncrementRetry %d: %v", i, err)
 		}
 	}
 
-	got, err := db.GetTask(task.ID)
+	got, err := db.GetTask(context.Background(), task.ID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -320,15 +321,15 @@ func TestIncrementRetry(t *testing.T) {
 func TestDeleteTask(t *testing.T) {
 	db := setupTestDB(t)
 	task := makeTask("del-1", "Delete Test")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	if err := db.DeleteTask(task.ID); err != nil {
+	if err := db.DeleteTask(context.Background(), task.ID); err != nil {
 		t.Fatalf("DeleteTask: %v", err)
 	}
 
-	_, err := db.GetTask(task.ID)
+	_, err := db.GetTask(context.Background(), task.ID)
 	if err == nil {
 		t.Error("GetTask should return error after deletion")
 	}
@@ -347,12 +348,12 @@ func TestGetTaskStats(t *testing.T) {
 	tasks[2].Status = models.TaskStatusCompleted
 
 	for _, task := range tasks {
-		if err := db.CreateTask(task); err != nil {
+		if err := db.CreateTask(context.Background(), task); err != nil {
 			t.Fatalf("CreateTask: %v", err)
 		}
 	}
 
-	stats, err := db.GetTaskStats()
+	stats, err := db.GetTaskStats(context.Background())
 	if err != nil {
 		t.Fatalf("GetTaskStats: %v", err)
 	}
@@ -373,14 +374,14 @@ func TestCreateAndListProxies(t *testing.T) {
 	p1 := makeProxy("proxy-1", "proxy1.example.com:8080", "US")
 	p2 := makeProxy("proxy-2", "proxy2.example.com:8080", "UK")
 
-	if err := db.CreateProxy(p1); err != nil {
+	if err := db.CreateProxy(context.Background(), p1); err != nil {
 		t.Fatalf("CreateProxy 1: %v", err)
 	}
-	if err := db.CreateProxy(p2); err != nil {
+	if err := db.CreateProxy(context.Background(), p2); err != nil {
 		t.Fatalf("CreateProxy 2: %v", err)
 	}
 
-	proxies, err := db.ListProxies()
+	proxies, err := db.ListProxies(context.Background())
 	if err != nil {
 		t.Fatalf("ListProxies: %v", err)
 	}
@@ -395,19 +396,19 @@ func TestListHealthyProxies(t *testing.T) {
 	p1 := makeProxy("hp-1", "h1.example.com:8080", "US")
 	p2 := makeProxy("hp-2", "h2.example.com:8080", "UK")
 
-	if err := db.CreateProxy(p1); err != nil {
+	if err := db.CreateProxy(context.Background(), p1); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
-	if err := db.CreateProxy(p2); err != nil {
+	if err := db.CreateProxy(context.Background(), p2); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
 
 	// Mark one as healthy
-	if err := db.UpdateProxyHealth("hp-1", models.ProxyStatusHealthy, 50); err != nil {
+	if err := db.UpdateProxyHealth(context.Background(), "hp-1", models.ProxyStatusHealthy, 50); err != nil {
 		t.Fatalf("UpdateProxyHealth: %v", err)
 	}
 
-	healthy, err := db.ListHealthyProxies()
+	healthy, err := db.ListHealthyProxies(context.Background())
 	if err != nil {
 		t.Fatalf("ListHealthyProxies: %v", err)
 	}
@@ -422,15 +423,15 @@ func TestListHealthyProxies(t *testing.T) {
 func TestUpdateProxyHealth(t *testing.T) {
 	db := setupTestDB(t)
 	p := makeProxy("health-1", "health.example.com:8080", "US")
-	if err := db.CreateProxy(p); err != nil {
+	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
 
-	if err := db.UpdateProxyHealth("health-1", models.ProxyStatusHealthy, 100); err != nil {
+	if err := db.UpdateProxyHealth(context.Background(), "health-1", models.ProxyStatusHealthy, 100); err != nil {
 		t.Fatalf("UpdateProxyHealth: %v", err)
 	}
 
-	proxies, err := db.ListProxies()
+	proxies, err := db.ListProxies(context.Background())
 	if err != nil {
 		t.Fatalf("ListProxies: %v", err)
 	}
@@ -458,21 +459,21 @@ func TestUpdateProxyHealth(t *testing.T) {
 func TestIncrementProxyUsage(t *testing.T) {
 	db := setupTestDB(t)
 	p := makeProxy("usage-1", "usage.example.com:8080", "US")
-	if err := db.CreateProxy(p); err != nil {
+	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
 
 	// Record 3 successes and 1 failure
 	for i := 0; i < 3; i++ {
-		if err := db.IncrementProxyUsage("usage-1", true); err != nil {
+		if err := db.IncrementProxyUsage(context.Background(), "usage-1", true); err != nil {
 			t.Fatalf("IncrementProxyUsage(success) %d: %v", i, err)
 		}
 	}
-	if err := db.IncrementProxyUsage("usage-1", false); err != nil {
+	if err := db.IncrementProxyUsage(context.Background(), "usage-1", false); err != nil {
 		t.Fatalf("IncrementProxyUsage(failure): %v", err)
 	}
 
-	proxies, err := db.ListProxies()
+	proxies, err := db.ListProxies(context.Background())
 	if err != nil {
 		t.Fatalf("ListProxies: %v", err)
 	}
@@ -492,15 +493,15 @@ func TestIncrementProxyUsage(t *testing.T) {
 func TestDeleteProxy(t *testing.T) {
 	db := setupTestDB(t)
 	p := makeProxy("del-p-1", "del.example.com:8080", "US")
-	if err := db.CreateProxy(p); err != nil {
+	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
 
-	if err := db.DeleteProxy("del-p-1"); err != nil {
+	if err := db.DeleteProxy(context.Background(), "del-p-1"); err != nil {
 		t.Fatalf("DeleteProxy: %v", err)
 	}
 
-	proxies, err := db.ListProxies()
+	proxies, err := db.ListProxies(context.Background())
 	if err != nil {
 		t.Fatalf("ListProxies: %v", err)
 	}
@@ -527,11 +528,11 @@ func TestCreateTaskWithNilStepsAndTags(t *testing.T) {
 		// Steps and Tags are nil
 	}
 
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask with nil slices: %v", err)
 	}
 
-	got, err := db.GetTask("nil-fields")
+	got, err := db.GetTask(context.Background(), "nil-fields")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -583,7 +584,7 @@ func TestProxyCredentialsEncryptedAtRest(t *testing.T) {
 	p.Username = "cleartext_user"
 	p.Password = "cleartext_pass"
 
-	if err := db.CreateProxy(p); err != nil {
+	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
 
@@ -600,7 +601,7 @@ func TestProxyCredentialsEncryptedAtRest(t *testing.T) {
 		t.Error("password stored in plaintext — expected ciphertext")
 	}
 
-	got, err := db.ListProxies()
+	got, err := db.ListProxies(context.Background())
 	if err != nil {
 		t.Fatalf("ListProxies: %v", err)
 	}
@@ -628,7 +629,7 @@ func TestTaskProxyCredentialsEncryptedAtRest(t *testing.T) {
 	task.Proxy.Username = "task_user"
 	task.Proxy.Password = "task_pass"
 
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -645,7 +646,7 @@ func TestTaskProxyCredentialsEncryptedAtRest(t *testing.T) {
 		t.Error("proxy_password stored in plaintext — expected ciphertext")
 	}
 
-	got, err := db.GetTask("enc-task-1")
+	got, err := db.GetTask(context.Background(), "enc-task-1")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -660,7 +661,7 @@ func TestTaskProxyCredentialsEncryptedAtRest(t *testing.T) {
 func TestUpdateTask(t *testing.T) {
 	db := setupTestDB(t)
 	task := makeTask("upd-1", "Original")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -669,11 +670,11 @@ func TestUpdateTask(t *testing.T) {
 	}
 	newProxy := models.ProxyConfig{Server: "new.proxy:9090", Username: "u2", Password: "p2"}
 
-	if err := db.UpdateTask("upd-1", "Updated", "https://updated.com", newSteps, newProxy, models.PriorityHigh, []string{"updated-tag"}); err != nil {
+	if err := db.UpdateTask(context.Background(), "upd-1", "Updated", "https://updated.com", newSteps, newProxy, models.PriorityHigh, []string{"updated-tag"}, 0); err != nil {
 		t.Fatalf("UpdateTask: %v", err)
 	}
 
-	got, err := db.GetTask("upd-1")
+	got, err := db.GetTask(context.Background(), "upd-1")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -696,7 +697,7 @@ func TestUpdateTask(t *testing.T) {
 
 func TestDeleteTaskNotFound(t *testing.T) {
 	db := setupTestDB(t)
-	err := db.DeleteTask("nonexistent-id")
+	err := db.DeleteTask(context.Background(), "nonexistent-id")
 	if err == nil {
 		t.Fatal("expected error for nonexistent task ID")
 	}
@@ -704,7 +705,7 @@ func TestDeleteTaskNotFound(t *testing.T) {
 
 func TestDeleteProxyNotFound(t *testing.T) {
 	db := setupTestDB(t)
-	err := db.DeleteProxy("nonexistent-id")
+	err := db.DeleteProxy(context.Background(), "nonexistent-id")
 	if err == nil {
 		t.Fatal("expected error for nonexistent proxy ID")
 	}
@@ -718,12 +719,12 @@ func TestListTasksPaginated(t *testing.T) {
 			fmt.Sprintf("page-%d", i),
 			fmt.Sprintf("Task %d", i),
 		)
-		if err := db.CreateTask(task); err != nil {
+		if err := db.CreateTask(context.Background(), task); err != nil {
 			t.Fatalf("CreateTask %d: %v", i, err)
 		}
 	}
 
-	result, err := db.ListTasksPaginated(1, 5, "", "")
+	result, err := db.ListTasksPaginated(context.Background(), 1, 5, "", "")
 	if err != nil {
 		t.Fatalf("ListTasksPaginated: %v", err)
 	}
@@ -737,7 +738,7 @@ func TestListTasksPaginated(t *testing.T) {
 		t.Errorf("TotalPages: got %d, want 3", result.TotalPages)
 	}
 
-	result2, err := db.ListTasksPaginated(3, 5, "", "")
+	result2, err := db.ListTasksPaginated(context.Background(), 3, 5, "", "")
 	if err != nil {
 		t.Fatalf("ListTasksPaginated page 3: %v", err)
 	}
@@ -754,12 +755,12 @@ func TestListTasksPaginatedWithStatusFilter(t *testing.T) {
 		if i%2 == 0 {
 			task.Status = models.TaskStatusCompleted
 		}
-		if err := db.CreateTask(task); err != nil {
+		if err := db.CreateTask(context.Background(), task); err != nil {
 			t.Fatalf("CreateTask %d: %v", i, err)
 		}
 	}
 
-	result, err := db.ListTasksPaginated(1, 10, "completed", "")
+	result, err := db.ListTasksPaginated(context.Background(), 1, 10, "completed", "")
 	if err != nil {
 		t.Fatalf("ListTasksPaginated: %v", err)
 	}
@@ -773,14 +774,14 @@ func TestPurgeOldRecords(t *testing.T) {
 
 	task := makeTask("old-1", "Old Task")
 	task.Status = models.TaskStatusCompleted
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
-	if err := db.UpdateTaskStatus("old-1", models.TaskStatusCompleted, ""); err != nil {
+	if err := db.UpdateTaskStatus(context.Background(), "old-1", models.TaskStatusCompleted, ""); err != nil {
 		t.Fatalf("UpdateTaskStatus: %v", err)
 	}
 
-	n, err := db.PurgeOldRecords(90)
+	n, err := db.PurgeOldRecords(context.Background(), 90)
 	if err != nil {
 		t.Fatalf("PurgeOldRecords: %v", err)
 	}
@@ -799,11 +800,11 @@ func TestListAuditTrail(t *testing.T) {
 		ToState:   models.TaskStatusRunning,
 		Timestamp: time.Now(),
 	}
-	if err := db.InsertTaskEvent(event); err != nil {
+	if err := db.InsertTaskEvent(context.Background(), event); err != nil {
 		t.Fatalf("InsertTaskEvent: %v", err)
 	}
 
-	events, err := db.ListAuditTrail("task-1", 10)
+	events, err := db.ListAuditTrail(context.Background(), "task-1", 10)
 	if err != nil {
 		t.Fatalf("ListAuditTrail: %v", err)
 	}
@@ -814,7 +815,7 @@ func TestListAuditTrail(t *testing.T) {
 		t.Errorf("ToState: got %q, want %q", events[0].ToState, models.TaskStatusRunning)
 	}
 
-	all, err := db.ListAuditTrail("", 0)
+	all, err := db.ListAuditTrail(context.Background(), "", 0)
 	if err != nil {
 		t.Fatalf("ListAuditTrail all: %v", err)
 	}
@@ -826,14 +827,14 @@ func TestListAuditTrail(t *testing.T) {
 func TestUpdateTaskRejectsRunning(t *testing.T) {
 	db := setupTestDB(t)
 	task := makeTask("upd-run-1", "Running Task")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
-	if err := db.UpdateTaskStatus("upd-run-1", models.TaskStatusRunning, ""); err != nil {
+	if err := db.UpdateTaskStatus(context.Background(), "upd-run-1", models.TaskStatusRunning, ""); err != nil {
 		t.Fatalf("UpdateTaskStatus: %v", err)
 	}
 
-	err := db.UpdateTask("upd-run-1", "New Name", "https://x.com", nil, models.ProxyConfig{}, models.PriorityNormal, nil)
+	err := db.UpdateTask(context.Background(), "upd-run-1", "New Name", "https://x.com", nil, models.ProxyConfig{}, models.PriorityNormal, nil, 0)
 	if err == nil {
 		t.Fatal("expected error when updating running task")
 	}
@@ -861,11 +862,11 @@ func TestCreateAndGetRecordedFlow(t *testing.T) {
 	db := setupTestDB(t)
 	flow := makeFlow("flow-1", "Test Flow")
 
-	if err := db.CreateRecordedFlow(flow); err != nil {
+	if err := db.CreateRecordedFlow(context.Background(), flow); err != nil {
 		t.Fatalf("CreateRecordedFlow: %v", err)
 	}
 
-	got, err := db.GetRecordedFlow("flow-1")
+	got, err := db.GetRecordedFlow(context.Background(), "flow-1")
 	if err != nil {
 		t.Fatalf("GetRecordedFlow: %v", err)
 	}
@@ -889,7 +890,7 @@ func TestCreateAndGetRecordedFlow(t *testing.T) {
 
 func TestGetRecordedFlowNotFound(t *testing.T) {
 	db := setupTestDB(t)
-	_, err := db.GetRecordedFlow("nonexistent")
+	_, err := db.GetRecordedFlow(context.Background(), "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for nonexistent flow")
 	}
@@ -901,12 +902,12 @@ func TestListRecordedFlows(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		flow := makeFlow(fmt.Sprintf("list-flow-%d", i), fmt.Sprintf("Flow %d", i))
 		flow.UpdatedAt = time.Now().Add(time.Duration(i) * time.Second)
-		if err := db.CreateRecordedFlow(flow); err != nil {
+		if err := db.CreateRecordedFlow(context.Background(), flow); err != nil {
 			t.Fatalf("CreateRecordedFlow %d: %v", i, err)
 		}
 	}
 
-	flows, err := db.ListRecordedFlows()
+	flows, err := db.ListRecordedFlows(context.Background())
 	if err != nil {
 		t.Fatalf("ListRecordedFlows: %v", err)
 	}
@@ -917,7 +918,7 @@ func TestListRecordedFlows(t *testing.T) {
 
 func TestListRecordedFlowsEmpty(t *testing.T) {
 	db := setupTestDB(t)
-	flows, err := db.ListRecordedFlows()
+	flows, err := db.ListRecordedFlows(context.Background())
 	if err != nil {
 		t.Fatalf("ListRecordedFlows: %v", err)
 	}
@@ -930,7 +931,7 @@ func TestUpdateRecordedFlow(t *testing.T) {
 	db := setupTestDB(t)
 	flow := makeFlow("upd-flow-1", "Original")
 
-	if err := db.CreateRecordedFlow(flow); err != nil {
+	if err := db.CreateRecordedFlow(context.Background(), flow); err != nil {
 		t.Fatalf("CreateRecordedFlow: %v", err)
 	}
 
@@ -938,11 +939,11 @@ func TestUpdateRecordedFlow(t *testing.T) {
 	flow.Description = "Updated description"
 	flow.UpdatedAt = time.Now()
 
-	if err := db.UpdateRecordedFlow(flow); err != nil {
+	if err := db.UpdateRecordedFlow(context.Background(), flow); err != nil {
 		t.Fatalf("UpdateRecordedFlow: %v", err)
 	}
 
-	got, err := db.GetRecordedFlow("upd-flow-1")
+	got, err := db.GetRecordedFlow(context.Background(), "upd-flow-1")
 	if err != nil {
 		t.Fatalf("GetRecordedFlow: %v", err)
 	}
@@ -957,7 +958,7 @@ func TestUpdateRecordedFlow(t *testing.T) {
 func TestUpdateRecordedFlowNotFound(t *testing.T) {
 	db := setupTestDB(t)
 	flow := makeFlow("nonexistent-flow", "Ghost")
-	err := db.UpdateRecordedFlow(flow)
+	err := db.UpdateRecordedFlow(context.Background(), flow)
 	if err == nil {
 		t.Fatal("expected error for nonexistent flow update")
 	}
@@ -967,15 +968,15 @@ func TestDeleteRecordedFlow(t *testing.T) {
 	db := setupTestDB(t)
 	flow := makeFlow("del-flow-1", "Delete Me")
 
-	if err := db.CreateRecordedFlow(flow); err != nil {
+	if err := db.CreateRecordedFlow(context.Background(), flow); err != nil {
 		t.Fatalf("CreateRecordedFlow: %v", err)
 	}
 
-	if err := db.DeleteRecordedFlow("del-flow-1"); err != nil {
+	if err := db.DeleteRecordedFlow(context.Background(), "del-flow-1"); err != nil {
 		t.Fatalf("DeleteRecordedFlow: %v", err)
 	}
 
-	_, err := db.GetRecordedFlow("del-flow-1")
+	_, err := db.GetRecordedFlow(context.Background(), "del-flow-1")
 	if err == nil {
 		t.Error("GetRecordedFlow should fail after deletion")
 	}
@@ -983,7 +984,7 @@ func TestDeleteRecordedFlow(t *testing.T) {
 
 func TestDeleteRecordedFlowNotFound(t *testing.T) {
 	db := setupTestDB(t)
-	err := db.DeleteRecordedFlow("nonexistent")
+	err := db.DeleteRecordedFlow(context.Background(), "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for nonexistent flow deletion")
 	}
@@ -992,7 +993,7 @@ func TestDeleteRecordedFlowNotFound(t *testing.T) {
 func TestDeleteRecordedFlowCascade(t *testing.T) {
 	db := setupTestDB(t)
 	flow := makeFlow("cascade-flow", "Cascade Test")
-	if err := db.CreateRecordedFlow(flow); err != nil {
+	if err := db.CreateRecordedFlow(context.Background(), flow); err != nil {
 		t.Fatalf("CreateRecordedFlow: %v", err)
 	}
 
@@ -1001,7 +1002,7 @@ func TestDeleteRecordedFlowCascade(t *testing.T) {
 		HTML: "<html></html>", ScreenshotPath: "/tmp/s.png",
 		URL: "https://example.com", CapturedAt: time.Now(),
 	}
-	if err := db.CreateDOMSnapshot(snap); err != nil {
+	if err := db.CreateDOMSnapshot(context.Background(), snap); err != nil {
 		t.Fatalf("CreateDOMSnapshot: %v", err)
 	}
 
@@ -1010,15 +1011,15 @@ func TestDeleteRecordedFlowCascade(t *testing.T) {
 			URL: "wss://example.com", EventType: models.WSEventCreated,
 			Timestamp: time.Now()},
 	}
-	if err := db.InsertWebSocketLogs("cascade-flow", wsLogs); err != nil {
+	if err := db.InsertWebSocketLogs(context.Background(), "cascade-flow", wsLogs); err != nil {
 		t.Fatalf("InsertWebSocketLogs: %v", err)
 	}
 
-	if err := db.DeleteRecordedFlow("cascade-flow"); err != nil {
+	if err := db.DeleteRecordedFlow(context.Background(), "cascade-flow"); err != nil {
 		t.Fatalf("DeleteRecordedFlow: %v", err)
 	}
 
-	snaps, err := db.ListDOMSnapshots("cascade-flow")
+	snaps, err := db.ListDOMSnapshots(context.Background(), "cascade-flow")
 	if err != nil {
 		t.Fatalf("ListDOMSnapshots: %v", err)
 	}
@@ -1026,7 +1027,7 @@ func TestDeleteRecordedFlowCascade(t *testing.T) {
 		t.Errorf("expected 0 snapshots after cascade delete, got %d", len(snaps))
 	}
 
-	remaining, err := db.ListWebSocketLogs("cascade-flow")
+	remaining, err := db.ListWebSocketLogs(context.Background(), "cascade-flow")
 	if err != nil {
 		t.Fatalf("ListWebSocketLogs: %v", err)
 	}
@@ -1047,12 +1048,12 @@ func TestCreateAndListDOMSnapshots(t *testing.T) {
 	}
 
 	for _, s := range snapshots {
-		if err := db.CreateDOMSnapshot(s); err != nil {
+		if err := db.CreateDOMSnapshot(context.Background(), s); err != nil {
 			t.Fatalf("CreateDOMSnapshot %s: %v", s.ID, err)
 		}
 	}
 
-	got, err := db.ListDOMSnapshots("flow-1")
+	got, err := db.ListDOMSnapshots(context.Background(), "flow-1")
 	if err != nil {
 		t.Fatalf("ListDOMSnapshots: %v", err)
 	}
@@ -1070,7 +1071,7 @@ func TestCreateAndListDOMSnapshots(t *testing.T) {
 
 func TestListDOMSnapshotsEmpty(t *testing.T) {
 	db := setupTestDB(t)
-	got, err := db.ListDOMSnapshots("nonexistent")
+	got, err := db.ListDOMSnapshots(context.Background(), "nonexistent")
 	if err != nil {
 		t.Fatalf("ListDOMSnapshots: %v", err)
 	}
@@ -1090,7 +1091,7 @@ func TestCreateBatchGroupAndProgress(t *testing.T) {
 		Name:   "Test Batch",
 		Total:  3,
 	}
-	if err := db.CreateBatchGroup(group); err != nil {
+	if err := db.CreateBatchGroup(context.Background(), group); err != nil {
 		t.Fatalf("CreateBatchGroup: %v", err)
 	}
 
@@ -1102,12 +1103,12 @@ func TestCreateBatchGroupAndProgress(t *testing.T) {
 		} else if i == 1 {
 			task.Status = models.TaskStatusFailed
 		}
-		if err := db.CreateTask(task); err != nil {
+		if err := db.CreateTask(context.Background(), task); err != nil {
 			t.Fatalf("CreateTask %d: %v", i, err)
 		}
 	}
 
-	progress, err := db.GetBatchProgress("batch-1")
+	progress, err := db.GetBatchProgress(context.Background(), "batch-1")
 	if err != nil {
 		t.Fatalf("GetBatchProgress: %v", err)
 	}
@@ -1130,7 +1131,7 @@ func TestCreateBatchGroupAndProgress(t *testing.T) {
 
 func TestGetBatchProgressEmpty(t *testing.T) {
 	db := setupTestDB(t)
-	progress, err := db.GetBatchProgress("nonexistent")
+	progress, err := db.GetBatchProgress(context.Background(), "nonexistent")
 	if err != nil {
 		t.Fatalf("GetBatchProgress: %v", err)
 	}
@@ -1147,17 +1148,17 @@ func TestListTasksByBatch(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		task := makeTask(fmt.Sprintf("batch-task-%d", i), fmt.Sprintf("Task %d", i))
 		task.BatchID = "batch-x"
-		if err := db.CreateTask(task); err != nil {
+		if err := db.CreateTask(context.Background(), task); err != nil {
 			t.Fatalf("CreateTask %d: %v", i, err)
 		}
 	}
 
 	unbatched := makeTask("unbatched-1", "Unbatched")
-	if err := db.CreateTask(unbatched); err != nil {
+	if err := db.CreateTask(context.Background(), unbatched); err != nil {
 		t.Fatalf("CreateTask unbatched: %v", err)
 	}
 
-	tasks, err := db.ListTasksByBatch("batch-x")
+	tasks, err := db.ListTasksByBatch(context.Background(), "batch-x")
 	if err != nil {
 		t.Fatalf("ListTasksByBatch: %v", err)
 	}
@@ -1168,7 +1169,7 @@ func TestListTasksByBatch(t *testing.T) {
 
 func TestListTasksByBatchEmpty(t *testing.T) {
 	db := setupTestDB(t)
-	tasks, err := db.ListTasksByBatch("nonexistent")
+	tasks, err := db.ListTasksByBatch(context.Background(), "nonexistent")
 	if err != nil {
 		t.Fatalf("ListTasksByBatch: %v", err)
 	}
@@ -1190,12 +1191,12 @@ func TestListTasksByBatchStatus(t *testing.T) {
 		} else {
 			task.Status = models.TaskStatusFailed
 		}
-		if err := db.CreateTask(task); err != nil {
+		if err := db.CreateTask(context.Background(), task); err != nil {
 			t.Fatalf("CreateTask %d: %v", i, err)
 		}
 	}
 
-	completed, err := db.ListTasksByBatchStatus("batch-status", models.TaskStatusCompleted)
+	completed, err := db.ListTasksByBatchStatus(context.Background(), "batch-status", models.TaskStatusCompleted)
 	if err != nil {
 		t.Fatalf("ListTasksByBatchStatus: %v", err)
 	}
@@ -1203,7 +1204,7 @@ func TestListTasksByBatchStatus(t *testing.T) {
 		t.Errorf("completed count: got %d, want 2", len(completed))
 	}
 
-	failed, err := db.ListTasksByBatchStatus("batch-status", models.TaskStatusFailed)
+	failed, err := db.ListTasksByBatchStatus(context.Background(), "batch-status", models.TaskStatusFailed)
 	if err != nil {
 		t.Fatalf("ListTasksByBatchStatus: %v", err)
 	}
@@ -1218,7 +1219,7 @@ func TestInsertAndListStepLogs(t *testing.T) {
 	db := setupTestDB(t)
 
 	task := makeTask("step-log-task", "Step Log Task")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -1228,11 +1229,11 @@ func TestInsertAndListStepLogs(t *testing.T) {
 		{TaskID: "step-log-task", StepIndex: 2, Action: models.ActionType, Selector: "#input", Value: "hello", ErrorCode: "TIMEOUT", ErrorMsg: "timed out", DurationMs: 5000, StartedAt: time.Now()},
 	}
 
-	if err := db.InsertStepLogs("step-log-task", logs); err != nil {
+	if err := db.InsertStepLogs(context.Background(), "step-log-task", logs); err != nil {
 		t.Fatalf("InsertStepLogs: %v", err)
 	}
 
-	got, err := db.ListStepLogs("step-log-task")
+	got, err := db.ListStepLogs(context.Background(), "step-log-task")
 	if err != nil {
 		t.Fatalf("ListStepLogs: %v", err)
 	}
@@ -1253,12 +1254,12 @@ func TestInsertAndListStepLogs(t *testing.T) {
 
 func TestInsertStepLogsEmpty(t *testing.T) {
 	db := setupTestDB(t)
-	err := db.InsertStepLogs("task-1", nil)
+	err := db.InsertStepLogs(context.Background(), "task-1", nil)
 	if err != nil {
 		t.Errorf("InsertStepLogs(nil) should return nil, got: %v", err)
 	}
 
-	err = db.InsertStepLogs("task-1", []models.StepLog{})
+	err = db.InsertStepLogs(context.Background(), "task-1", []models.StepLog{})
 	if err != nil {
 		t.Errorf("InsertStepLogs(empty) should return nil, got: %v", err)
 	}
@@ -1266,7 +1267,7 @@ func TestInsertStepLogsEmpty(t *testing.T) {
 
 func TestListStepLogsEmpty(t *testing.T) {
 	db := setupTestDB(t)
-	got, err := db.ListStepLogs("nonexistent")
+	got, err := db.ListStepLogs(context.Background(), "nonexistent")
 	if err != nil {
 		t.Fatalf("ListStepLogs: %v", err)
 	}
@@ -1281,7 +1282,7 @@ func TestInsertAndListNetworkLogs(t *testing.T) {
 	db := setupTestDB(t)
 
 	task := makeTask("net-log-task", "Network Log Task")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -1291,11 +1292,11 @@ func TestInsertAndListNetworkLogs(t *testing.T) {
 		{TaskID: "net-log-task", StepIndex: 1, RequestURL: "https://api.example.com/data", Method: "POST", StatusCode: 500, Error: "server error", DurationMs: 300, Timestamp: time.Now()},
 	}
 
-	if err := db.InsertNetworkLogs("net-log-task", logs); err != nil {
+	if err := db.InsertNetworkLogs(context.Background(), "net-log-task", logs); err != nil {
 		t.Fatalf("InsertNetworkLogs: %v", err)
 	}
 
-	got, err := db.ListNetworkLogs("net-log-task")
+	got, err := db.ListNetworkLogs(context.Background(), "net-log-task")
 	if err != nil {
 		t.Fatalf("ListNetworkLogs: %v", err)
 	}
@@ -1316,7 +1317,7 @@ func TestInsertAndListNetworkLogs(t *testing.T) {
 
 func TestInsertNetworkLogsEmpty(t *testing.T) {
 	db := setupTestDB(t)
-	err := db.InsertNetworkLogs("task-1", nil)
+	err := db.InsertNetworkLogs(context.Background(), "task-1", nil)
 	if err != nil {
 		t.Errorf("InsertNetworkLogs(nil) should return nil, got: %v", err)
 	}
@@ -1324,7 +1325,7 @@ func TestInsertNetworkLogsEmpty(t *testing.T) {
 
 func TestListNetworkLogsEmpty(t *testing.T) {
 	db := setupTestDB(t)
-	got, err := db.ListNetworkLogs("nonexistent")
+	got, err := db.ListNetworkLogs(context.Background(), "nonexistent")
 	if err != nil {
 		t.Fatalf("ListNetworkLogs: %v", err)
 	}
@@ -1345,12 +1346,12 @@ func TestInsertAndListTaskEvents(t *testing.T) {
 	}
 
 	for _, ev := range events {
-		if err := db.InsertTaskEvent(ev); err != nil {
+		if err := db.InsertTaskEvent(context.Background(), ev); err != nil {
 			t.Fatalf("InsertTaskEvent %s: %v", ev.ID, err)
 		}
 	}
 
-	got, err := db.ListTaskEvents("task-1")
+	got, err := db.ListTaskEvents(context.Background(), "task-1")
 	if err != nil {
 		t.Fatalf("ListTaskEvents: %v", err)
 	}
@@ -1368,7 +1369,7 @@ func TestInsertAndListTaskEvents(t *testing.T) {
 
 func TestListTaskEventsEmpty(t *testing.T) {
 	db := setupTestDB(t)
-	got, err := db.ListTaskEvents("nonexistent")
+	got, err := db.ListTaskEvents(context.Background(), "nonexistent")
 	if err != nil {
 		t.Fatalf("ListTaskEvents: %v", err)
 	}
@@ -1390,12 +1391,12 @@ func TestListAuditTrailWithLimit(t *testing.T) {
 			ToState:   models.TaskStatusRunning,
 			Timestamp: time.Now().Add(time.Duration(i) * time.Second),
 		}
-		if err := db.InsertTaskEvent(ev); err != nil {
+		if err := db.InsertTaskEvent(context.Background(), ev); err != nil {
 			t.Fatalf("InsertTaskEvent %d: %v", i, err)
 		}
 	}
 
-	got, err := db.ListAuditTrail("", 5)
+	got, err := db.ListAuditTrail(context.Background(), "", 5)
 	if err != nil {
 		t.Fatalf("ListAuditTrail: %v", err)
 	}
@@ -1410,11 +1411,11 @@ func TestListTasksPaginatedInvalidPage(t *testing.T) {
 	db := setupTestDB(t)
 
 	task := makeTask("page-edge-1", "Task")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	result, err := db.ListTasksPaginated(0, 10, "", "")
+	result, err := db.ListTasksPaginated(context.Background(), 0, 10, "", "")
 	if err != nil {
 		t.Fatalf("ListTasksPaginated with page 0: %v", err)
 	}
@@ -1427,11 +1428,11 @@ func TestListTasksPaginatedInvalidPageSize(t *testing.T) {
 	db := setupTestDB(t)
 
 	task := makeTask("page-size-1", "Task")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	result, err := db.ListTasksPaginated(1, 0, "", "")
+	result, err := db.ListTasksPaginated(context.Background(), 1, 0, "", "")
 	if err != nil {
 		t.Fatalf("ListTasksPaginated with pageSize 0: %v", err)
 	}
@@ -1439,7 +1440,7 @@ func TestListTasksPaginatedInvalidPageSize(t *testing.T) {
 		t.Errorf("PageSize: got %d, want 50 (default)", result.PageSize)
 	}
 
-	result2, err := db.ListTasksPaginated(1, 999, "", "")
+	result2, err := db.ListTasksPaginated(context.Background(), 1, 999, "", "")
 	if err != nil {
 		t.Fatalf("ListTasksPaginated with pageSize 999: %v", err)
 	}
@@ -1456,14 +1457,14 @@ func TestListTasksPaginatedWithTagFilter(t *testing.T) {
 	task2 := makeTask("tag-filter-2", "Without Tag")
 	task2.Tags = []string{"other"}
 
-	if err := db.CreateTask(task1); err != nil {
+	if err := db.CreateTask(context.Background(), task1); err != nil {
 		t.Fatalf("CreateTask 1: %v", err)
 	}
-	if err := db.CreateTask(task2); err != nil {
+	if err := db.CreateTask(context.Background(), task2); err != nil {
 		t.Fatalf("CreateTask 2: %v", err)
 	}
 
-	result, err := db.ListTasksPaginated(1, 10, "", "web")
+	result, err := db.ListTasksPaginated(context.Background(), 1, 10, "", "web")
 	if err != nil {
 		t.Fatalf("ListTasksPaginated with tag: %v", err)
 	}
@@ -1480,14 +1481,14 @@ func TestListTasksPaginatedWithStatusAll(t *testing.T) {
 	task2 := makeTask("all-2", "Completed")
 	task2.Status = models.TaskStatusCompleted
 
-	if err := db.CreateTask(task1); err != nil {
+	if err := db.CreateTask(context.Background(), task1); err != nil {
 		t.Fatalf("CreateTask 1: %v", err)
 	}
-	if err := db.CreateTask(task2); err != nil {
+	if err := db.CreateTask(context.Background(), task2); err != nil {
 		t.Fatalf("CreateTask 2: %v", err)
 	}
 
-	result, err := db.ListTasksPaginated(1, 10, "all", "")
+	result, err := db.ListTasksPaginated(context.Background(), 1, 10, "all", "")
 	if err != nil {
 		t.Fatalf("ListTasksPaginated with status=all: %v", err)
 	}
@@ -1500,7 +1501,7 @@ func TestListTasksPaginatedWithStatusAll(t *testing.T) {
 
 func TestUpdateTaskStatusNotFound(t *testing.T) {
 	db := setupTestDB(t)
-	err := db.UpdateTaskStatus("nonexistent", models.TaskStatusRunning, "")
+	err := db.UpdateTaskStatus(context.Background(), "nonexistent", models.TaskStatusRunning, "")
 	if err == nil {
 		t.Fatal("expected error for nonexistent task status update")
 	}
@@ -1511,7 +1512,7 @@ func TestUpdateTaskStatusNotFound(t *testing.T) {
 func TestUpdateTaskResultNotFound(t *testing.T) {
 	db := setupTestDB(t)
 	result := models.TaskResult{TaskID: "x", Success: true}
-	err := db.UpdateTaskResult("nonexistent", result)
+	err := db.UpdateTaskResult(context.Background(), "nonexistent", result)
 	if err == nil {
 		t.Fatal("expected error for nonexistent task result update")
 	}
@@ -1522,21 +1523,21 @@ func TestUpdateTaskResultNotFound(t *testing.T) {
 func TestResetRetryCount(t *testing.T) {
 	db := setupTestDB(t)
 	task := makeTask("reset-retry-1", "Reset Retry")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
 	for i := 0; i < 3; i++ {
-		if err := db.IncrementRetry(task.ID); err != nil {
+		if err := db.IncrementRetry(context.Background(), task.ID); err != nil {
 			t.Fatalf("IncrementRetry: %v", err)
 		}
 	}
 
-	if err := db.ResetRetryCount(task.ID); err != nil {
+	if err := db.ResetRetryCount(context.Background(), task.ID); err != nil {
 		t.Fatalf("ResetRetryCount: %v", err)
 	}
 
-	got, err := db.GetTask(task.ID)
+	got, err := db.GetTask(context.Background(), task.ID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -1547,7 +1548,7 @@ func TestResetRetryCount(t *testing.T) {
 
 func TestResetRetryCountNotFound(t *testing.T) {
 	db := setupTestDB(t)
-	err := db.ResetRetryCount("nonexistent")
+	err := db.ResetRetryCount(context.Background(), "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for nonexistent task")
 	}
@@ -1555,7 +1556,7 @@ func TestResetRetryCountNotFound(t *testing.T) {
 
 func TestIncrementRetryNotFound(t *testing.T) {
 	db := setupTestDB(t)
-	err := db.IncrementRetry("nonexistent")
+	err := db.IncrementRetry(context.Background(), "nonexistent")
 	if err == nil {
 		t.Fatal("expected error for nonexistent task retry increment")
 	}
@@ -1565,7 +1566,7 @@ func TestIncrementRetryNotFound(t *testing.T) {
 
 func TestUpdateProxyHealthNotFound(t *testing.T) {
 	db := setupTestDB(t)
-	err := db.UpdateProxyHealth("nonexistent", models.ProxyStatusHealthy, 100)
+	err := db.UpdateProxyHealth(context.Background(), "nonexistent", models.ProxyStatusHealthy, 100)
 	if err == nil {
 		t.Fatal("expected error for nonexistent proxy health update")
 	}
@@ -1575,7 +1576,7 @@ func TestUpdateProxyHealthNotFound(t *testing.T) {
 
 func TestUpdateTaskNotFound(t *testing.T) {
 	db := setupTestDB(t)
-	err := db.UpdateTask("nonexistent", "Name", "https://example.com", nil, models.ProxyConfig{}, models.PriorityNormal, nil)
+	err := db.UpdateTask(context.Background(), "nonexistent", "Name", "https://example.com", nil, models.ProxyConfig{}, models.PriorityNormal, nil, 0)
 	if err == nil {
 		t.Fatal("expected error for nonexistent task update")
 	}
@@ -1588,11 +1589,11 @@ func TestTaskHeadlessField(t *testing.T) {
 
 	task := makeTask("headless-1", "Headless Task")
 	task.Headless = true
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask headless=true: %v", err)
 	}
 
-	got, err := db.GetTask("headless-1")
+	got, err := db.GetTask(context.Background(), "headless-1")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -1602,11 +1603,11 @@ func TestTaskHeadlessField(t *testing.T) {
 
 	task2 := makeTask("headless-2", "Non-Headless Task")
 	task2.Headless = false
-	if err := db.CreateTask(task2); err != nil {
+	if err := db.CreateTask(context.Background(), task2); err != nil {
 		t.Fatalf("CreateTask headless=false: %v", err)
 	}
 
-	got2, err := db.GetTask("headless-2")
+	got2, err := db.GetTask(context.Background(), "headless-2")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -1622,21 +1623,21 @@ func TestTaskHeadlessField(t *testing.T) {
 func TestUpdateTaskOnFailedTask(t *testing.T) {
 	db := setupTestDB(t)
 	task := makeTask("upd-failed-1", "Failed Task")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
-	if err := db.UpdateTaskStatus("upd-failed-1", models.TaskStatusFailed, "some error"); err != nil {
+	if err := db.UpdateTaskStatus(context.Background(), "upd-failed-1", models.TaskStatusFailed, "some error"); err != nil {
 		t.Fatalf("UpdateTaskStatus: %v", err)
 	}
 
-	err := db.UpdateTask("upd-failed-1", "Retried", "https://example.com", []models.TaskStep{
+	err := db.UpdateTask(context.Background(), "upd-failed-1", "Retried", "https://example.com", []models.TaskStep{
 		{Action: models.ActionNavigate, Value: "https://example.com"},
-	}, models.ProxyConfig{}, models.PriorityNormal, nil)
+	}, models.ProxyConfig{}, models.PriorityNormal, nil, 0)
 	if err != nil {
 		t.Fatalf("UpdateTask on failed task should succeed: %v", err)
 	}
 
-	got, err := db.GetTask("upd-failed-1")
+	got, err := db.GetTask(context.Background(), "upd-failed-1")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -1649,7 +1650,7 @@ func TestUpdateTaskOnFailedTask(t *testing.T) {
 
 func TestGetTaskStatsEmpty(t *testing.T) {
 	db := setupTestDB(t)
-	stats, err := db.GetTaskStats()
+	stats, err := db.GetTaskStats(context.Background())
 	if err != nil {
 		t.Fatalf("GetTaskStats: %v", err)
 	}
@@ -1669,11 +1670,11 @@ func TestCreateRecordedFlowEmptySteps(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}
 
-	if err := db.CreateRecordedFlow(flow); err != nil {
+	if err := db.CreateRecordedFlow(context.Background(), flow); err != nil {
 		t.Fatalf("CreateRecordedFlow: %v", err)
 	}
 
-	got, err := db.GetRecordedFlow("flow-empty-steps")
+	got, err := db.GetRecordedFlow(context.Background(), "flow-empty-steps")
 	if err != nil {
 		t.Fatalf("GetRecordedFlow: %v", err)
 	}
@@ -1719,11 +1720,11 @@ func TestCreateTaskWithEmptyProxy(t *testing.T) {
 		CreatedAt: time.Now(),
 	}
 
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	got, err := db.GetTask("empty-proxy")
+	got, err := db.GetTask(context.Background(), "empty-proxy")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -1754,12 +1755,12 @@ func TestBatchProgressAllStatuses(t *testing.T) {
 		task := makeTask(fmt.Sprintf("bp-all-%d", i), fmt.Sprintf("Task %d", i))
 		task.BatchID = "batch-all-statuses"
 		task.Status = status
-		if err := db.CreateTask(task); err != nil {
+		if err := db.CreateTask(context.Background(), task); err != nil {
 			t.Fatalf("CreateTask %d: %v", i, err)
 		}
 	}
 
-	progress, err := db.GetBatchProgress("batch-all-statuses")
+	progress, err := db.GetBatchProgress(context.Background(), "batch-all-statuses")
 	if err != nil {
 		t.Fatalf("GetBatchProgress: %v", err)
 	}
@@ -1792,7 +1793,7 @@ func TestBatchProgressAllStatuses(t *testing.T) {
 func TestCreateAndGetTaskWithResult(t *testing.T) {
 	db := setupTestDB(t)
 	task := makeTask("result-round-trip", "Result Test")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -1807,11 +1808,11 @@ func TestCreateAndGetTaskWithResult(t *testing.T) {
 		Duration:    3 * time.Second,
 	}
 
-	if err := db.UpdateTaskResult(task.ID, result); err != nil {
+	if err := db.UpdateTaskResult(context.Background(), task.ID, result); err != nil {
 		t.Fatalf("UpdateTaskResult: %v", err)
 	}
 
-	got, err := db.GetTask(task.ID)
+	got, err := db.GetTask(context.Background(), task.ID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -1830,7 +1831,7 @@ func TestCreateAndGetTaskWithResult(t *testing.T) {
 
 func TestListTasksEmpty(t *testing.T) {
 	db := setupTestDB(t)
-	tasks, err := db.ListTasks()
+	tasks, err := db.ListTasks(context.Background())
 	if err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}
@@ -1854,11 +1855,11 @@ func TestCreateProxyWithCredentials(t *testing.T) {
 		CreatedAt: time.Now(),
 	}
 
-	if err := db.CreateProxy(p); err != nil {
+	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
 
-	proxies, err := db.ListProxies()
+	proxies, err := db.ListProxies(context.Background())
 	if err != nil {
 		t.Fatalf("ListProxies: %v", err)
 	}
@@ -1899,11 +1900,11 @@ func TestCreateProxyWithoutCredentials(t *testing.T) {
 		CreatedAt: time.Now(),
 	}
 
-	if err := db.CreateProxy(p); err != nil {
+	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
 
-	proxies, err := db.ListProxies()
+	proxies, err := db.ListProxies(context.Background())
 	if err != nil {
 		t.Fatalf("ListProxies: %v", err)
 	}
@@ -1928,7 +1929,7 @@ func TestInsertStepLogsMultiple(t *testing.T) {
 	db := setupTestDB(t)
 
 	task := makeTask("sl-multi-1", "Step Log Multi Task")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -1945,11 +1946,11 @@ func TestInsertStepLogsMultiple(t *testing.T) {
 		}
 	}
 
-	if err := db.InsertStepLogs("sl-multi-1", logs); err != nil {
+	if err := db.InsertStepLogs(context.Background(), "sl-multi-1", logs); err != nil {
 		t.Fatalf("InsertStepLogs: %v", err)
 	}
 
-	got, err := db.ListStepLogs("sl-multi-1")
+	got, err := db.ListStepLogs(context.Background(), "sl-multi-1")
 	if err != nil {
 		t.Fatalf("ListStepLogs: %v", err)
 	}
@@ -1970,7 +1971,7 @@ func TestInsertNetworkLogsMultiple(t *testing.T) {
 	db := setupTestDB(t)
 
 	task := makeTask("nl-multi-1", "Network Log Multi Task")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -1992,11 +1993,11 @@ func TestInsertNetworkLogsMultiple(t *testing.T) {
 		}
 	}
 
-	if err := db.InsertNetworkLogs("nl-multi-1", logs); err != nil {
+	if err := db.InsertNetworkLogs(context.Background(), "nl-multi-1", logs); err != nil {
 		t.Fatalf("InsertNetworkLogs: %v", err)
 	}
 
-	got, err := db.ListNetworkLogs("nl-multi-1")
+	got, err := db.ListNetworkLogs(context.Background(), "nl-multi-1")
 	if err != nil {
 		t.Fatalf("ListNetworkLogs: %v", err)
 	}
@@ -2022,11 +2023,11 @@ func TestTaskWithFlowAndBatchIDs(t *testing.T) {
 	task.FlowID = "flow-123"
 	task.BatchID = "batch-456"
 
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	got, err := db.GetTask("fb-1")
+	got, err := db.GetTask(context.Background(), "fb-1")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -2043,7 +2044,7 @@ func TestPurgeOldRecordsWithOldData(t *testing.T) {
 
 	task := makeTask("purge-old-1", "Old Task")
 	task.Status = models.TaskStatusCompleted
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -2053,25 +2054,25 @@ func TestPurgeOldRecordsWithOldData(t *testing.T) {
 		t.Fatalf("set old completed_at: %v", err)
 	}
 
-	if err := db.InsertStepLogs("purge-old-1", []models.StepLog{
+	if err := db.InsertStepLogs(context.Background(), "purge-old-1", []models.StepLog{
 		{TaskID: "purge-old-1", StepIndex: 0, Action: models.ActionClick, DurationMs: 100, StartedAt: time.Now()},
 	}); err != nil {
 		t.Fatalf("InsertStepLogs: %v", err)
 	}
 
-	if err := db.InsertNetworkLogs("purge-old-1", []models.NetworkLog{
+	if err := db.InsertNetworkLogs(context.Background(), "purge-old-1", []models.NetworkLog{
 		{TaskID: "purge-old-1", StepIndex: 0, RequestURL: "https://example.com", Method: "GET", StatusCode: 200, Timestamp: time.Now()},
 	}); err != nil {
 		t.Fatalf("InsertNetworkLogs: %v", err)
 	}
 
-	if err := db.InsertTaskEvent(models.TaskLifecycleEvent{
+	if err := db.InsertTaskEvent(context.Background(), models.TaskLifecycleEvent{
 		ID: "purge-evt-1", TaskID: "purge-old-1", FromState: models.TaskStatusPending, ToState: models.TaskStatusCompleted, Timestamp: time.Now(),
 	}); err != nil {
 		t.Fatalf("InsertTaskEvent: %v", err)
 	}
 
-	n, err := db.PurgeOldRecords(90)
+	n, err := db.PurgeOldRecords(context.Background(), 90)
 	if err != nil {
 		t.Fatalf("PurgeOldRecords: %v", err)
 	}
@@ -2079,22 +2080,22 @@ func TestPurgeOldRecordsWithOldData(t *testing.T) {
 		t.Error("expected some records to be purged")
 	}
 
-	_, err = db.GetTask("purge-old-1")
+	_, err = db.GetTask(context.Background(), "purge-old-1")
 	if err == nil {
 		t.Error("task should be purged")
 	}
 
-	stepLogs, _ := db.ListStepLogs("purge-old-1")
+	stepLogs, _ := db.ListStepLogs(context.Background(), "purge-old-1")
 	if len(stepLogs) != 0 {
 		t.Errorf("step logs should be purged, got %d", len(stepLogs))
 	}
 
-	netLogs, _ := db.ListNetworkLogs("purge-old-1")
+	netLogs, _ := db.ListNetworkLogs(context.Background(), "purge-old-1")
 	if len(netLogs) != 0 {
 		t.Errorf("network logs should be purged, got %d", len(netLogs))
 	}
 
-	events, _ := db.ListTaskEvents("purge-old-1")
+	events, _ := db.ListTaskEvents(context.Background(), "purge-old-1")
 	if len(events) != 0 {
 		t.Errorf("events should be purged, got %d", len(events))
 	}
@@ -2169,11 +2170,11 @@ func TestInsertAndListWebSocketLogs(t *testing.T) {
 		},
 	}
 
-	if err := db.InsertWebSocketLogs("flow-ws-1", logs); err != nil {
+	if err := db.InsertWebSocketLogs(context.Background(), "flow-ws-1", logs); err != nil {
 		t.Fatalf("InsertWebSocketLogs: %v", err)
 	}
 
-	got, err := db.ListWebSocketLogs("flow-ws-1")
+	got, err := db.ListWebSocketLogs(context.Background(), "flow-ws-1")
 	if err != nil {
 		t.Fatalf("ListWebSocketLogs: %v", err)
 	}
@@ -2222,10 +2223,10 @@ func TestInsertAndListWebSocketLogs(t *testing.T) {
 func TestInsertWebSocketLogsEmpty(t *testing.T) {
 	db := setupTestDB(t)
 
-	if err := db.InsertWebSocketLogs("flow-ws-empty", nil); err != nil {
+	if err := db.InsertWebSocketLogs(context.Background(), "flow-ws-empty", nil); err != nil {
 		t.Fatalf("InsertWebSocketLogs(nil): %v", err)
 	}
-	if err := db.InsertWebSocketLogs("flow-ws-empty", []models.WebSocketLog{}); err != nil {
+	if err := db.InsertWebSocketLogs(context.Background(), "flow-ws-empty", []models.WebSocketLog{}); err != nil {
 		t.Fatalf("InsertWebSocketLogs(empty): %v", err)
 	}
 }
@@ -2233,7 +2234,7 @@ func TestInsertWebSocketLogsEmpty(t *testing.T) {
 func TestListWebSocketLogsNoResults(t *testing.T) {
 	db := setupTestDB(t)
 
-	got, err := db.ListWebSocketLogs("nonexistent-flow")
+	got, err := db.ListWebSocketLogs(context.Background(), "nonexistent-flow")
 	if err != nil {
 		t.Fatalf("ListWebSocketLogs: %v", err)
 	}
@@ -2257,11 +2258,11 @@ func TestInsertWebSocketLogsErrorEvent(t *testing.T) {
 		},
 	}
 
-	if err := db.InsertWebSocketLogs("flow-ws-err", logs); err != nil {
+	if err := db.InsertWebSocketLogs(context.Background(), "flow-ws-err", logs); err != nil {
 		t.Fatalf("InsertWebSocketLogs: %v", err)
 	}
 
-	got, err := db.ListWebSocketLogs("flow-ws-err")
+	got, err := db.ListWebSocketLogs(context.Background(), "flow-ws-err")
 	if err != nil {
 		t.Fatalf("ListWebSocketLogs: %v", err)
 	}
@@ -2287,14 +2288,14 @@ func TestWebSocketLogsIsolatedByFlowID(t *testing.T) {
 		{FlowID: "flow-b", StepIndex: 1, RequestID: "r2", EventType: models.WSEventClosed, Timestamp: time.Now()},
 	}
 
-	if err := db.InsertWebSocketLogs("flow-a", logs1); err != nil {
+	if err := db.InsertWebSocketLogs(context.Background(), "flow-a", logs1); err != nil {
 		t.Fatalf("InsertWebSocketLogs flow-a: %v", err)
 	}
-	if err := db.InsertWebSocketLogs("flow-b", logs2); err != nil {
+	if err := db.InsertWebSocketLogs(context.Background(), "flow-b", logs2); err != nil {
 		t.Fatalf("InsertWebSocketLogs flow-b: %v", err)
 	}
 
-	gotA, err := db.ListWebSocketLogs("flow-a")
+	gotA, err := db.ListWebSocketLogs(context.Background(), "flow-a")
 	if err != nil {
 		t.Fatalf("ListWebSocketLogs flow-a: %v", err)
 	}
@@ -2302,7 +2303,7 @@ func TestWebSocketLogsIsolatedByFlowID(t *testing.T) {
 		t.Errorf("flow-a: expected 1 log, got %d", len(gotA))
 	}
 
-	gotB, err := db.ListWebSocketLogs("flow-b")
+	gotB, err := db.ListWebSocketLogs(context.Background(), "flow-b")
 	if err != nil {
 		t.Fatalf("ListWebSocketLogs flow-b: %v", err)
 	}
@@ -2315,27 +2316,27 @@ func TestWebSocketLogsIsolatedByFlowID(t *testing.T) {
 
 func TestInsertStepLogsEmptySlice(t *testing.T) {
 	db := setupTestDB(t)
-	if err := db.InsertStepLogs("task-empty-steps", nil); err != nil {
+	if err := db.InsertStepLogs(context.Background(), "task-empty-steps", nil); err != nil {
 		t.Fatalf("InsertStepLogs(nil): %v", err)
 	}
-	if err := db.InsertStepLogs("task-empty-steps", []models.StepLog{}); err != nil {
+	if err := db.InsertStepLogs(context.Background(), "task-empty-steps", []models.StepLog{}); err != nil {
 		t.Fatalf("InsertStepLogs(empty): %v", err)
 	}
 }
 
 func TestInsertNetworkLogsEmptySlice(t *testing.T) {
 	db := setupTestDB(t)
-	if err := db.InsertNetworkLogs("task-empty-net", nil); err != nil {
+	if err := db.InsertNetworkLogs(context.Background(), "task-empty-net", nil); err != nil {
 		t.Fatalf("InsertNetworkLogs(nil): %v", err)
 	}
-	if err := db.InsertNetworkLogs("task-empty-net", []models.NetworkLog{}); err != nil {
+	if err := db.InsertNetworkLogs(context.Background(), "task-empty-net", []models.NetworkLog{}); err != nil {
 		t.Fatalf("InsertNetworkLogs(empty): %v", err)
 	}
 }
 
 func TestListStepLogsNoResults(t *testing.T) {
 	db := setupTestDB(t)
-	logs, err := db.ListStepLogs("nonexistent-task")
+	logs, err := db.ListStepLogs(context.Background(), "nonexistent-task")
 	if err != nil {
 		t.Fatalf("ListStepLogs: %v", err)
 	}
@@ -2346,7 +2347,7 @@ func TestListStepLogsNoResults(t *testing.T) {
 
 func TestListNetworkLogsNoResults(t *testing.T) {
 	db := setupTestDB(t)
-	logs, err := db.ListNetworkLogs("nonexistent-task")
+	logs, err := db.ListNetworkLogs(context.Background(), "nonexistent-task")
 	if err != nil {
 		t.Fatalf("ListNetworkLogs: %v", err)
 	}
@@ -2359,7 +2360,7 @@ func TestInsertAndListStepLogsRoundTrip(t *testing.T) {
 	db := setupTestDB(t)
 
 	task := makeTask("sl-round-1", "Step Log Round Trip")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -2368,11 +2369,11 @@ func TestInsertAndListStepLogsRoundTrip(t *testing.T) {
 		{TaskID: "sl-round-1", StepIndex: 1, Action: models.ActionClick, Selector: "#btn", SnapshotID: "snap-1", ErrorCode: "TIMEOUT", ErrorMsg: "timed out", DurationMs: 200, StartedAt: time.Now().Truncate(time.Second)},
 	}
 
-	if err := db.InsertStepLogs("sl-round-1", logs); err != nil {
+	if err := db.InsertStepLogs(context.Background(), "sl-round-1", logs); err != nil {
 		t.Fatalf("InsertStepLogs: %v", err)
 	}
 
-	got, err := db.ListStepLogs("sl-round-1")
+	got, err := db.ListStepLogs(context.Background(), "sl-round-1")
 	if err != nil {
 		t.Fatalf("ListStepLogs: %v", err)
 	}
@@ -2403,7 +2404,7 @@ func TestInsertAndListNetworkLogsRoundTrip(t *testing.T) {
 	db := setupTestDB(t)
 
 	task := makeTask("nl-round-1", "Net Log Round Trip")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -2425,11 +2426,11 @@ func TestInsertAndListNetworkLogsRoundTrip(t *testing.T) {
 		},
 	}
 
-	if err := db.InsertNetworkLogs("nl-round-1", logs); err != nil {
+	if err := db.InsertNetworkLogs(context.Background(), "nl-round-1", logs); err != nil {
 		t.Fatalf("InsertNetworkLogs: %v", err)
 	}
 
-	got, err := db.ListNetworkLogs("nl-round-1")
+	got, err := db.ListNetworkLogs(context.Background(), "nl-round-1")
 	if err != nil {
 		t.Fatalf("ListNetworkLogs: %v", err)
 	}
@@ -2466,7 +2467,7 @@ func TestScanTaskCorruptedStepsJSON(t *testing.T) {
 		Steps:  []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 		Tags:   []string{"ok"},
 	}
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -2475,7 +2476,7 @@ func TestScanTaskCorruptedStepsJSON(t *testing.T) {
 		t.Fatalf("corrupt steps: %v", err)
 	}
 
-	_, err := db.GetTask("corrupt-steps-1")
+	_, err := db.GetTask(context.Background(), "corrupt-steps-1")
 	if err == nil {
 		t.Fatal("expected error from GetTask with corrupted steps JSON")
 	}
@@ -2492,7 +2493,7 @@ func TestScanTaskCorruptedResultJSON(t *testing.T) {
 		Steps:  []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 		Tags:   []string{},
 	}
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -2501,7 +2502,7 @@ func TestScanTaskCorruptedResultJSON(t *testing.T) {
 		t.Fatalf("corrupt result: %v", err)
 	}
 
-	_, err := db.GetTask("corrupt-result-1")
+	_, err := db.GetTask(context.Background(), "corrupt-result-1")
 	if err == nil {
 		t.Fatal("expected error from GetTask with corrupted result JSON")
 	}
@@ -2518,7 +2519,7 @@ func TestScanTaskCorruptedTagsJSON(t *testing.T) {
 		Steps:  []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 		Tags:   []string{"valid"},
 	}
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -2526,7 +2527,7 @@ func TestScanTaskCorruptedTagsJSON(t *testing.T) {
 		t.Fatalf("corrupt tags: %v", err)
 	}
 
-	_, err := db.GetTask("corrupt-tags-1")
+	_, err := db.GetTask(context.Background(), "corrupt-tags-1")
 	if err == nil {
 		t.Fatal("expected error from GetTask with corrupted tags JSON")
 	}
@@ -2543,7 +2544,7 @@ func TestListTasksCorruptedJSON(t *testing.T) {
 		Steps:  []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 		Tags:   []string{},
 	}
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -2551,7 +2552,7 @@ func TestListTasksCorruptedJSON(t *testing.T) {
 		t.Fatalf("corrupt steps: %v", err)
 	}
 
-	_, err := db.ListTasks()
+	_, err := db.ListTasks(context.Background())
 	if err == nil {
 		t.Fatal("expected error from ListTasks with corrupted steps JSON")
 	}
@@ -2568,7 +2569,7 @@ func TestListTasksByStatusCorruptedJSON(t *testing.T) {
 		Steps:  []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 		Tags:   []string{},
 	}
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -2576,7 +2577,7 @@ func TestListTasksByStatusCorruptedJSON(t *testing.T) {
 		t.Fatalf("corrupt steps: %v", err)
 	}
 
-	_, err := db.ListTasksByStatus("pending")
+	_, err := db.ListTasksByStatus(context.Background(), "pending")
 	if err == nil {
 		t.Fatal("expected error from ListTasksByStatus with corrupted JSON")
 	}
@@ -2595,7 +2596,7 @@ func TestGetRecordedFlowCorruptedSteps(t *testing.T) {
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	if err := db.CreateRecordedFlow(flow); err != nil {
+	if err := db.CreateRecordedFlow(context.Background(), flow); err != nil {
 		t.Fatalf("CreateRecordedFlow: %v", err)
 	}
 
@@ -2603,7 +2604,7 @@ func TestGetRecordedFlowCorruptedSteps(t *testing.T) {
 		t.Fatalf("corrupt flow steps: %v", err)
 	}
 
-	_, err := db.GetRecordedFlow("flow-corrupt-1")
+	_, err := db.GetRecordedFlow(context.Background(), "flow-corrupt-1")
 	if err == nil {
 		t.Fatal("expected error from GetRecordedFlow with corrupted steps")
 	}
@@ -2622,7 +2623,7 @@ func TestListRecordedFlowsCorruptedSteps(t *testing.T) {
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	if err := db.CreateRecordedFlow(flow); err != nil {
+	if err := db.CreateRecordedFlow(context.Background(), flow); err != nil {
 		t.Fatalf("CreateRecordedFlow: %v", err)
 	}
 
@@ -2630,7 +2631,7 @@ func TestListRecordedFlowsCorruptedSteps(t *testing.T) {
 		t.Fatalf("corrupt flow steps: %v", err)
 	}
 
-	_, err := db.ListRecordedFlows()
+	_, err := db.ListRecordedFlows(context.Background())
 	if err == nil {
 		t.Fatal("expected error from ListRecordedFlows with corrupted steps")
 	}
@@ -2647,7 +2648,7 @@ func TestListTasksPaginatedCorruptedJSON(t *testing.T) {
 		Steps:  []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 		Tags:   []string{},
 	}
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -2655,7 +2656,7 @@ func TestListTasksPaginatedCorruptedJSON(t *testing.T) {
 		t.Fatalf("corrupt steps: %v", err)
 	}
 
-	_, err := db.ListTasksPaginated(1, 10, "all", "")
+	_, err := db.ListTasksPaginated(context.Background(), 1, 10, "all", "")
 	if err == nil {
 		t.Fatal("expected error from ListTasksPaginated with corrupted JSON")
 	}
@@ -2674,12 +2675,12 @@ func TestGetTaskStatsMultipleStatuses(t *testing.T) {
 			Steps:  []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 			Tags:   []string{},
 		}
-		if err := db.CreateTask(task); err != nil {
+		if err := db.CreateTask(context.Background(), task); err != nil {
 			t.Fatalf("CreateTask %s: %v", status, err)
 		}
 	}
 
-	stats, err := db.GetTaskStats()
+	stats, err := db.GetTaskStats(context.Background())
 	if err != nil {
 		t.Fatalf("GetTaskStats: %v", err)
 	}
@@ -2704,12 +2705,12 @@ func TestListAuditTrailFilteredByTask(t *testing.T) {
 		ToState:   "running",
 		Timestamp: time.Now(),
 	}
-	if err := db.InsertTaskEvent(ev); err != nil {
+	if err := db.InsertTaskEvent(context.Background(), ev); err != nil {
 		t.Fatalf("InsertTaskEvent: %v", err)
 	}
 
 	// Query filtered by task
-	events, err := db.ListAuditTrail("task-audit-filt-1", 10)
+	events, err := db.ListAuditTrail(context.Background(), "task-audit-filt-1", 10)
 	if err != nil {
 		t.Fatalf("ListAuditTrail filtered: %v", err)
 	}
@@ -2721,7 +2722,7 @@ func TestListAuditTrailFilteredByTask(t *testing.T) {
 	}
 
 	// Query for non-existent task returns empty
-	none, err := db.ListAuditTrail("no-such-task-filter", 5)
+	none, err := db.ListAuditTrail(context.Background(), "no-such-task-filter", 5)
 	if err != nil {
 		t.Fatalf("ListAuditTrail no results: %v", err)
 	}
@@ -2742,7 +2743,7 @@ func TestListTasksByBatchCorruptedJSON(t *testing.T) {
 		Steps:   []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 		Tags:    []string{},
 	}
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -2750,7 +2751,7 @@ func TestListTasksByBatchCorruptedJSON(t *testing.T) {
 		t.Fatalf("corrupt steps: %v", err)
 	}
 
-	_, err := db.ListTasksByBatch("batch-corrupt-1")
+	_, err := db.ListTasksByBatch(context.Background(), "batch-corrupt-1")
 	if err == nil {
 		t.Fatal("expected error from ListTasksByBatch with corrupted JSON")
 	}
@@ -2768,7 +2769,7 @@ func TestListTasksByBatchStatusCorruptedJSON(t *testing.T) {
 		Steps:   []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 		Tags:    []string{},
 	}
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -2776,7 +2777,7 @@ func TestListTasksByBatchStatusCorruptedJSON(t *testing.T) {
 		t.Fatalf("corrupt steps: %v", err)
 	}
 
-	_, err := db.ListTasksByBatchStatus("batch-bstat-corrupt-1", "pending")
+	_, err := db.ListTasksByBatchStatus(context.Background(), "batch-bstat-corrupt-1", "pending")
 	if err == nil {
 		t.Fatal("expected error from ListTasksByBatchStatus with corrupted JSON")
 	}

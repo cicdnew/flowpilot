@@ -19,6 +19,7 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 )
 
@@ -107,6 +108,24 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (*models.TaskRes
 	browserCtx, browserCancel := chromedp.NewContext(allocCtx)
 	defer browserCancel()
 
+	netLogger := logs.NewNetworkLogger(task.ID)
+	chromedp.ListenTarget(browserCtx, func(ev interface{}) {
+		switch e := ev.(type) {
+		case *network.EventRequestWillBeSent:
+			netLogger.HandleRequestWillBeSent(e)
+		case *network.EventResponseReceived:
+			netLogger.HandleResponseReceived(e)
+		case *network.EventLoadingFinished:
+			netLogger.HandleLoadingFinished(e, nil)
+		case *network.EventLoadingFailed:
+			netLogger.HandleLoadingFailed(e.RequestID)
+		}
+	})
+
+	if err := chromedp.Run(browserCtx, network.Enable()); err != nil {
+		r.addLog(result, "warn", fmt.Sprintf("enable network logging: %v", err))
+	}
+
 	if err := ClearCookies(browserCtx); err != nil {
 		r.addLog(result, "warn", fmt.Sprintf("clear cookies: %v", err))
 	}
@@ -120,11 +139,13 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (*models.TaskRes
 		}
 	}
 
-	if err := r.runSteps(browserCtx, task.Steps, result); err != nil {
+	if err := r.runSteps(browserCtx, task.Steps, result, netLogger); err != nil {
+		result.NetworkLogs = netLogger.Logs()
 		result.Duration = time.Since(start)
 		return result, err
 	}
 
+	result.NetworkLogs = netLogger.Logs()
 	result.Success = true
 	result.Duration = time.Since(start)
 	r.addLog(result, "info", fmt.Sprintf("task completed in %s", result.Duration))
@@ -163,11 +184,12 @@ func (r *Runner) createAllocator(ctx context.Context, proxyConfig models.ProxyCo
 }
 
 // runSteps iterates through each task step and executes it.
-func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, result *models.TaskResult) error {
+func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, result *models.TaskResult, netLogger *logs.NetworkLogger) error {
 	stepLogger := logs.NewStepLogger(result.TaskID)
 	defer func() { result.StepLogs = stepLogger.Logs() }()
 
 	for i, step := range steps {
+		netLogger.SetStepIndex(i)
 		r.addLog(result, "info", fmt.Sprintf("step %d: %s", i+1, step.Action))
 
 		timeout := defaultTimeout
@@ -388,7 +410,7 @@ func (r *Runner) execTabSwitch(ctx context.Context, step models.TaskStep) error 
 	for _, t := range targets {
 		if t.Type == "page" && t.URL == step.Value {
 			return r.exec.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
-				return nil
+				return target.ActivateTarget(t.TargetID).Do(c)
 			}))
 		}
 	}

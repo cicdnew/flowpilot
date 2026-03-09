@@ -322,7 +322,7 @@ func TestCreateBatchFromFlow_TaskPersistedInDB(t *testing.T) {
 	}
 
 	// Verify the task can be retrieved from DB
-	got, err := db.GetTask(tasks[0].ID)
+	got, err := db.GetTask(context.Background(), tasks[0].ID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}

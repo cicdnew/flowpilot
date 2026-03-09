@@ -88,6 +88,7 @@ type TaskResult struct {
 	Screenshots   []string          `json:"screenshots,omitempty"` // file paths
 	Logs          []LogEntry        `json:"logs"`
 	StepLogs      []StepLog         `json:"stepLogs,omitempty"`
+	NetworkLogs   []NetworkLog      `json:"networkLogs,omitempty"`
 	Duration      time.Duration     `json:"duration"`
 	Error         string            `json:"error,omitempty"`
 }

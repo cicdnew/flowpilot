@@ -98,7 +98,7 @@ func TestSubmitUpdatesStatusToQueued(t *testing.T) {
 	defer q.Stop()
 
 	task := makeTestTask("submit-1")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -111,7 +111,7 @@ func TestSubmitUpdatesStatusToQueued(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Check that the task was marked as queued
-	got, err := db.GetTask("submit-1")
+	got, err := db.GetTask(context.Background(), "submit-1")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestCancel(t *testing.T) {
 	defer q.Stop()
 
 	task := makeTestTask("cancel-1")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -165,7 +165,7 @@ func TestCancel(t *testing.T) {
 		t.Fatalf("Cancel: %v", err)
 	}
 
-	got, err := db.GetTask("cancel-1")
+	got, err := db.GetTask(context.Background(), "cancel-1")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestSubmitBatch(t *testing.T) {
 	tasks := make([]models.Task, 5)
 	for i := range tasks {
 		tasks[i] = makeTestTask(fmt.Sprintf("batch-%d", i))
-		if err := db.CreateTask(tasks[i]); err != nil {
+		if err := db.CreateTask(context.Background(), tasks[i]); err != nil {
 			t.Fatalf("CreateTask %d: %v", i, err)
 		}
 	}
@@ -236,7 +236,7 @@ func TestSubmitBatch(t *testing.T) {
 
 	// Verify all tasks were submitted (status changed from pending)
 	for _, task := range tasks {
-		got, err := db.GetTask(task.ID)
+		got, err := db.GetTask(context.Background(), task.ID)
 		if err != nil {
 			t.Fatalf("GetTask %s: %v", task.ID, err)
 		}
@@ -342,7 +342,7 @@ func TestSubmitContextCancelled(t *testing.T) {
 	defer q.Stop()
 
 	task := makeTestTask("ctx-cancel-1")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -387,7 +387,7 @@ func TestTaskTimeoutDefault(t *testing.T) {
 
 	task := makeTestTask("timeout-default")
 	task.Timeout = 0
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -397,7 +397,7 @@ func TestTaskTimeoutDefault(t *testing.T) {
 	}
 
 	time.Sleep(200 * time.Millisecond)
-	got, err := db.GetTask("timeout-default")
+	got, err := db.GetTask(context.Background(), "timeout-default")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -419,7 +419,7 @@ func TestHandleSuccessPath(t *testing.T) {
 	defer q.Stop()
 
 	task := makeTestTask("success-1")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -434,7 +434,7 @@ func TestHandleSuccessPath(t *testing.T) {
 
 	q.handleSuccess(task, result)
 
-	got, err := db.GetTask(task.ID)
+	got, err := db.GetTask(context.Background(), task.ID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -533,7 +533,7 @@ func TestMetricsTotalSubmittedIncrementsOnSubmit(t *testing.T) {
 	defer q.Stop()
 
 	task := makeTestTask("metrics-submit-1")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -579,7 +579,7 @@ func TestSubmitDuplicateRunning(t *testing.T) {
 	defer q.Stop()
 
 	task := makeTestTask("dup-run-1")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -601,7 +601,7 @@ func TestSubmitDuplicatePending(t *testing.T) {
 	defer q.Stop()
 
 	task := makeTestTask("dup-pend-1")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -641,7 +641,7 @@ func TestCancelNonExistentTask(t *testing.T) {
 	defer q.Stop()
 
 	task := makeTestTask("cancel-nonexist-1")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -649,7 +649,7 @@ func TestCancelNonExistentTask(t *testing.T) {
 		t.Fatalf("Cancel: %v", err)
 	}
 
-	got, err := db.GetTask("cancel-nonexist-1")
+	got, err := db.GetTask(context.Background(), "cancel-nonexist-1")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -665,7 +665,7 @@ func TestCancelPendingTask(t *testing.T) {
 	defer q.Stop()
 
 	task := makeTestTask("cancel-pend-1")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -714,10 +714,10 @@ func TestSubmitBatchStopsOnError(t *testing.T) {
 
 	task1 := makeTestTask("batch-err-1")
 	task2 := makeTestTask("batch-err-2")
-	if err := db.CreateTask(task1); err != nil {
+	if err := db.CreateTask(context.Background(), task1); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
-	if err := db.CreateTask(task2); err != nil {
+	if err := db.CreateTask(context.Background(), task2); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -761,13 +761,13 @@ func TestHandleFailureMaxRetriesExceeded(t *testing.T) {
 	task := makeTestTask("fail-max-1")
 	task.RetryCount = 2
 	task.MaxRetries = 2
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
 	q.handleFailure(context.Background(), task, fmt.Errorf("exec failed"))
 
-	got, err := db.GetTask(task.ID)
+	got, err := db.GetTask(context.Background(), task.ID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -802,7 +802,7 @@ func TestHandleFailureRetriesWithBackoff(t *testing.T) {
 	task := makeTestTask("fail-retry-1")
 	task.RetryCount = 0
 	task.MaxRetries = 3
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -832,13 +832,18 @@ func TestHandleFailureRetryStoppedByQueueStop(t *testing.T) {
 	task := makeTestTask("fail-stop-1")
 	task.RetryCount = 0
 	task.MaxRetries = 3
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
+	}
+
+	ri := q.handleFailure(context.Background(), task, fmt.Errorf("temporary error"))
+	if !ri.shouldRetry {
+		t.Fatal("expected shouldRetry to be true")
 	}
 
 	done := make(chan struct{})
 	go func() {
-		q.handleFailure(context.Background(), task, fmt.Errorf("temporary error"))
+		q.scheduleRetry(ri)
 		close(done)
 	}()
 
@@ -848,10 +853,10 @@ func TestHandleFailureRetryStoppedByQueueStop(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("handleFailure did not return after queue stop")
+		t.Fatal("scheduleRetry did not return after queue stop")
 	}
 
-	got, err := db.GetTask(task.ID)
+	got, err := db.GetTask(context.Background(), task.ID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -869,15 +874,20 @@ func TestHandleFailureRetryStoppedByContextCancel(t *testing.T) {
 	task := makeTestTask("fail-ctx-1")
 	task.RetryCount = 0
 	task.MaxRetries = 3
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	ri := q.handleFailure(ctx, task, fmt.Errorf("temporary error"))
+	if !ri.shouldRetry {
+		t.Fatal("expected shouldRetry to be true")
+	}
+
 	done := make(chan struct{})
 	go func() {
-		q.handleFailure(ctx, task, fmt.Errorf("temporary error"))
+		q.scheduleRetry(ri)
 		close(done)
 	}()
 
@@ -887,10 +897,10 @@ func TestHandleFailureRetryStoppedByContextCancel(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("handleFailure did not return after context cancel")
+		t.Fatal("scheduleRetry did not return after context cancel")
 	}
 
-	got, err := db.GetTask(task.ID)
+	got, err := db.GetTask(context.Background(), task.ID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -937,7 +947,7 @@ func TestExecuteTaskCancelledBeforeAcquire(t *testing.T) {
 	defer q.Stop()
 
 	task := makeTestTask("exec-cancel-1")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -970,7 +980,7 @@ func TestCancelledMapCleanedAfterAcquireFailure(t *testing.T) {
 	defer q.Stop()
 
 	task := makeTestTask("cancel-leak-1")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -997,7 +1007,7 @@ func TestCancelledMapCleanedAfterStoppedEarlyExit(t *testing.T) {
 	q, db := setupTestQueue(t, 10, nil, nil)
 
 	task := makeTestTask("cancel-leak-2")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -1023,7 +1033,7 @@ func TestExecuteTaskStoppedBeforeRun(t *testing.T) {
 	q, db := setupTestQueue(t, 10, nil, nil)
 
 	task := makeTestTask("exec-stopped-1")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -1041,7 +1051,7 @@ func TestMetricsTotalCompletedAfterHandleSuccess(t *testing.T) {
 	defer q.Stop()
 
 	task := makeTestTask("metrics-complete-1")
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -1064,7 +1074,7 @@ func TestMetricsTotalFailedAfterHandleFailure(t *testing.T) {
 	task := makeTestTask("metrics-fail-1")
 	task.RetryCount = 5
 	task.MaxRetries = 5
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 

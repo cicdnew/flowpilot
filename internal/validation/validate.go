@@ -40,6 +40,7 @@ var (
 	ErrInvalidFilterStatus = errors.New("invalid filter status")
 	ErrTagFilterTooLong    = errors.New("tag filter must not exceed 50 characters")
 	ErrTagFilterControl    = errors.New("tag filter must not contain control characters")
+	ErrInvalidTimeout      = errors.New("timeout must be between 0 and 3600 seconds")
 )
 
 var validActions = map[models.StepAction]bool{
@@ -213,6 +214,15 @@ func ValidateTags(tags []string) error {
 				return fmt.Errorf("tag %d: %w", i, ErrTagControlChars)
 			}
 		}
+	}
+	return nil
+}
+
+// ValidateTimeout checks that the timeout value is within acceptable bounds.
+// A timeout of 0 means "use default" and is valid.
+func ValidateTimeout(timeout int) error {
+	if timeout < 0 || timeout > 3600 {
+		return ErrInvalidTimeout
 	}
 	return nil
 }

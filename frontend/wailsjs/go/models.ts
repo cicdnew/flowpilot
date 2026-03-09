@@ -70,6 +70,7 @@ export namespace models {
 	    taskIds: string[];
 	    total: number;
 	    name: string;
+	    createdAt: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new BatchGroup(source);
@@ -82,6 +83,7 @@ export namespace models {
 	        this.taskIds = source["taskIds"];
 	        this.total = source["total"];
 	        this.name = source["name"];
+	        this.createdAt = source["createdAt"];
 	    }
 	}
 	export class BatchProgress {

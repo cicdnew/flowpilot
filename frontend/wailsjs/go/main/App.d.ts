@@ -12,7 +12,7 @@ export function CreateBatchFromFlow(arg1:models.AdvancedBatchInput):Promise<mode
 
 export function CreateRecordedFlow(arg1:string,arg2:string,arg3:string,arg4:Array<models.RecordedStep>):Promise<models.RecordedFlow>;
 
-export function CreateTask(arg1:string,arg2:string,arg3:Array<models.TaskStep>,arg4:models.ProxyConfig,arg5:number,arg6:boolean,arg7:Array<string>):Promise<models.Task>;
+export function CreateTask(arg1:string,arg2:string,arg3:Array<models.TaskStep>,arg4:models.ProxyConfig,arg5:number,arg6:boolean,arg7:Array<string>,arg8:number):Promise<models.Task>;
 
 export function CreateTaskFromFlow(arg1:string,arg2:string,arg3:string,arg4:models.ProxyConfig,arg5:number,arg6:boolean,arg7:Array<string>):Promise<models.Task>;
 
@@ -45,6 +45,8 @@ export function GetTask(arg1:string):Promise<models.Task>;
 export function GetTaskStats():Promise<Record<string, number>>;
 
 export function IsRecording():Promise<boolean>;
+
+export function ListBatchGroups():Promise<Array<models.BatchGroup>>;
 
 export function ListDOMSnapshots(arg1:string):Promise<Array<models.DOMSnapshot>>;
 
@@ -84,4 +86,4 @@ export function StopRecording():Promise<Array<models.RecordedStep>>;
 
 export function UpdateRecordedFlow(arg1:models.RecordedFlow):Promise<void>;
 
-export function UpdateTask(arg1:string,arg2:string,arg3:string,arg4:Array<models.TaskStep>,arg5:models.ProxyConfig,arg6:number,arg7:Array<string>):Promise<void>;
+export function UpdateTask(arg1:string,arg2:string,arg3:string,arg4:Array<models.TaskStep>,arg5:models.ProxyConfig,arg6:number,arg7:Array<string>,arg8:number):Promise<void>;

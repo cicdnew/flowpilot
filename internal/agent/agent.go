@@ -127,7 +127,7 @@ func (a *Agent) Run(ctx context.Context) error {
 }
 
 func (a *Agent) processPending(ctx context.Context) {
-	tasks, err := a.db.ListTasksByStatus(models.TaskStatusPending)
+	tasks, err := a.db.ListTasksByStatus(ctx, models.TaskStatusPending)
 	if err != nil {
 		log.Printf("[agent] list pending tasks: %v", err)
 		return

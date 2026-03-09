@@ -97,7 +97,7 @@ func (q *Queue) Submit(ctx context.Context, task models.Task) error {
 	q.metrics.TotalSubmitted++
 	q.mu.Unlock()
 
-	if err := q.db.UpdateTaskStatus(task.ID, models.TaskStatusQueued, ""); err != nil {
+	if err := q.db.UpdateTaskStatus(context.Background(), task.ID, models.TaskStatusQueued, ""); err != nil {
 		q.mu.Lock()
 		delete(q.pending, task.ID)
 		q.mu.Unlock()
@@ -138,7 +138,7 @@ func (q *Queue) Cancel(taskID string) error {
 		q.mu.Unlock()
 	}
 
-	if err := q.db.UpdateTaskStatus(taskID, models.TaskStatusCancelled, "cancelled by user"); err != nil {
+	if err := q.db.UpdateTaskStatus(context.Background(), taskID, models.TaskStatusCancelled, "cancelled by user"); err != nil {
 		return fmt.Errorf("update task status to cancelled: %w", err)
 	}
 	q.emitEvent(taskID, models.TaskStatusCancelled, "cancelled by user")
@@ -184,6 +184,13 @@ func (q *Queue) Metrics() models.QueueMetrics {
 	return metrics
 }
 
+type retryInfo struct {
+	shouldRetry bool
+	task        models.Task
+	backoff     time.Duration
+	parentCtx   context.Context
+}
+
 func (q *Queue) executeTask(ctx context.Context, task models.Task) {
 	if err := q.sem.Acquire(ctx, 1); err != nil {
 		q.mu.Lock()
@@ -193,7 +200,7 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task) {
 		q.metrics.TotalFailed++
 		q.mu.Unlock()
 		if !wasCancelled {
-			_ = q.db.UpdateTaskStatus(task.ID, models.TaskStatusFailed, "failed to acquire queue slot")
+			_ = q.db.UpdateTaskStatus(context.Background(), task.ID, models.TaskStatusFailed, "failed to acquire queue slot")
 			q.emitEvent(task.ID, models.TaskStatusFailed, "failed to acquire queue slot")
 		}
 		return
@@ -234,7 +241,7 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task) {
 		}
 	}
 
-	if err := q.db.UpdateTaskStatus(task.ID, models.TaskStatusRunning, ""); err != nil {
+	if err := q.db.UpdateTaskStatus(taskCtx, task.ID, models.TaskStatusRunning, ""); err != nil {
 		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
 		return
 	}
@@ -243,8 +250,14 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task) {
 	result, err := q.runner.RunTask(taskCtx, task)
 
 	if result != nil && len(result.StepLogs) > 0 {
-		if slErr := q.db.InsertStepLogs(task.ID, result.StepLogs); slErr != nil {
+		if slErr := q.db.InsertStepLogs(ctx, task.ID, result.StepLogs); slErr != nil {
 			q.emitEvent(task.ID, task.Status, fmt.Sprintf("persist step logs: %v", slErr))
+		}
+	}
+
+	if result != nil && len(result.NetworkLogs) > 0 {
+		if nlErr := q.db.InsertNetworkLogs(ctx, task.ID, result.NetworkLogs); nlErr != nil {
+			q.emitEvent(task.ID, task.Status, fmt.Sprintf("persist network logs: %v", nlErr))
 		}
 	}
 
@@ -256,19 +269,23 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task) {
 		}
 	}
 
+	var retry retryInfo
 	if err != nil {
-		q.handleFailure(ctx, task, err)
-		return
+		retry = q.handleFailure(ctx, task, err)
+	} else {
+		q.handleSuccess(task, result)
 	}
 
-	q.handleSuccess(task, result)
+	if retry.shouldRetry {
+		go q.scheduleRetry(retry)
+	}
 }
 
-func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execErr error) {
+func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execErr error) retryInfo {
 	if task.RetryCount < task.MaxRetries {
-		if err := q.db.IncrementRetry(task.ID); err != nil {
+		if err := q.db.IncrementRetry(context.Background(), task.ID); err != nil {
 			q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("increment retry: %v", err))
-			return
+			return retryInfo{}
 		}
 		q.emitEvent(task.ID, models.TaskStatusRetrying, execErr.Error())
 
@@ -278,62 +295,71 @@ func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execE
 		}
 		backoff := time.Duration(backoffSec) * time.Second
 
-		timer := time.NewTimer(backoff)
-		select {
-		case <-timer.C:
-		case <-q.stopCh:
-			timer.Stop()
-			if err := q.db.UpdateTaskStatus(task.ID, models.TaskStatusCancelled, "cancelled during retry backoff (queue stopped)"); err != nil {
-				q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
-			}
-			return
-		case <-parentCtx.Done():
-			timer.Stop()
-			if err := q.db.UpdateTaskStatus(task.ID, models.TaskStatusCancelled, "cancelled during retry backoff"); err != nil {
-				q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
-			}
-			return
-		}
-
-		q.mu.Lock()
-		if q.stopped {
-			q.mu.Unlock()
-			if err := q.db.UpdateTaskStatus(task.ID, models.TaskStatusCancelled, "cancelled during retry (queue stopped)"); err != nil {
-				q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
-			}
-			return
-		}
-
 		retryTask := task
 		retryTask.RetryCount++
 		retryTask.Status = models.TaskStatusPending
 		retryTask.Steps = make([]models.TaskStep, len(task.Steps))
 		copy(retryTask.Steps, task.Steps)
 
-		retryCtx, retryCancel := context.WithCancel(parentCtx)
-		q.pending[retryTask.ID] = retryCancel
-		q.mu.Unlock()
-
-		go q.executeTask(retryCtx, retryTask)
-		return
+		return retryInfo{
+			shouldRetry: true,
+			task:        retryTask,
+			backoff:     backoff,
+			parentCtx:   parentCtx,
+		}
 	}
 
-	if err := q.db.UpdateTaskStatus(task.ID, models.TaskStatusFailed, execErr.Error()); err != nil {
+	if err := q.db.UpdateTaskStatus(context.Background(), task.ID, models.TaskStatusFailed, execErr.Error()); err != nil {
 		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
-		return
+		return retryInfo{}
 	}
 	q.mu.Lock()
 	q.metrics.TotalFailed++
 	q.mu.Unlock()
 	q.emitEvent(task.ID, models.TaskStatusFailed, execErr.Error())
+	return retryInfo{}
+}
+
+func (q *Queue) scheduleRetry(ri retryInfo) {
+	timer := time.NewTimer(ri.backoff)
+	select {
+	case <-timer.C:
+	case <-q.stopCh:
+		timer.Stop()
+		if err := q.db.UpdateTaskStatus(context.Background(), ri.task.ID, models.TaskStatusCancelled, "cancelled during retry backoff (queue stopped)"); err != nil {
+			q.emitEvent(ri.task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
+		}
+		return
+	case <-ri.parentCtx.Done():
+		timer.Stop()
+		if err := q.db.UpdateTaskStatus(context.Background(), ri.task.ID, models.TaskStatusCancelled, "cancelled during retry backoff"); err != nil {
+			q.emitEvent(ri.task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
+		}
+		return
+	}
+
+	q.mu.Lock()
+	if q.stopped {
+		q.mu.Unlock()
+		if err := q.db.UpdateTaskStatus(context.Background(), ri.task.ID, models.TaskStatusCancelled, "cancelled during retry (queue stopped)"); err != nil {
+			q.emitEvent(ri.task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
+		}
+		return
+	}
+
+	retryCtx, retryCancel := context.WithCancel(ri.parentCtx)
+	q.pending[ri.task.ID] = retryCancel
+	q.mu.Unlock()
+
+	q.executeTask(retryCtx, ri.task)
 }
 
 func (q *Queue) handleSuccess(task models.Task, result *models.TaskResult) {
-	if err := q.db.UpdateTaskResult(task.ID, *result); err != nil {
+	if err := q.db.UpdateTaskResult(context.Background(), task.ID, *result); err != nil {
 		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("save result: %v", err))
 		return
 	}
-	if err := q.db.UpdateTaskStatus(task.ID, models.TaskStatusCompleted, ""); err != nil {
+	if err := q.db.UpdateTaskStatus(context.Background(), task.ID, models.TaskStatusCompleted, ""); err != nil {
 		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
 		return
 	}

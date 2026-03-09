@@ -22,8 +22,8 @@ export function CreateRecordedFlow(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['CreateRecordedFlow'](arg1, arg2, arg3, arg4);
 }
 
-export function CreateTask(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
-  return window['go']['main']['App']['CreateTask'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+export function CreateTask(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
+  return window['go']['main']['App']['CreateTask'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 }
 
 export function CreateTaskFromFlow(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
@@ -88,6 +88,10 @@ export function GetTaskStats() {
 
 export function IsRecording() {
   return window['go']['main']['App']['IsRecording']();
+}
+
+export function ListBatchGroups() {
+  return window['go']['main']['App']['ListBatchGroups']();
 }
 
 export function ListDOMSnapshots(arg1) {
@@ -166,6 +170,6 @@ export function UpdateRecordedFlow(arg1) {
   return window['go']['main']['App']['UpdateRecordedFlow'](arg1);
 }
 
-export function UpdateTask(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
-  return window['go']['main']['App']['UpdateTask'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+export function UpdateTask(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
+  return window['go']['main']['App']['UpdateTask'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 }

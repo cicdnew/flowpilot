@@ -74,7 +74,7 @@ func (m *Manager) Stop() {
 // SelectProxy picks a proxy based on the configured rotation strategy.
 // If geo is specified, only proxies in that geo are considered.
 func (m *Manager) SelectProxy(geo string) (*models.Proxy, error) {
-	proxies, err := m.db.ListHealthyProxies()
+	proxies, err := m.db.ListHealthyProxies(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("list healthy proxies: %w", err)
 	}
@@ -111,7 +111,7 @@ func (m *Manager) SelectProxy(geo string) (*models.Proxy, error) {
 
 // RecordUsage records whether a proxy was used successfully.
 func (m *Manager) RecordUsage(proxyID string, success bool) error {
-	return m.db.IncrementProxyUsage(proxyID, success)
+	return m.db.IncrementProxyUsage(context.Background(), proxyID, success)
 }
 
 func (m *Manager) selectRoundRobin(proxies []models.Proxy) models.Proxy {
@@ -151,7 +151,7 @@ func (m *Manager) selectLowestLatency(proxies []models.Proxy) models.Proxy {
 }
 
 func (m *Manager) checkAll(ctx context.Context) {
-	proxies, err := m.db.ListProxies()
+	proxies, err := m.db.ListProxies(ctx)
 	if err != nil {
 		log.Printf("health check: list proxies: %v", err)
 		return
@@ -171,7 +171,7 @@ func (m *Manager) checkAll(ctx context.Context) {
 func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 	proxyURL, err := url.Parse(fmt.Sprintf("%s://%s", proxy.Protocol, proxy.Server))
 	if err != nil {
-		if dbErr := m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusUnhealthy, 0); dbErr != nil {
+		if dbErr := m.db.UpdateProxyHealth(context.Background(), proxy.ID, models.ProxyStatusUnhealthy, 0); dbErr != nil {
 			log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
 		}
 		return
@@ -191,7 +191,7 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 	start := time.Now()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.config.HealthCheckURL, nil)
 	if err != nil {
-		if dbErr := m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusUnhealthy, 0); dbErr != nil {
+		if dbErr := m.db.UpdateProxyHealth(context.Background(), proxy.ID, models.ProxyStatusUnhealthy, 0); dbErr != nil {
 			log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
 		}
 		return
@@ -201,7 +201,7 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 	latency := int(time.Since(start).Milliseconds())
 
 	if err != nil {
-		if dbErr := m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusUnhealthy, latency); dbErr != nil {
+		if dbErr := m.db.UpdateProxyHealth(context.Background(), proxy.ID, models.ProxyStatusUnhealthy, latency); dbErr != nil {
 			log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
 		}
 		return
@@ -209,13 +209,13 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		if dbErr := m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusUnhealthy, latency); dbErr != nil {
+		if dbErr := m.db.UpdateProxyHealth(context.Background(), proxy.ID, models.ProxyStatusUnhealthy, latency); dbErr != nil {
 			log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
 		}
 		return
 	}
 
-	if dbErr := m.db.UpdateProxyHealth(proxy.ID, models.ProxyStatusHealthy, latency); dbErr != nil {
+	if dbErr := m.db.UpdateProxyHealth(context.Background(), proxy.ID, models.ProxyStatusHealthy, latency); dbErr != nil {
 		log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
 	}
 }

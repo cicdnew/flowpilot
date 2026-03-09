@@ -10,10 +10,12 @@
   let priority = 5;
   let autoStart = true;
   let proxyServer = '';
+  let proxyProtocol = 'http';
   let proxyUsername = '';
   let proxyPassword = '';
   let proxyGeo = '';
 
+  let taskTimeout = 0;
   let tagsInput = '';
   let steps: TaskStep[] = [{ action: 'navigate', value: '', selector: '' }];
   let errorMessage = '';
@@ -35,6 +37,7 @@
 
     const proxyConfig: ProxyConfig = {
       server: proxyServer,
+      protocol: proxyProtocol,
       username: proxyUsername,
       password: proxyPassword,
       geo: proxyGeo,
@@ -55,7 +58,7 @@
 
     try {
       errorMessage = '';
-      await CreateTask(name, url, taskSteps, proxyConfig, priority, autoStart, tags);
+      await CreateTask(name, url, taskSteps, proxyConfig, priority, autoStart, tags, taskTimeout);
       dispatch('created');
       dispatch('close');
     } catch (err: any) {
@@ -108,8 +111,22 @@
         <span class="hint">Comma-separated</span>
       </div>
 
+      <div class="form-group">
+        <label for="task-timeout">Timeout (seconds)</label>
+        <input id="task-timeout" type="number" bind:value={taskTimeout} min="0" max="3600" placeholder="0 = default (5 min)" />
+        <span class="hint">0 = use default (5 min). Max 3600s.</span>
+      </div>
+
       <h4>Proxy (Optional)</h4>
       <div class="form-row">
+        <div class="form-group">
+          <label for="proxy-protocol">Protocol</label>
+          <select id="proxy-protocol" bind:value={proxyProtocol}>
+            <option value="http">http</option>
+            <option value="https">https</option>
+            <option value="socks5">socks5</option>
+          </select>
+        </div>
         <div class="form-group">
           <label for="proxy-server">Server</label>
           <input id="proxy-server" bind:value={proxyServer} placeholder="host:port" />

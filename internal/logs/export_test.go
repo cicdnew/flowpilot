@@ -2,6 +2,7 @@ package logs
 
 import (
 	"archive/zip"
+	"context"
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
@@ -388,21 +389,21 @@ func TestExportTaskLogs(t *testing.T) {
 		Status:    models.TaskStatusCompleted,
 		CreatedAt: time.Now(),
 	}
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
 	stepLogs := []models.StepLog{
 		{TaskID: "export-task-1", StepIndex: 0, Action: models.ActionNavigate, Value: "https://example.com", DurationMs: 100, StartedAt: time.Now()},
 	}
-	if err := db.InsertStepLogs("export-task-1", stepLogs); err != nil {
+	if err := db.InsertStepLogs(context.Background(), "export-task-1", stepLogs); err != nil {
 		t.Fatalf("InsertStepLogs: %v", err)
 	}
 
 	networkLogs := []models.NetworkLog{
 		{TaskID: "export-task-1", StepIndex: 0, RequestURL: "https://example.com", Method: "GET", StatusCode: 200, DurationMs: 50, Timestamp: time.Now()},
 	}
-	if err := db.InsertNetworkLogs("export-task-1", networkLogs); err != nil {
+	if err := db.InsertNetworkLogs(context.Background(), "export-task-1", networkLogs); err != nil {
 		t.Fatalf("InsertNetworkLogs: %v", err)
 	}
 
@@ -411,7 +412,7 @@ func TestExportTaskLogs(t *testing.T) {
 		t.Fatalf("NewExporter: %v", err)
 	}
 
-	jsonlPath, csvPath, err := exporter.ExportTaskLogs("export-task-1")
+	jsonlPath, csvPath, err := exporter.ExportTaskLogs(context.Background(), "export-task-1")
 	if err != nil {
 		t.Fatalf("ExportTaskLogs: %v", err)
 	}
@@ -449,7 +450,7 @@ func TestExportTaskLogsNoData(t *testing.T) {
 		t.Fatalf("NewExporter: %v", err)
 	}
 
-	jsonlPath, csvPath, err := exporter.ExportTaskLogs("nonexistent")
+	jsonlPath, csvPath, err := exporter.ExportTaskLogs(context.Background(), "nonexistent")
 	if err != nil {
 		t.Fatalf("ExportTaskLogs: %v", err)
 	}
@@ -472,14 +473,14 @@ func TestExportBatchLogs(t *testing.T) {
 			BatchID:   "batch-export-1",
 			CreatedAt: time.Now(),
 		}
-		if err := db.CreateTask(task); err != nil {
+		if err := db.CreateTask(context.Background(), task); err != nil {
 			t.Fatalf("CreateTask %d: %v", i, err)
 		}
 
 		stepLogs := []models.StepLog{
 			{TaskID: task.ID, StepIndex: 0, Action: models.ActionClick, Selector: "#btn", DurationMs: 50, StartedAt: time.Now()},
 		}
-		if err := db.InsertStepLogs(task.ID, stepLogs); err != nil {
+		if err := db.InsertStepLogs(context.Background(), task.ID, stepLogs); err != nil {
 			t.Fatalf("InsertStepLogs %d: %v", i, err)
 		}
 	}
@@ -489,7 +490,7 @@ func TestExportBatchLogs(t *testing.T) {
 		t.Fatalf("NewExporter: %v", err)
 	}
 
-	zipPath, err := exporter.ExportBatchLogs("batch-export-1")
+	zipPath, err := exporter.ExportBatchLogs(context.Background(), "batch-export-1")
 	if err != nil {
 		t.Fatalf("ExportBatchLogs: %v", err)
 	}
@@ -518,7 +519,7 @@ func TestExportBatchLogsEmpty(t *testing.T) {
 		t.Fatalf("NewExporter: %v", err)
 	}
 
-	zipPath, err := exporter.ExportBatchLogs("nonexistent-batch")
+	zipPath, err := exporter.ExportBatchLogs(context.Background(), "nonexistent-batch")
 	if err != nil {
 		t.Fatalf("ExportBatchLogs: %v", err)
 	}
@@ -590,7 +591,7 @@ func TestNewExporterInvalidPath(t *testing.T) {
 
 func TestWriteBatchZipInvalidPath(t *testing.T) {
 	tasks := []models.Task{{ID: "zip-err-1"}}
-	err := writeBatchZip("/proc/fakedir/batch.zip", nil, tasks)
+	err := writeBatchZip(context.Background(), "/proc/fakedir/batch.zip", nil, tasks)
 	if err == nil {
 		t.Error("expected error for unwritable zip path")
 	}
@@ -608,21 +609,21 @@ func TestExportBatchLogsVerifyZipContents(t *testing.T) {
 		BatchID:   "batch-verify",
 		CreatedAt: time.Now(),
 	}
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
 	stepLogs := []models.StepLog{
 		{TaskID: "batch-verify-1", StepIndex: 0, Action: models.ActionClick, Selector: "#go", DurationMs: 30, StartedAt: time.Now()},
 	}
-	if err := db.InsertStepLogs("batch-verify-1", stepLogs); err != nil {
+	if err := db.InsertStepLogs(context.Background(), "batch-verify-1", stepLogs); err != nil {
 		t.Fatalf("InsertStepLogs: %v", err)
 	}
 
 	networkLogs := []models.NetworkLog{
 		{TaskID: "batch-verify-1", StepIndex: 0, RequestURL: "https://example.com/api", Method: "GET", StatusCode: 200, DurationMs: 100, Timestamp: time.Now()},
 	}
-	if err := db.InsertNetworkLogs("batch-verify-1", networkLogs); err != nil {
+	if err := db.InsertNetworkLogs(context.Background(), "batch-verify-1", networkLogs); err != nil {
 		t.Fatalf("InsertNetworkLogs: %v", err)
 	}
 
@@ -631,7 +632,7 @@ func TestExportBatchLogsVerifyZipContents(t *testing.T) {
 		t.Fatalf("NewExporter: %v", err)
 	}
 
-	zipPath, err := exporter.ExportBatchLogs("batch-verify")
+	zipPath, err := exporter.ExportBatchLogs(context.Background(), "batch-verify")
 	if err != nil {
 		t.Fatalf("ExportBatchLogs: %v", err)
 	}
@@ -684,21 +685,21 @@ func TestExportTaskLogsZip(t *testing.T) {
 		Status:    models.TaskStatusCompleted,
 		CreatedAt: time.Now(),
 	}
-	if err := db.CreateTask(task); err != nil {
+	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
 	stepLogs := []models.StepLog{
 		{TaskID: "zip-task-1", StepIndex: 0, Action: models.ActionNavigate, Value: "https://example.com", DurationMs: 100, StartedAt: time.Now()},
 	}
-	if err := db.InsertStepLogs("zip-task-1", stepLogs); err != nil {
+	if err := db.InsertStepLogs(context.Background(), "zip-task-1", stepLogs); err != nil {
 		t.Fatalf("InsertStepLogs: %v", err)
 	}
 
 	networkLogs := []models.NetworkLog{
 		{TaskID: "zip-task-1", StepIndex: 0, RequestURL: "https://example.com", Method: "GET", StatusCode: 200, DurationMs: 50, Timestamp: time.Now()},
 	}
-	if err := db.InsertNetworkLogs("zip-task-1", networkLogs); err != nil {
+	if err := db.InsertNetworkLogs(context.Background(), "zip-task-1", networkLogs); err != nil {
 		t.Fatalf("InsertNetworkLogs: %v", err)
 	}
 
@@ -707,7 +708,7 @@ func TestExportTaskLogsZip(t *testing.T) {
 		t.Fatalf("NewExporter: %v", err)
 	}
 
-	zipPath, err := exporter.ExportTaskLogsZip("zip-task-1")
+	zipPath, err := exporter.ExportTaskLogsZip(context.Background(), "zip-task-1")
 	if err != nil {
 		t.Fatalf("ExportTaskLogsZip: %v", err)
 	}
@@ -764,7 +765,7 @@ func TestExportTaskLogsZipNoData(t *testing.T) {
 		t.Fatalf("NewExporter: %v", err)
 	}
 
-	zipPath, err := exporter.ExportTaskLogsZip("nonexistent")
+	zipPath, err := exporter.ExportTaskLogsZip(context.Background(), "nonexistent")
 	if err != nil {
 		t.Fatalf("ExportTaskLogsZip: %v", err)
 	}
@@ -788,7 +789,7 @@ func TestExportTaskLogsZipInvalidPath(t *testing.T) {
 	db := setupTestDB(t)
 
 	exporter := &Exporter{db: db, output: "/proc/fakedir"}
-	_, err := exporter.ExportTaskLogsZip("task-1")
+	_, err := exporter.ExportTaskLogsZip(context.Background(), "task-1")
 	if err == nil {
 		t.Error("expected error for unwritable path")
 	}

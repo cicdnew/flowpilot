@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { ListRecordedFlows, DeleteRecordedFlow, PlayRecordedFlow } from '../../wailsjs/go/main/App';
+  import { ListRecordedFlows, DeleteRecordedFlow, PlayRecordedFlow, UpdateRecordedFlow } from '../../wailsjs/go/main/App';
   import { recordedFlows } from '../lib/store';
+  import type { RecordedFlow } from '../lib/types';
   import { createEventDispatcher, onMount } from 'svelte';
 
   const dispatch = createEventDispatcher();
@@ -8,6 +9,11 @@
   let loading = false;
   let errorMessage = '';
   let playingFlowId = '';
+  let headless = false;
+  let editingFlowId = '';
+  let editName = '';
+  let editDescription = '';
+  let editSaving = false;
 
   async function refresh() {
     loading = true;
@@ -36,11 +42,41 @@
     playingFlowId = id;
     try {
       errorMessage = '';
-      await PlayRecordedFlow(id, originUrl, true);
+      await PlayRecordedFlow(id, originUrl, headless);
     } catch (err: any) {
       errorMessage = err?.message || String(err);
     } finally {
       playingFlowId = '';
+    }
+  }
+
+  function startEditFlow(flow: RecordedFlow) {
+    editingFlowId = flow.id;
+    editName = flow.name;
+    editDescription = flow.description || '';
+  }
+
+  function cancelEditFlow() {
+    editingFlowId = '';
+    editName = '';
+    editDescription = '';
+  }
+
+  async function saveEditFlow(flow: RecordedFlow) {
+    editSaving = true;
+    try {
+      errorMessage = '';
+      await UpdateRecordedFlow({
+        ...flow,
+        name: editName,
+        description: editDescription,
+      } as any);
+      cancelEditFlow();
+      await refresh();
+    } catch (err: any) {
+      errorMessage = err?.message || String(err);
+    } finally {
+      editSaving = false;
     }
   }
 
@@ -52,7 +88,13 @@
 <div class="panel">
   <div class="panel-header">
     <h2>Recorded Flows</h2>
-    <button class="btn-secondary btn-sm" on:click={refresh} disabled={loading}>Refresh</button>
+    <div class="header-controls">
+      <label class="checkbox">
+        <input type="checkbox" bind:checked={headless} />
+        Headless
+      </label>
+      <button class="btn-secondary btn-sm" on:click={refresh} disabled={loading}>Refresh</button>
+    </div>
   </div>
 
   {#if errorMessage}
@@ -65,17 +107,30 @@
     {:else}
       {#each $recordedFlows as flow}
         <div class="flow-row">
-          <div>
-            <strong>{flow.name}</strong>
-            <div class="muted">{flow.originUrl}</div>
-          </div>
-          <div class="actions">
-            <button class="btn-primary btn-sm" on:click={() => dispatch('use', flow)}>Use</button>
-            <button class="btn-success btn-sm" on:click={() => playFlow(flow.id, flow.originUrl)} disabled={playingFlowId === flow.id}>
-              {playingFlowId === flow.id ? '...' : '▶ Play'}
-            </button>
-            <button class="btn-danger btn-sm" on:click={() => removeFlow(flow.id)}>Delete</button>
-          </div>
+          {#if editingFlowId === flow.id}
+            <div class="edit-inline">
+              <input bind:value={editName} placeholder="Flow name" />
+              <input bind:value={editDescription} placeholder="Description (optional)" />
+              <div class="edit-inline-actions">
+                <button class="btn-primary btn-sm" on:click={() => saveEditFlow(flow)} disabled={!editName || editSaving}>{editSaving ? 'Saving...' : 'Save'}</button>
+                <button class="btn-secondary btn-sm" on:click={cancelEditFlow}>Cancel</button>
+              </div>
+            </div>
+          {:else}
+            <div>
+              <strong>{flow.name}</strong>
+              {#if flow.description}<div class="muted">{flow.description}</div>{/if}
+              <div class="muted">{flow.originUrl}</div>
+            </div>
+            <div class="actions">
+              <button class="btn-primary btn-sm" on:click={() => dispatch('use', flow)}>Use</button>
+              <button class="btn-secondary btn-sm" on:click={() => startEditFlow(flow)}>Edit</button>
+              <button class="btn-success btn-sm" on:click={() => playFlow(flow.id, flow.originUrl)} disabled={playingFlowId === flow.id}>
+                {playingFlowId === flow.id ? '...' : '▶ Play'}
+              </button>
+              <button class="btn-danger btn-sm" on:click={() => removeFlow(flow.id)}>Delete</button>
+            </div>
+          {/if}
         </div>
       {/each}
     {/if}
@@ -94,6 +149,21 @@
     justify-content: space-between;
     align-items: center;
   }
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .checkbox input[type="checkbox"] {
+    width: auto;
+  }
   .flow-row {
     display: flex;
     justify-content: space-between;
@@ -108,5 +178,18 @@
   .actions {
     display: flex;
     gap: 8px;
+  }
+  .edit-inline {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+  .edit-inline input {
+    width: 100%;
+  }
+  .edit-inline-actions {
+    display: flex;
+    gap: 6px;
   }
 </style>

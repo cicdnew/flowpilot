@@ -186,7 +186,7 @@ func TestProcessPendingWithTasks(t *testing.T) {
 		},
 		CreatedAt: time.Now(),
 	}
-	if err := a.db.CreateTask(task); err != nil {
+	if err := a.db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
@@ -194,7 +194,7 @@ func TestProcessPendingWithTasks(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
-	got, err := a.db.GetTask("agent-task-1")
+	got, err := a.db.GetTask(context.Background(), "agent-task-1")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}

@@ -3,6 +3,7 @@ package logs
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -30,12 +31,12 @@ func NewExporter(db *database.DB, outputDir string) (*Exporter, error) {
 }
 
 // ExportTaskLogs writes JSONL and CSV files for a task and returns the file paths.
-func (e *Exporter) ExportTaskLogs(taskID string) (string, string, error) {
-	stepLogs, err := e.db.ListStepLogs(taskID)
+func (e *Exporter) ExportTaskLogs(ctx context.Context, taskID string) (string, string, error) {
+	stepLogs, err := e.db.ListStepLogs(ctx, taskID)
 	if err != nil {
 		return "", "", err
 	}
-	networkLogs, err := e.db.ListNetworkLogs(taskID)
+	networkLogs, err := e.db.ListNetworkLogs(ctx, taskID)
 	if err != nil {
 		return "", "", err
 	}
@@ -52,12 +53,12 @@ func (e *Exporter) ExportTaskLogs(taskID string) (string, string, error) {
 	return jsonlPath, csvPath, nil
 }
 
-func (e *Exporter) ExportTaskLogsZip(taskID string) (string, error) {
-	stepLogs, err := e.db.ListStepLogs(taskID)
+func (e *Exporter) ExportTaskLogsZip(ctx context.Context, taskID string) (string, error) {
+	stepLogs, err := e.db.ListStepLogs(ctx, taskID)
 	if err != nil {
 		return "", err
 	}
-	networkLogs, err := e.db.ListNetworkLogs(taskID)
+	networkLogs, err := e.db.ListNetworkLogs(ctx, taskID)
 	if err != nil {
 		return "", err
 	}
@@ -92,13 +93,13 @@ func (e *Exporter) ExportTaskLogsZip(taskID string) (string, error) {
 }
 
 // ExportBatchLogs exports logs for all tasks in a batch and returns the ZIP path.
-func (e *Exporter) ExportBatchLogs(batchID string) (string, error) {
-	tasks, err := e.db.ListTasksByBatch(batchID)
+func (e *Exporter) ExportBatchLogs(ctx context.Context, batchID string) (string, error) {
+	tasks, err := e.db.ListTasksByBatch(ctx, batchID)
 	if err != nil {
 		return "", err
 	}
 	zipPath := filepath.Join(e.output, fmt.Sprintf("batch_%s_%d.zip", batchID, time.Now().Unix()))
-	if err := writeBatchZip(zipPath, e.db, tasks); err != nil {
+	if err := writeBatchZip(ctx, zipPath, e.db, tasks); err != nil {
 		return "", err
 	}
 	return zipPath, nil
@@ -163,7 +164,7 @@ func writeCSV(path string, stepLogs []models.StepLog, networkLogs []models.Netwo
 	return nil
 }
 
-func writeBatchZip(path string, db *database.DB, tasks []models.Task) (retErr error) {
+func writeBatchZip(ctx context.Context, path string, db *database.DB, tasks []models.Task) (retErr error) {
 	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create zip: %w", err)
@@ -182,11 +183,11 @@ func writeBatchZip(path string, db *database.DB, tasks []models.Task) (retErr er
 	}()
 
 	for _, task := range tasks {
-		stepLogs, err := db.ListStepLogs(task.ID)
+		stepLogs, err := db.ListStepLogs(ctx, task.ID)
 		if err != nil {
 			return err
 		}
-		networkLogs, err := db.ListNetworkLogs(task.ID)
+		networkLogs, err := db.ListNetworkLogs(ctx, task.ID)
 		if err != nil {
 			return err
 		}

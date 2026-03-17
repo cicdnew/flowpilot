@@ -6,6 +6,7 @@ export namespace models {
 	    username?: string;
 	    password?: string;
 	    geo?: string;
+	    fallback?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ProxyConfig(source);
@@ -27,6 +28,8 @@ export namespace models {
 	    priority: number;
 	    proxy: ProxyConfig;
 	    tags?: string[];
+	    proxyCountry?: string;
+	    proxyFallback?: string;
 	    autoStart: boolean;
 	    headless?: boolean;
 	
@@ -42,6 +45,8 @@ export namespace models {
 	        this.priority = source["priority"];
 	        this.proxy = this.convertValues(source["proxy"], ProxyConfig);
 	        this.tags = source["tags"];
+	        this.proxyCountry = source["proxyCountry"];
+	        this.proxyFallback = source["proxyFallback"];
 	        this.autoStart = source["autoStart"];
 	        this.headless = source["headless"];
 	    }
@@ -347,6 +352,24 @@ export namespace models {
 		    return a;
 		}
 	}
+	export class TaskLoggingPolicy {
+	    captureStepLogs?: boolean;
+	    captureNetworkLogs?: boolean;
+	    captureScreenshots?: boolean;
+	    maxExecutionLogs: number;
+
+	    static createFrom(source: any = {}) {
+	        return new TaskLoggingPolicy(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.captureStepLogs = source["captureStepLogs"];
+	        this.captureNetworkLogs = source["captureNetworkLogs"];
+	        this.captureScreenshots = source["captureScreenshots"];
+	        this.maxExecutionLogs = source["maxExecutionLogs"];
+	    }
+	}
 	export class Task {
 	    id: string;
 	    name: string;
@@ -370,6 +393,7 @@ export namespace models {
 	    batchId?: string;
 	    flowId?: string;
 	    headless: boolean;
+	    loggingPolicy?: TaskLoggingPolicy;
 	
 	    static createFrom(source: any = {}) {
 	        return new Task(source);
@@ -396,6 +420,7 @@ export namespace models {
 	        this.batchId = source["batchId"];
 	        this.flowId = source["flowId"];
 	        this.headless = source["headless"];
+	        this.loggingPolicy = this.convertValues(source["loggingPolicy"], TaskLoggingPolicy);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -469,6 +494,10 @@ export namespace models {
 	    lastChecked?: any;
 	    // Go type: time
 	    createdAt: any;
+	    localEndpoint?: string;
+	    localEndpointOn?: boolean;
+	    localAuthEnabled?: boolean;
+	    activeLocalUsers?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Proxy(source);
@@ -488,6 +517,10 @@ export namespace models {
 	        this.totalUsed = source["totalUsed"];
 	        this.lastChecked = this.convertValues(source["lastChecked"], null);
 	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.localEndpoint = source["localEndpoint"];
+	        this.localEndpointOn = source["localEndpointOn"];
+	        this.localAuthEnabled = source["localAuthEnabled"];
+	        this.activeLocalUsers = source["activeLocalUsers"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -509,13 +542,89 @@ export namespace models {
 		}
 	}
 	
-	export class QueueMetrics {
+	export class ProxyCountryStats {
+    country: string;
+    total: number;
+    healthy: number;
+    activeReservations: number;
+    totalUsed: number;
+    fallbackAssignments: number;
+    activeLocalEndpoints: number;
+
+    static createFrom(source: any = {}) {
+        return new ProxyCountryStats(source);
+    }
+
+    constructor(source: any = {}) {
+        if ('string' === typeof source) source = JSON.parse(source);
+        this.country = source["country"];
+        this.total = source["total"];
+        this.healthy = source["healthy"];
+        this.activeReservations = source["activeReservations"];
+        this.totalUsed = source["totalUsed"];
+        this.fallbackAssignments = source["fallbackAssignments"];
+        this.activeLocalEndpoints = source["activeLocalEndpoints"];
+    }
+}
+
+export class ProxyRoutingPreset {
+    id: string;
+    name: string;
+    randomByCountry: boolean;
+    country?: string;
+    fallback?: string;
+    createdAt: any;
+
+    static createFrom(source: any = {}) {
+        return new ProxyRoutingPreset(source);
+    }
+
+    constructor(source: any = {}) {
+        if ('string' === typeof source) source = JSON.parse(source);
+        this.id = source["id"];
+        this.name = source["name"];
+        this.randomByCountry = source["randomByCountry"];
+        this.country = source["country"];
+        this.fallback = source["fallback"];
+        this.createdAt = source["createdAt"];
+    }
+}
+
+export class LocalProxyGatewayStats {
+    activeEndpoints: number;
+    endpointCreations: number;
+    endpointReuses: number;
+    authFailures: number;
+    upstreamFailures: number;
+    lastError?: string;
+
+    static createFrom(source: any = {}) {
+        return new LocalProxyGatewayStats(source);
+    }
+
+    constructor(source: any = {}) {
+        if ('string' === typeof source) source = JSON.parse(source);
+        this.activeEndpoints = source["activeEndpoints"];
+        this.endpointCreations = source["endpointCreations"];
+        this.endpointReuses = source["endpointReuses"];
+        this.authFailures = source["authFailures"];
+        this.upstreamFailures = source["upstreamFailures"];
+        this.lastError = source["lastError"];
+    }
+}
+
+export class QueueMetrics {
 	    running: number;
 	    queued: number;
 	    pending: number;
 	    totalSubmitted: number;
 	    totalCompleted: number;
 	    totalFailed: number;
+	    runningProxied: number;
+	    proxyConcurrencyLimit: number;
+	    persistenceQueueDepth: number;
+	    persistenceQueueCapacity: number;
+	    persistenceBatchSize: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new QueueMetrics(source);
@@ -529,6 +638,11 @@ export namespace models {
 	        this.totalSubmitted = source["totalSubmitted"];
 	        this.totalCompleted = source["totalCompleted"];
 	        this.totalFailed = source["totalFailed"];
+	        this.runningProxied = source["runningProxied"];
+	        this.proxyConcurrencyLimit = source["proxyConcurrencyLimit"];
+	        this.persistenceQueueDepth = source["persistenceQueueDepth"];
+	        this.persistenceQueueCapacity = source["persistenceQueueCapacity"];
+	        this.persistenceBatchSize = source["persistenceBatchSize"];
 	    }
 	}
 	export class SelectorCandidate {

@@ -31,9 +31,14 @@ type Agent struct {
 type Config struct {
 	DataDir             string
 	MaxConcurrency      int
+	ProxyConcurrency    int
 	PollInterval        time.Duration
 	HealthCheckInterval int
 	MaxProxyFailures    int
+	CaptureStepLogs     bool
+	CaptureNetworkLogs  bool
+	CaptureScreenshots  bool
+	MaxExecutionLogs    int
 }
 
 func New(cfg Config) (*Agent, error) {
@@ -49,6 +54,9 @@ func New(cfg Config) (*Agent, error) {
 	}
 	if cfg.PollInterval <= 0 {
 		cfg.PollInterval = 30 * time.Second
+	}
+	if cfg.MaxExecutionLogs <= 0 {
+		cfg.MaxExecutionLogs = 250
 	}
 
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
@@ -72,10 +80,23 @@ func New(cfg Config) (*Agent, error) {
 		return nil, fmt.Errorf("init browser runner: %w", err)
 	}
 	runner.SetForceHeadless(true)
+	stepLogs := cfg.CaptureStepLogs
+	networkLogs := cfg.CaptureNetworkLogs
+	screenshots := cfg.CaptureScreenshots
+	runner.SetDefaultLoggingPolicy(models.TaskLoggingPolicy{
+		CaptureStepLogs:    &stepLogs,
+		CaptureNetworkLogs: &networkLogs,
+		CaptureScreenshots: &screenshots,
+		MaxExecutionLogs:   cfg.MaxExecutionLogs,
+	})
 
 	q := queue.New(db, runner, cfg.MaxConcurrency, func(event models.TaskEvent) {
 		log.Printf("[agent] task %s -> %s", event.TaskID, event.Status)
 	})
+	if cfg.ProxyConcurrency <= 0 {
+		cfg.ProxyConcurrency = max(1, cfg.MaxConcurrency/2)
+	}
+	q.SetProxyConcurrencyLimit(cfg.ProxyConcurrency)
 
 	healthInterval := cfg.HealthCheckInterval
 	if healthInterval <= 0 {

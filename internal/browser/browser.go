@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"flowpilot/internal/captcha"
+	"flowpilot/internal/localproxy"
 	"flowpilot/internal/logs"
 	"flowpilot/internal/models"
 
@@ -61,13 +62,22 @@ func validateEvalScript(script string) error {
 }
 
 // Runner executes browser automation tasks using chromedp.
+type resolvedLoggingPolicy struct {
+	captureStepLogs    bool
+	captureNetworkLogs bool
+	captureScreenshots bool
+	maxExecutionLogs   int
+}
+
 type Runner struct {
-	screenshotDir string
-	allowEval     atomic.Bool
-	forceHeadless atomic.Bool
-	exec          Executor
-	captchaSolver captcha.Solver
-	pool          *BrowserPool
+	screenshotDir        string
+	allowEval            atomic.Bool
+	forceHeadless        atomic.Bool
+	exec                 Executor
+	captchaSolver        captcha.Solver
+	pool                 *BrowserPool
+	localProxyManager    *localproxy.Manager
+	defaultLoggingPolicy models.TaskLoggingPolicy
 }
 
 // NewRunner creates a new browser runner. Eval steps are blocked by default.
@@ -100,19 +110,74 @@ func (r *Runner) SetPool(p *BrowserPool) {
 	r.pool = p
 }
 
+func (r *Runner) SetLocalProxyManager(m *localproxy.Manager) {
+	r.localProxyManager = m
+}
+
+func (r *Runner) SetDefaultLoggingPolicy(policy models.TaskLoggingPolicy) {
+	r.defaultLoggingPolicy = policy
+}
+
+func (r *Runner) resolveLoggingPolicy(task models.Task) resolvedLoggingPolicy {
+	resolved := resolvedLoggingPolicy{
+		captureStepLogs:    true,
+		captureNetworkLogs: true,
+		captureScreenshots: true,
+		maxExecutionLogs:   1000,
+	}
+	if r.defaultLoggingPolicy.CaptureStepLogs != nil {
+		resolved.captureStepLogs = *r.defaultLoggingPolicy.CaptureStepLogs
+	}
+	if r.defaultLoggingPolicy.CaptureNetworkLogs != nil {
+		resolved.captureNetworkLogs = *r.defaultLoggingPolicy.CaptureNetworkLogs
+	}
+	if r.defaultLoggingPolicy.CaptureScreenshots != nil {
+		resolved.captureScreenshots = *r.defaultLoggingPolicy.CaptureScreenshots
+	}
+	if r.defaultLoggingPolicy.MaxExecutionLogs > 0 {
+		resolved.maxExecutionLogs = r.defaultLoggingPolicy.MaxExecutionLogs
+	}
+	if task.LoggingPolicy != nil {
+		if task.LoggingPolicy.CaptureStepLogs != nil {
+			resolved.captureStepLogs = *task.LoggingPolicy.CaptureStepLogs
+		}
+		if task.LoggingPolicy.CaptureNetworkLogs != nil {
+			resolved.captureNetworkLogs = *task.LoggingPolicy.CaptureNetworkLogs
+		}
+		if task.LoggingPolicy.CaptureScreenshots != nil {
+			resolved.captureScreenshots = *task.LoggingPolicy.CaptureScreenshots
+		}
+		if task.LoggingPolicy.MaxExecutionLogs > 0 {
+			resolved.maxExecutionLogs = task.LoggingPolicy.MaxExecutionLogs
+		}
+	}
+	return resolved
+}
+
 // RunTask executes a single task with its own browser context and proxy.
 func (r *Runner) RunTask(ctx context.Context, task models.Task) (*models.TaskResult, error) {
 	start := time.Now()
+	policy := r.resolveLoggingPolicy(task)
 	result := &models.TaskResult{
 		TaskID:        task.ID,
 		ExtractedData: make(map[string]string),
+		LogLimit:      policy.maxExecutionLogs,
 	}
 
 	var browserCtx context.Context
 	var browserCancel context.CancelFunc
 	var poolRelease func()
 
-	if r.pool != nil && task.Proxy.Server == "" {
+	effectiveProxy := task.Proxy
+	if r.localProxyManager != nil && task.Proxy.Server != "" {
+		if localProxy, err := r.localProxyManager.Endpoint(task.Proxy); err == nil {
+			effectiveProxy = localProxy
+		} else {
+			r.addLog(result, "warn", fmt.Sprintf("local proxy endpoint unavailable, using upstream proxy directly: %v", err))
+		}
+	}
+
+	if r.pool != nil && effectiveProxy.Server == "" {
 		var err error
 		browserCtx, poolRelease, err = r.pool.Acquire(ctx)
 		if err != nil {
@@ -124,36 +189,39 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (*models.TaskRes
 		defer poolRelease()
 		browserCancel = func() {} // no-op; poolRelease handles cleanup
 	} else {
-		allocCtx, allocCancel := r.createAllocator(ctx, task.Proxy, task.Headless)
+		allocCtx, allocCancel := r.createAllocator(ctx, effectiveProxy, task.Headless)
 		defer allocCancel()
 		browserCtx, browserCancel = chromedp.NewContext(allocCtx)
 	}
 	defer browserCancel()
 
-	netLogger := logs.NewNetworkLogger(task.ID)
-	chromedp.ListenTarget(browserCtx, func(ev interface{}) {
-		switch e := ev.(type) {
-		case *network.EventRequestWillBeSent:
-			netLogger.HandleRequestWillBeSent(e)
-		case *network.EventResponseReceived:
-			netLogger.HandleResponseReceived(e)
-		case *network.EventLoadingFinished:
-			netLogger.HandleLoadingFinished(e, nil)
-		case *network.EventLoadingFailed:
-			netLogger.HandleLoadingFailed(e.RequestID)
-		}
-	})
+	var netLogger *logs.NetworkLogger
+	if policy.captureNetworkLogs {
+		netLogger = logs.NewNetworkLogger(task.ID)
+		chromedp.ListenTarget(browserCtx, func(ev interface{}) {
+			switch e := ev.(type) {
+			case *network.EventRequestWillBeSent:
+				netLogger.HandleRequestWillBeSent(e)
+			case *network.EventResponseReceived:
+				netLogger.HandleResponseReceived(e)
+			case *network.EventLoadingFinished:
+				netLogger.HandleLoadingFinished(e, nil)
+			case *network.EventLoadingFailed:
+				netLogger.HandleLoadingFailed(e.RequestID)
+			}
+		})
 
-	if err := chromedp.Run(browserCtx, network.Enable()); err != nil {
-		r.addLog(result, "warn", fmt.Sprintf("enable network logging: %v", err))
+		if err := chromedp.Run(browserCtx, network.Enable()); err != nil {
+			r.addLog(result, "warn", fmt.Sprintf("enable network logging: %v", err))
+		}
 	}
 
 	if err := ClearCookies(browserCtx); err != nil {
 		r.addLog(result, "warn", fmt.Sprintf("clear cookies: %v", err))
 	}
 
-	if task.Proxy.Username != "" {
-		if err := r.setupProxyAuth(browserCtx, task.Proxy); err != nil {
+	if effectiveProxy.Username != "" {
+		if err := r.setupProxyAuth(browserCtx, effectiveProxy); err != nil {
 			result.Duration = time.Since(start)
 			result.Error = fmt.Sprintf("proxy auth setup failed: %v", err)
 			r.addLog(result, "error", result.Error)
@@ -161,13 +229,17 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (*models.TaskRes
 		}
 	}
 
-	if err := r.runSteps(browserCtx, task.Steps, result, netLogger); err != nil {
-		result.NetworkLogs = netLogger.Logs()
+	if err := r.runSteps(browserCtx, task.Steps, result, netLogger, policy); err != nil {
+		if netLogger != nil {
+			result.NetworkLogs = netLogger.Logs()
+		}
 		result.Duration = time.Since(start)
 		return result, err
 	}
 
-	result.NetworkLogs = netLogger.Logs()
+	if netLogger != nil {
+		result.NetworkLogs = netLogger.Logs()
+	}
 	result.Success = true
 	result.Duration = time.Since(start)
 	r.addLog(result, "info", fmt.Sprintf("task completed in %s", result.Duration))
@@ -217,9 +289,12 @@ func (r *Runner) createAllocator(ctx context.Context, proxyConfig models.ProxyCo
 
 // runSteps executes task steps using a program-counter (PC) based approach
 // to support conditional logic, loops, and goto jumps.
-func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, result *models.TaskResult, netLogger *logs.NetworkLogger) error {
-	stepLogger := logs.NewStepLogger(result.TaskID)
-	defer func() { result.StepLogs = stepLogger.Logs() }()
+func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, result *models.TaskResult, netLogger *logs.NetworkLogger, policy resolvedLoggingPolicy) error {
+	var stepLogger *logs.StepLogger
+	if policy.captureStepLogs {
+		stepLogger = logs.NewStepLogger(result.TaskID)
+		defer func() { result.StepLogs = stepLogger.Logs() }()
+	}
 
 	labelIndex := buildLabelIndex(steps)
 
@@ -235,7 +310,9 @@ func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, r
 	pc := 0
 	for pc < len(steps) {
 		step := steps[pc]
-		netLogger.SetStepIndex(pc)
+		if netLogger != nil {
+			netLogger.SetStepIndex(pc)
+		}
 		r.addLog(result, "info", fmt.Sprintf("step %d: %s", pc+1, step.Action))
 
 		switch step.Action {
@@ -304,16 +381,27 @@ func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, r
 		if step.Timeout > 0 {
 			timeout = time.Duration(step.Timeout) * time.Millisecond
 		}
-		start := stepLogger.StartStep(pc, step.Action, step.Selector, step.Value, "")
+		if step.Action == models.ActionScreenshot && !policy.captureScreenshots {
+			r.addLog(result, "info", fmt.Sprintf("step %d screenshot skipped by logging policy", pc+1))
+			pc++
+			continue
+		}
+
+		var startedAt time.Time
+		if stepLogger != nil {
+			startedAt = stepLogger.StartStep(pc, step.Action, step.Selector, step.Value, "")
+		}
 		stepCtx, stepCancel := context.WithTimeout(browserCtx, timeout)
 		err := r.executeStep(stepCtx, step, result)
 		stepCancel()
 
-		var code models.ErrorCode
-		if err != nil {
-			code = models.ClassifyError(err)
+		if stepLogger != nil {
+			var code models.ErrorCode
+			if err != nil {
+				code = models.ClassifyError(err)
+			}
+			stepLogger.EndStep(pc, step.Action, step.Selector, step.Value, "", startedAt, err, code)
 		}
-		stepLogger.EndStep(pc, step.Action, step.Selector, step.Value, "", start, err, code)
 
 		if err != nil {
 			r.addLog(result, "error", fmt.Sprintf("step %d failed: %v", pc+1, err))
@@ -379,6 +467,9 @@ func (r *Runner) addLog(result *models.TaskResult, level, message string) {
 		Level:     level,
 		Message:   message,
 	})
+	if result.LogLimit > 0 && len(result.Logs) > result.LogLimit {
+		result.Logs = append([]models.LogEntry(nil), result.Logs[len(result.Logs)-result.LogLimit:]...)
+	}
 }
 
 // ClearCookies clears cookies in a browser context.

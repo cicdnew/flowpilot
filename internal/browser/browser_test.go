@@ -264,12 +264,12 @@ func TestRunStepsEmptySteps(t *testing.T) {
 	}
 
 	nl := logs.NewNetworkLogger(result.TaskID)
-	err := runner.runSteps(context.Background(), nil, result, nl)
+	err := runner.runSteps(context.Background(), nil, result, nl, runner.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("runSteps with nil steps: %v", err)
 	}
 
-	err = runner.runSteps(context.Background(), []models.TaskStep{}, result, nl)
+	err = runner.runSteps(context.Background(), []models.TaskStep{}, result, nl, runner.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("runSteps with empty steps: %v", err)
 	}
@@ -287,7 +287,7 @@ func TestRunStepsStopsOnError(t *testing.T) {
 		{Action: "invalid_action_2"},
 	}
 
-	err := runner.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID))
+	err := runner.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID), runner.resolveLoggingPolicy(models.Task{}))
 	if err == nil {
 		t.Fatal("expected error from invalid steps")
 	}
@@ -981,7 +981,7 @@ func TestRunStepsWithMockSuccess(t *testing.T) {
 		{Action: models.ActionType, Selector: "#input", Value: "hello"},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID))
+	err := r.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID), r.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1004,7 +1004,7 @@ func TestRunStepsWithMockStopsOnError(t *testing.T) {
 		{Action: models.ActionClick, Selector: "#btn"},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID))
+	err := r.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID), r.resolveLoggingPolicy(models.Task{}))
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -1022,9 +1022,44 @@ func TestRunStepsCustomTimeout(t *testing.T) {
 		{Action: models.ActionNavigate, Value: "https://example.com", Timeout: 5000},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID))
+	err := r.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID), r.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAddLogRespectsLimit(t *testing.T) {
+	runner := &Runner{screenshotDir: t.TempDir(), exec: chromeExecutor{}}
+	result := &models.TaskResult{TaskID: "capped-log", LogLimit: 2}
+
+	runner.addLog(result, "info", "first")
+	runner.addLog(result, "info", "second")
+	runner.addLog(result, "info", "third")
+
+	if len(result.Logs) != 2 {
+		t.Fatalf("log count: got %d, want 2", len(result.Logs))
+	}
+	if result.Logs[0].Message != "second" || result.Logs[1].Message != "third" {
+		t.Fatalf("expected last two logs to be retained, got %#v", result.Logs)
+	}
+}
+
+func TestRunStepsSkipsScreenshotWhenDisabled(t *testing.T) {
+	mock := &mockExecutor{}
+	r := newMockRunner(t, mock)
+	result := &models.TaskResult{TaskID: "skip-ss", ExtractedData: make(map[string]string)}
+	captureScreenshots := false
+	policy := r.resolveLoggingPolicy(models.Task{LoggingPolicy: &models.TaskLoggingPolicy{CaptureScreenshots: &captureScreenshots}})
+
+	err := r.runSteps(context.Background(), []models.TaskStep{{Action: models.ActionScreenshot}}, result, logs.NewNetworkLogger(result.TaskID), policy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.callCount() != 0 {
+		t.Fatalf("expected no executor calls when screenshot capture is disabled, got %d", mock.callCount())
+	}
+	if len(result.Screenshots) != 0 {
+		t.Fatalf("expected no screenshots, got %d", len(result.Screenshots))
 	}
 }
 

@@ -62,17 +62,44 @@ export const taskStats = derived(tasks, ($tasks) => {
 });
 
 export function updateTaskInStore(event: TaskEvent) {
-  tasks.update(list => 
-    list.map(t => 
-      t.id === event.taskId 
-        ? { ...t, status: event.status, error: event.error || t.error }
-        : t
-    )
-  );
+  tasks.update(list => {
+    const index = list.findIndex(t => t.id === event.taskId);
+    if (index === -1) {
+      return list;
+    }
+
+    const current = list[index];
+    const nextError = event.error || current.error;
+    if (current.status === event.status && current.error === nextError) {
+      return list;
+    }
+
+    const updated = [...list];
+    updated[index] = { ...current, status: event.status, error: nextError };
+    return updated;
+  });
 }
 
 export function replaceTaskInStore(updated: Task) {
-  tasks.update(list =>
-    list.map(t => t.id === updated.id ? updated : t)
-  );
+  tasks.update(list => {
+    const index = list.findIndex(t => t.id === updated.id);
+    if (index === -1) {
+      return list;
+    }
+
+    const next = [...list];
+    next[index] = updated;
+    return next;
+  });
+}
+
+export function removeTaskFromStore(taskId: string) {
+  tasks.update(list => {
+    const index = list.findIndex(t => t.id === taskId);
+    if (index === -1) {
+      return list;
+    }
+
+    return list.filter(t => t.id !== taskId);
+  });
 }

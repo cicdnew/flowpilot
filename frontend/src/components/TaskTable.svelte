@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tasks, selectedTaskId } from '../lib/store';
+  import { tasks, selectedTaskId, removeTaskFromStore } from '../lib/store';
   import { StartTask, CancelTask, DeleteTask } from '../../wailsjs/go/main/App';
   import type { Task } from '../lib/types';
   import { createEventDispatcher } from 'svelte';
@@ -35,7 +35,6 @@
     } finally {
       unmarkBusy(id);
     }
-    dispatch('refresh');
   }
 
   async function cancelTask(id: string) {
@@ -48,21 +47,25 @@
     } finally {
       unmarkBusy(id);
     }
-    dispatch('refresh');
   }
 
   async function deleteTask(id: string) {
     if (!confirm('Delete this task?')) return;
+    let deleted = false;
     markBusy(id);
     try {
       clearError();
       await DeleteTask(id);
+      deleted = true;
     } catch (err: any) {
       actionError = `Delete failed: ${err?.message || err}`;
     } finally {
       unmarkBusy(id);
     }
-    dispatch('refresh');
+    if (deleted) {
+      removeTaskFromStore(id);
+      dispatch('refresh');
+    }
   }
 
   function formatDate(dateStr: string): string {

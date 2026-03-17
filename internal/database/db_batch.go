@@ -85,7 +85,7 @@ func (db *DB) GetBatchProgress(ctx context.Context, batchID string) (models.Batc
 
 func (db *DB) ListTasksByBatch(ctx context.Context, batchID string) ([]models.Task, error) {
 	rows, err := db.readConn.QueryContext(ctx, `SELECT id, name, url, steps, batch_id, flow_id, headless, proxy_server, proxy_username, proxy_password, proxy_geo, proxy_protocol,
-		priority, status, retry_count, max_retries, timeout_seconds, error, result, tags, created_at, started_at, completed_at
+		priority, status, retry_count, max_retries, timeout_seconds, error, result, tags, logging_policy, created_at, started_at, completed_at
 		FROM tasks WHERE batch_id = ? ORDER BY created_at ASC`, batchID)
 	if err != nil {
 		return nil, fmt.Errorf("query tasks by batch %s: %w", batchID, err)
@@ -108,7 +108,7 @@ func (db *DB) ListTasksByBatch(ctx context.Context, batchID string) ([]models.Ta
 
 func (db *DB) ListTasksByBatchStatus(ctx context.Context, batchID string, status models.TaskStatus) ([]models.Task, error) {
 	rows, err := db.readConn.QueryContext(ctx, `SELECT id, name, url, steps, batch_id, flow_id, headless, proxy_server, proxy_username, proxy_password, proxy_geo, proxy_protocol,
-		priority, status, retry_count, max_retries, timeout_seconds, error, result, tags, created_at, started_at, completed_at
+		priority, status, retry_count, max_retries, timeout_seconds, error, result, tags, logging_policy, created_at, started_at, completed_at
 		FROM tasks WHERE batch_id = ? AND status = ? ORDER BY created_at ASC`, batchID, status)
 	if err != nil {
 		return nil, fmt.Errorf("query tasks by batch status %s: %w", batchID, err)

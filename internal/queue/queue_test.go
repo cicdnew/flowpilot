@@ -741,7 +741,7 @@ func TestHandleFailureMaxRetriesExceeded(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	q.handleFailure(context.Background(), task, fmt.Errorf("exec failed"))
+	q.handleFailure(context.Background(), task, fmt.Errorf("exec failed"), nil)
 
 	got, err := db.GetTask(context.Background(), task.ID)
 	if err != nil {
@@ -782,7 +782,7 @@ func TestHandleFailureRetriesWithBackoff(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	ri := q.handleFailure(context.Background(), task, fmt.Errorf("temporary error"))
+	ri := q.handleFailure(context.Background(), task, fmt.Errorf("temporary error"), nil)
 	if !ri.shouldRetry {
 		t.Fatal("expected shouldRetry to be true")
 	}
@@ -817,7 +817,7 @@ func TestHandleFailureRetryStoppedByQueueStop(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	ri := q.handleFailure(context.Background(), task, fmt.Errorf("temporary error"))
+	ri := q.handleFailure(context.Background(), task, fmt.Errorf("temporary error"), nil)
 	if !ri.shouldRetry {
 		t.Fatal("expected shouldRetry to be true")
 	}
@@ -861,7 +861,7 @@ func TestHandleFailureRetryStoppedByContextCancel(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	ri := q.handleFailure(ctx, task, fmt.Errorf("temporary error"))
+	ri := q.handleFailure(ctx, task, fmt.Errorf("temporary error"), nil)
 	if !ri.shouldRetry {
 		t.Fatal("expected shouldRetry to be true")
 	}
@@ -957,7 +957,7 @@ func TestMetricsTotalFailedAfterHandleFailure(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	q.handleFailure(context.Background(), task, fmt.Errorf("terminal failure"))
+	q.handleFailure(context.Background(), task, fmt.Errorf("terminal failure"), nil)
 
 	m := q.Metrics()
 	if m.TotalFailed != 1 {
@@ -1275,3 +1275,84 @@ func TestMetricsIncludesPausedInQueued(t *testing.T) {
 	}
 }
 
+func TestDequeueRunnableLockedSkipsProxyWhenProxySlotsFull(t *testing.T) {
+	q, _ := setupTestQueue(t, 2, nil, nil)
+	defer q.Stop()
+
+	proxied := makeTestTask("proxy-task")
+	proxied.Proxy.Server = "http://proxy.example"
+	normal := makeTestTask("normal-task")
+	normal.Priority = models.PriorityLow
+
+	q.mu.Lock()
+	q.proxyConcurrencyLimit = 1
+	q.runningProxied = 1
+	heap.Push(&q.pq, &heapItem{task: proxied, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
+	q.heapSet[proxied.ID] = struct{}{}
+	heap.Push(&q.pq, &heapItem{task: normal, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
+	q.heapSet[normal.ID] = struct{}{}
+
+	item, isProxied, autoProxy := q.dequeueRunnableLocked()
+	q.mu.Unlock()
+
+	if item == nil {
+		t.Fatal("expected runnable task")
+	}
+	if item.task.ID != normal.ID {
+		t.Fatalf("expected non-proxy task to run while proxy slots are full, got %s", item.task.ID)
+	}
+	if isProxied {
+		t.Fatal("expected dequeued task to be non-proxied")
+	}
+	if autoProxy {
+		t.Fatal("expected dequeued task to not be auto-proxy")
+	}
+
+	q.mu.Lock()
+	deferredStillQueued := q.isTaskInHeap(proxied.ID)
+	q.mu.Unlock()
+	if !deferredStillQueued {
+		t.Fatal("expected proxied task to remain queued")
+	}
+}
+
+func TestDequeueRunnableLockedTreatsAutoProxyTasksAsProxyLimited(t *testing.T) {
+	q, db := setupTestQueue(t, 2, nil, nil)
+	defer q.Stop()
+
+	pm := proxy.NewManager(db, models.ProxyPoolConfig{Strategy: models.RotationRoundRobin})
+	defer pm.Stop()
+	q.SetProxyManager(pm)
+
+	autoProxyTask := makeTestTask("auto-proxy-task")
+	anotherAutoProxyTask := makeTestTask("auto-proxy-task-2")
+	anotherAutoProxyTask.Priority = models.PriorityLow
+
+	q.mu.Lock()
+	q.proxyConcurrencyLimit = 1
+	q.runningProxied = 1
+	heap.Push(&q.pq, &heapItem{task: autoProxyTask, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
+	q.heapSet[autoProxyTask.ID] = struct{}{}
+	heap.Push(&q.pq, &heapItem{task: anotherAutoProxyTask, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
+	q.heapSet[anotherAutoProxyTask.ID] = struct{}{}
+
+	item, countsAgainstProxyLimit, autoProxy := q.dequeueRunnableLocked()
+	q.mu.Unlock()
+
+	if item != nil {
+		t.Fatalf("expected no runnable task while all pending tasks require proxy slots, got %s", item.task.ID)
+	}
+	if countsAgainstProxyLimit {
+		t.Fatal("expected no selected task when proxy slots are full")
+	}
+	if autoProxy {
+		t.Fatal("expected no selected task when proxy slots are full")
+	}
+
+	q.mu.Lock()
+	stillQueued := q.isTaskInHeap(autoProxyTask.ID) && q.isTaskInHeap(anotherAutoProxyTask.ID)
+	q.mu.Unlock()
+	if !stillQueued {
+		t.Fatal("expected auto-proxy tasks to remain queued while proxy slots are full")
+	}
+}

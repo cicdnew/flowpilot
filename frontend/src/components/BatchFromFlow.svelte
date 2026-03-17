@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { CreateBatchFromFlow, ParseBatchURLs } from '../../wailsjs/go/main/App';
-  import type { RecordedFlow } from '../lib/types';
+  import { CreateBatchFromFlow, ParseBatchURLs, ListProxyRoutingPresets } from '../../wailsjs/go/main/App';
+  import type { RecordedFlow, ProxyRoutingFallback, ProxyRoutingPreset } from '../lib/types';
   import { createEventDispatcher } from 'svelte';
 
   export let flow: RecordedFlow | null = null;
@@ -10,8 +10,25 @@
   let namingTemplate = 'Task \{\{index\}\} - \{\{domain\}\}';
   let priority = 5;
   let autoStart = true;
+  let useRandomCountryProxy = false;
+  let proxyCountry = '';
+  let proxyFallback: ProxyRoutingFallback = 'strict';
+  let routingPresets: ProxyRoutingPreset[] = [];
+  let selectedPresetId = '';
   let errorMessage = '';
   let submitting = false;
+
+  ListProxyRoutingPresets().then((list) => {
+    routingPresets = (list || []) as ProxyRoutingPreset[];
+  }).catch(() => {});
+
+  function applyPreset(id: string) {
+    const preset = routingPresets.find(p => p.id === id);
+    if (!preset) return;
+    useRandomCountryProxy = preset.randomByCountry;
+    proxyCountry = preset.country || '';
+    proxyFallback = (preset.fallback as ProxyRoutingFallback) || 'strict';
+  }
 
   function parseUrls(): string[] {
     return urlList
@@ -24,6 +41,10 @@
     if (!flow) return;
     const urls = parseUrls();
     if (urls.length === 0) return;
+    if (useRandomCountryProxy && !proxyCountry.trim()) {
+      errorMessage = 'Country code is required for batch random-by-country proxy routing.';
+      return;
+    }
     submitting = true;
     try {
       errorMessage = '';
@@ -32,7 +53,15 @@
         urls,
         namingTemplate,
         priority,
-        proxy: { server: '', username: '', password: '', geo: '' },
+        proxy: {
+          server: '',
+          username: '',
+          password: '',
+          geo: useRandomCountryProxy ? proxyCountry.trim().toUpperCase() : '',
+          fallback: proxyFallback,
+        },
+        proxyCountry: useRandomCountryProxy ? proxyCountry.trim().toUpperCase() : '',
+        proxyFallback,
         tags: [],
         autoStart,
       } as any);
@@ -101,6 +130,37 @@
         </label>
         </div>
       </div>
+      <h4>Batch Proxy Routing</h4>
+      {#if routingPresets.length}
+        <div class="form-group">
+          <label for="batch-routing-preset">Routing Preset</label>
+          <select id="batch-routing-preset" bind:value={selectedPresetId} on:change={() => applyPreset(selectedPresetId)}>
+            <option value="">Custom</option>
+            {#each routingPresets as preset}
+              <option value={preset.id}>{preset.name}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
+      <label class="checkbox">
+        <input type="checkbox" bind:checked={useRandomCountryProxy} />
+        Random healthy proxy by country for all tasks in this batch
+      </label>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="batch-proxy-country">Country</label>
+          <input id="batch-proxy-country" bind:value={proxyCountry} placeholder="US" />
+        </div>
+        <div class="form-group">
+          <label for="batch-proxy-fallback">Fallback</label>
+          <select id="batch-proxy-fallback" bind:value={proxyFallback}>
+            <option value="strict">Strict country only</option>
+            <option value="any_healthy">Fallback to any healthy proxy</option>
+            <option value="direct">Fallback to direct connection</option>
+          </select>
+        </div>
+      </div>
+      <div class="hint">When enabled, every generated task inherits the same country-random routing rule.</div>
     </div>
 
     {#if errorMessage}

@@ -30,8 +30,11 @@
   let pageSize = 50;
   let totalPages = 1;
   let totalItems = 0;
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingTaskRefresh = false;
 
   async function refreshTasks() {
+    pendingTaskRefresh = false;
     loading = true;
     try {
       loadError = '';
@@ -46,14 +49,33 @@
     }
   }
 
-  $: if ($statusFilter || $statusFilter === 'all') {
-    currentPage = 1;
-    refreshTasks();
+  function scheduleRefresh(delay = 150) {
+    if ($activeTab !== 'tasks') {
+      pendingTaskRefresh = true;
+      return;
+    }
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+    }
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      refreshTasks();
+    }, delay);
   }
 
-  $: if ($tagFilter !== undefined) {
-    currentPage = 1;
-    refreshTasks();
+  let lastFilterKey = '';
+
+  $: {
+    const nextFilterKey = `${$statusFilter}|${$tagFilter}`;
+    if (nextFilterKey !== lastFilterKey) {
+      lastFilterKey = nextFilterKey;
+      currentPage = 1;
+      refreshTasks();
+    }
+  }
+
+  $: if ($activeTab === 'tasks' && pendingTaskRefresh && !refreshTimer && !loading) {
+    scheduleRefresh(0);
   }
 
   function goToPage(page: number) {
@@ -75,8 +97,6 @@
       isRecording.set(recording);
     } catch (_) {}
 
-    refreshTasks();
-
     EventsOn('task:event', async (event: any) => {
       updateTaskInStore(event);
       if (['completed', 'failed', 'cancelled'].includes(event.status)) {
@@ -84,12 +104,17 @@
           const full = await GetTask(event.taskId) as Task;
           replaceTaskInStore(full);
         } catch (_) {}
-        refreshTasks();
+        pendingTaskRefresh = true;
+        scheduleRefresh();
       }
     });
   });
 
   onDestroy(() => {
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+      refreshTimer = null;
+    }
     EventsOff('task:event');
   });
 </script>

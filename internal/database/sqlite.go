@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -88,6 +89,7 @@ func (db *DB) migrate() error {
 		error TEXT DEFAULT '',
 		result TEXT DEFAULT '',
 		tags TEXT DEFAULT '[]',
+		logging_policy TEXT DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		started_at DATETIME,
 		completed_at DATETIME
@@ -194,6 +196,15 @@ func (db *DB) migrate() error {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
+	CREATE TABLE IF NOT EXISTS proxy_routing_presets (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		random_by_country INTEGER DEFAULT 0,
+		country TEXT DEFAULT '',
+		fallback TEXT DEFAULT 'strict',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
 	CREATE TABLE IF NOT EXISTS schedules (
 		id TEXT PRIMARY KEY,
 		name TEXT NOT NULL,
@@ -277,6 +288,9 @@ func (db *DB) migrate() error {
 	_, err := db.conn.Exec(schema)
 	if err != nil {
 		return fmt.Errorf("exec schema: %w", err)
+	}
+	if _, err := db.conn.Exec(`ALTER TABLE tasks ADD COLUMN logging_policy TEXT DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("add tasks.logging_policy column: %w", err)
 	}
 
 	return nil

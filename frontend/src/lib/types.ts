@@ -58,12 +58,15 @@ export interface BatchProgress {
   cancelled: number;
 }
 
+export type ProxyRoutingFallback = 'strict' | 'any_healthy' | 'direct';
+
 export interface ProxyConfig {
   server: string;
   protocol?: string;
   username?: string;
   password?: string;
   geo?: string;
+  fallback?: ProxyRoutingFallback | string;
 }
 
 export interface LogEntry {
@@ -100,6 +103,13 @@ export interface TaskResult {
   error?: string;
 }
 
+export interface TaskLoggingPolicy {
+  captureStepLogs?: boolean;
+  captureNetworkLogs?: boolean;
+  captureScreenshots?: boolean;
+  maxExecutionLogs?: number;
+}
+
 export interface Task {
   id: string;
   name: string;
@@ -120,6 +130,7 @@ export interface Task {
   batchId?: string;
   flowId?: string;
   headless?: boolean;
+  loggingPolicy?: TaskLoggingPolicy;
 }
 
 export interface PaginatedTasks {
@@ -143,6 +154,38 @@ export interface Proxy {
   totalUsed: number;
   lastChecked?: string;
   createdAt: string;
+  localEndpoint?: string;
+  localEndpointOn?: boolean;
+  localAuthEnabled?: boolean;
+  activeLocalUsers?: number;
+}
+
+export interface ProxyCountryStats {
+  country: string;
+  total: number;
+  healthy: number;
+  activeReservations: number;
+  totalUsed: number;
+  fallbackAssignments: number;
+  activeLocalEndpoints: number;
+}
+
+export interface ProxyRoutingPreset {
+  id: string;
+  name: string;
+  randomByCountry: boolean;
+  country?: string;
+  fallback?: ProxyRoutingFallback | string;
+  createdAt: string;
+}
+
+export interface LocalProxyGatewayStats {
+  activeEndpoints: number;
+  endpointCreations: number;
+  endpointReuses: number;
+  authFailures: number;
+  upstreamFailures: number;
+  lastError?: string;
 }
 
 export type WebSocketEventType = 'created' | 'handshake' | 'frame_sent' | 'frame_received' | 'closed' | 'error';
@@ -197,6 +240,11 @@ export interface QueueMetrics {
   totalSubmitted: number;
   totalCompleted: number;
   totalFailed: number;
+  runningProxied: number;
+  proxyConcurrencyLimit: number;
+  persistenceQueueDepth: number;
+  persistenceQueueCapacity: number;
+  persistenceBatchSize: number;
 }
 
 export interface StepLog {

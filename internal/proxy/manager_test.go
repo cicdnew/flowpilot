@@ -272,6 +272,32 @@ func TestSelectProxyWithGeoFilter(t *testing.T) {
 	}
 }
 
+func TestSelectProxyWithGeoRandomizesWithinCountryPool(t *testing.T) {
+	m, db := setupTestManager(t, models.RotationRoundRobin)
+
+	addHealthyProxy(t, db, "geo-rand-us-1", "us1.example.com:8080", "US", 100, 0)
+	addHealthyProxy(t, db, "geo-rand-us-2", "us2.example.com:8080", "US", 100, 0)
+	addHealthyProxy(t, db, "geo-rand-uk-1", "uk1.example.com:8080", "UK", 100, 0)
+
+	seen := map[string]int{}
+	for i := 0; i < 100; i++ {
+		p, err := m.SelectProxy("us")
+		if err != nil {
+			t.Fatalf("SelectProxy(us) %d: %v", i, err)
+		}
+		if p.Geo != "US" {
+			t.Fatalf("expected US proxy, got %s", p.Geo)
+		}
+		seen[p.ID]++
+	}
+	if seen["geo-rand-us-1"] == 0 || seen["geo-rand-us-2"] == 0 {
+		t.Fatalf("expected both US proxies to be selected randomly, got %+v", seen)
+	}
+	if seen["geo-rand-uk-1"] != 0 {
+		t.Fatalf("expected UK proxy to never be selected for US geo, got %+v", seen)
+	}
+}
+
 func TestSelectProxyNoMatchingGeo(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationRoundRobin)
 
@@ -352,6 +378,81 @@ func TestRecordUsage(t *testing.T) {
 	}
 	if err := m.RecordUsage("usage-1", false); err != nil {
 		t.Fatalf("RecordUsage(failure): %v", err)
+	}
+}
+
+func TestReserveProxyTracksAndReleasesReservations(t *testing.T) {
+	m, db := setupTestManager(t, models.RotationRoundRobin)
+
+	addHealthyProxy(t, db, "reserve-1", "reserve.example.com:8080", "", 100, 0)
+
+	lease, err := m.ReserveProxy("")
+	if err != nil {
+		t.Fatalf("ReserveProxy: %v", err)
+	}
+	if got := m.ActiveReservations("reserve-1"); got != 1 {
+		t.Fatalf("ActiveReservations: got %d, want 1", got)
+	}
+	if err := lease.Complete(true); err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if got := m.ActiveReservations("reserve-1"); got != 0 {
+		t.Fatalf("ActiveReservations after complete: got %d, want 0", got)
+	}
+
+	proxyState := getProxy(t, db, "reserve-1")
+	if proxyState.TotalUsed != 1 {
+		t.Fatalf("TotalUsed after completion: got %d, want 1", proxyState.TotalUsed)
+	}
+}
+
+func TestReserveProxyPrefersLowerReservationPressure(t *testing.T) {
+	m, db := setupTestManager(t, models.RotationLeastUsed)
+
+	addHealthyProxy(t, db, "pressure-1", "p1.example.com:8080", "", 100, 0)
+	addHealthyProxy(t, db, "pressure-2", "p2.example.com:8080", "", 100, 0)
+
+	first, err := m.ReserveProxy("")
+	if err != nil {
+		t.Fatalf("first ReserveProxy: %v", err)
+	}
+	second, err := m.ReserveProxy("")
+	if err != nil {
+		t.Fatalf("second ReserveProxy: %v", err)
+	}
+	if first.ProxyID() == second.ProxyID() {
+		t.Fatalf("expected second reservation to prefer lower-pressure proxy, got %s twice", first.ProxyID())
+	}
+	_ = first.Release()
+	_ = second.Release()
+}
+
+func TestReserveProxyWithGeoRandomizesWithinCountryPool(t *testing.T) {
+	m, db := setupTestManager(t, models.RotationRoundRobin)
+
+	addHealthyProxy(t, db, "reserve-us-1", "us1.example.com:8080", "US", 100, 0)
+	addHealthyProxy(t, db, "reserve-us-2", "us2.example.com:8080", "US", 100, 0)
+	addHealthyProxy(t, db, "reserve-fr-1", "fr1.example.com:8080", "FR", 100, 0)
+
+	seen := map[string]int{}
+	for i := 0; i < 50; i++ {
+		lease, err := m.ReserveProxy("US")
+		if err != nil {
+			t.Fatalf("ReserveProxy(US) %d: %v", i, err)
+		}
+		if lease.Proxy().Geo != "US" {
+			t.Fatalf("expected reserved proxy geo US, got %s", lease.Proxy().Geo)
+		}
+		seen[lease.ProxyID()]++
+		if err := lease.Release(); err != nil {
+			t.Fatalf("Release: %v", err)
+		}
+	}
+	if seen["reserve-us-1"] == 0 || seen["reserve-us-2"] == 0 {
+		t.Fatalf("expected both US proxies to be reserved over time, got %+v", seen)
+	}
+	if seen["reserve-fr-1"] != 0 {
+		t.Fatalf("expected FR proxy never to be reserved for US, got %+v", seen)
 	}
 }
 

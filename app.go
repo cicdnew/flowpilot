@@ -13,6 +13,7 @@ import (
 	"flowpilot/internal/captcha"
 	"flowpilot/internal/crypto"
 	"flowpilot/internal/database"
+	"flowpilot/internal/localproxy"
 	"flowpilot/internal/logs"
 	"flowpilot/internal/models"
 	"flowpilot/internal/proxy"
@@ -26,37 +27,48 @@ import (
 
 type AppConfig struct {
 	QueueConcurrency    int
+	ProxyConcurrency    int
 	BrowserPoolSize     int
 	BrowserMaxTabs      int
 	RetentionDays       int
 	HealthCheckInterval int
 	MaxProxyFailures    int
+	CaptureStepLogs     bool
+	CaptureNetworkLogs  bool
+	CaptureScreenshots  bool
+	MaxExecutionLogs    int
 }
 
 func DefaultAppConfig() AppConfig {
 	return AppConfig{
-		QueueConcurrency:    50,
-		BrowserPoolSize:     20,
-		BrowserMaxTabs:      15,
+		QueueConcurrency:    200,
+		ProxyConcurrency:    80,
+		BrowserPoolSize:     100,
+		BrowserMaxTabs:      20,
 		RetentionDays:       90,
-		HealthCheckInterval: 300,
-		MaxProxyFailures:    3,
+		HealthCheckInterval: 30,
+		MaxProxyFailures:    2,
+		CaptureStepLogs:     true,
+		CaptureNetworkLogs:  false,
+		CaptureScreenshots:  false,
+		MaxExecutionLogs:    250,
 	}
 }
 
 type App struct {
-	ctx          context.Context
-	db           *database.DB
-	runner       *browser.Runner
-	pool         *browser.BrowserPool
-	queue        *queue.Queue
-	proxyManager *proxy.Manager
-	scheduler    *scheduler.Scheduler
-	dataDir      string
-	batchEngine  *batch.Engine
-	logExporter  *logs.Exporter
-	config       AppConfig
-	initErr      error
+	ctx               context.Context
+	db                *database.DB
+	runner            *browser.Runner
+	pool              *browser.BrowserPool
+	queue             *queue.Queue
+	proxyManager      *proxy.Manager
+	localProxyManager *localproxy.Manager
+	scheduler         *scheduler.Scheduler
+	dataDir           string
+	batchEngine       *batch.Engine
+	logExporter       *logs.Exporter
+	config            AppConfig
+	initErr           error
 
 	recorderMu     sync.Mutex
 	activeRecorder *recorder.Recorder
@@ -114,6 +126,17 @@ func (a *App) startup(ctx context.Context) {
 		return
 	}
 	a.runner = runner
+	a.localProxyManager = localproxy.NewManager(5 * time.Minute)
+	a.runner.SetLocalProxyManager(a.localProxyManager)
+	stepLogs := a.config.CaptureStepLogs
+	networkLogs := a.config.CaptureNetworkLogs
+	screenshots := a.config.CaptureScreenshots
+	a.runner.SetDefaultLoggingPolicy(models.TaskLoggingPolicy{
+		CaptureStepLogs:    &stepLogs,
+		CaptureNetworkLogs: &networkLogs,
+		CaptureScreenshots: &screenshots,
+		MaxExecutionLogs:   a.config.MaxExecutionLogs,
+	})
 
 	pool := browser.NewBrowserPool(browser.PoolConfig{
 		Size:    a.config.BrowserPoolSize,
@@ -141,6 +164,7 @@ func (a *App) startup(ctx context.Context) {
 		wailsRuntime.EventsEmit(ctx, "task:event", event)
 	})
 	a.queue.SetProxyManager(a.proxyManager)
+	a.queue.SetProxyConcurrencyLimit(a.config.ProxyConcurrency)
 
 	// Recover tasks stuck in running/queued from a previous crash.
 	if err := a.queue.RecoverStaleTasks(ctx); err != nil {
@@ -208,6 +232,9 @@ func (a *App) cleanup() {
 	}
 	if a.proxyManager != nil {
 		a.proxyManager.Stop()
+	}
+	if a.localProxyManager != nil {
+		a.localProxyManager.Stop()
 	}
 	if a.db != nil {
 		a.db.Close()

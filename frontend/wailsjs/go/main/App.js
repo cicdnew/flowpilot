@@ -22,8 +22,8 @@ export function CreateRecordedFlow(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['CreateRecordedFlow'](arg1, arg2, arg3, arg4);
 }
 
-export function CreateTask(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
-  return window['go']['main']['App']['CreateTask'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+export function CreateTask(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
+  return window['go']['main']['App']['CreateTask'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
 }
 
 export function CreateTaskFromFlow(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
@@ -102,6 +102,26 @@ export function ListProxies() {
   return window['go']['main']['App']['ListProxies']();
 }
 
+export function ListProxyCountryStats() {
+  return window['go']['main']['App']['ListProxyCountryStats']();
+}
+
+export function CreateProxyRoutingPreset(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['CreateProxyRoutingPreset'](arg1, arg2, arg3, arg4);
+}
+
+export function ListProxyRoutingPresets() {
+  return window['go']['main']['App']['ListProxyRoutingPresets']();
+}
+
+export function DeleteProxyRoutingPreset(arg1) {
+  return window['go']['main']['App']['DeleteProxyRoutingPreset'](arg1);
+}
+
+export function GetLocalProxyGatewayStats() {
+  return window['go']['main']['App']['GetLocalProxyGatewayStats']();
+}
+
 export function ListRecordedFlows() {
   return window['go']['main']['App']['ListRecordedFlows']();
 }
@@ -170,8 +190,8 @@ export function UpdateRecordedFlow(arg1) {
   return window['go']['main']['App']['UpdateRecordedFlow'](arg1);
 }
 
-export function UpdateTask(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
-  return window['go']['main']['App']['UpdateTask'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+export function UpdateTask(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
+  return window['go']['main']['App']['UpdateTask'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
 }
 
 export function CreateSchedule(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {

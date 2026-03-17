@@ -25,7 +25,7 @@ func (a *App) AddProxy(server, protocol, username, password, geo string) (*model
 		Protocol:  models.ProxyProtocol(protocol),
 		Username:  username,
 		Password:  password,
-		Geo:       geo,
+		Geo:       strings.ToUpper(strings.TrimSpace(geo)),
 		Status:    models.ProxyStatusUnknown,
 		CreatedAt: time.Now(),
 	}
@@ -44,11 +44,93 @@ func (a *App) ListProxies() ([]models.Proxy, error) {
 	if err != nil {
 		return nil, err
 	}
+	var localStats map[string]int
+	if a.localProxyManager != nil {
+		localStats = a.localProxyManager.EndpointStatsByProxy(proxies)
+	}
 	for i := range proxies {
+		if a.localProxyManager != nil {
+			proxies[i].LocalEndpoint = a.localProxyManager.EndpointAddr(proxies[i].ToProxyConfig())
+			proxies[i].LocalEndpointOn = proxies[i].LocalEndpoint != ""
+			proxies[i].LocalAuthEnabled = proxies[i].LocalEndpointOn
+			proxies[i].ActiveLocalUsers = localStats[proxies[i].ID]
+		}
 		proxies[i].Username = maskCredential(proxies[i].Username)
 		proxies[i].Password = maskCredential(proxies[i].Password)
 	}
 	return proxies, nil
+}
+
+func (a *App) ListProxyCountryStats() ([]models.ProxyCountryStats, error) {
+	if err := a.ready(); err != nil {
+		return nil, err
+	}
+	proxies, err := a.db.ListProxies(a.ctx)
+	if err != nil {
+		return nil, err
+	}
+	activeLocalEndpoints := map[string]int(nil)
+	if a.localProxyManager != nil {
+		activeLocalEndpoints = a.localProxyManager.EndpointStatsByProxy(proxies)
+	}
+	if a.proxyManager == nil {
+		return nil, fmt.Errorf("proxy manager unavailable")
+	}
+	return a.proxyManager.CountryStats(proxies, activeLocalEndpoints), nil
+}
+
+func (a *App) CreateProxyRoutingPreset(name, country, fallback string, randomByCountry bool) (*models.ProxyRoutingPreset, error) {
+	if err := a.ready(); err != nil {
+		return nil, err
+	}
+	preset := models.ProxyRoutingPreset{
+		ID:              uuid.New().String(),
+		Name:            strings.TrimSpace(name),
+		Country:         strings.ToUpper(strings.TrimSpace(country)),
+		Fallback:        models.ProxyRoutingFallback(strings.TrimSpace(fallback)),
+		RandomByCountry: randomByCountry,
+		CreatedAt:       time.Now(),
+	}
+	if preset.Name == "" {
+		return nil, fmt.Errorf("preset name is required")
+	}
+	if preset.Fallback == "" {
+		preset.Fallback = models.ProxyFallbackStrict
+	}
+	if preset.RandomByCountry && preset.Country == "" {
+		return nil, fmt.Errorf("country is required for random-by-country presets")
+	}
+	if err := a.db.CreateProxyRoutingPreset(a.ctx, preset); err != nil {
+		return nil, err
+	}
+	return &preset, nil
+}
+
+func (a *App) ListProxyRoutingPresets() ([]models.ProxyRoutingPreset, error) {
+	if err := a.ready(); err != nil {
+		return nil, err
+	}
+	return a.db.ListProxyRoutingPresets(a.ctx)
+}
+
+func (a *App) DeleteProxyRoutingPreset(id string) error {
+	if err := a.ready(); err != nil {
+		return err
+	}
+	if strings.TrimSpace(id) == "" {
+		return fmt.Errorf("preset id is required")
+	}
+	return a.db.DeleteProxyRoutingPreset(a.ctx, id)
+}
+
+func (a *App) GetLocalProxyGatewayStats() (models.LocalProxyGatewayStats, error) {
+	if err := a.ready(); err != nil {
+		return models.LocalProxyGatewayStats{}, err
+	}
+	if a.localProxyManager == nil {
+		return models.LocalProxyGatewayStats{}, fmt.Errorf("local proxy manager unavailable")
+	}
+	return a.localProxyManager.Stats(), nil
 }
 
 func maskCredential(s string) string {

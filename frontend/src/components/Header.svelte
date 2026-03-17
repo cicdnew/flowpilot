@@ -1,15 +1,25 @@
 <script lang="ts">
   import { taskStats } from '../lib/store';
-  import { GetRunningCount, GetQueueMetrics } from '../../wailsjs/go/main/App';
+  import { GetQueueMetrics } from '../../wailsjs/go/main/App';
+  import type { QueueMetrics } from '../lib/types';
 
-  let runningCount = 0;
-  let queuedCount = 0;
+  let metrics: QueueMetrics = {
+    running: 0,
+    queued: 0,
+    pending: 0,
+    totalSubmitted: 0,
+    totalCompleted: 0,
+    totalFailed: 0,
+    runningProxied: 0,
+    proxyConcurrencyLimit: 0,
+    persistenceQueueDepth: 0,
+    persistenceQueueCapacity: 0,
+    persistenceBatchSize: 0,
+  };
 
   const interval = setInterval(async () => {
     try {
-      runningCount = await GetRunningCount();
-      const metrics = await GetQueueMetrics();
-      queuedCount = metrics.queued || 0;
+      metrics = await GetQueueMetrics();
     } catch (_) {}
   }, 2000);
 
@@ -28,12 +38,20 @@
       <span class="stat-label">Total</span>
     </div>
     <div class="stat running">
-      <span class="stat-value">{runningCount}</span>
+      <span class="stat-value">{metrics.running}</span>
       <span class="stat-label">Running</span>
     </div>
     <div class="stat queued">
-      <span class="stat-value">{queuedCount}</span>
+      <span class="stat-value">{metrics.queued}</span>
       <span class="stat-label">Queued</span>
+    </div>
+    <div class="stat info">
+      <span class="stat-value">{metrics.runningProxied}/{metrics.proxyConcurrencyLimit || '-'}</span>
+      <span class="stat-label">Proxy Slots</span>
+    </div>
+    <div class="stat info">
+      <span class="stat-value">{metrics.persistenceQueueDepth}/{metrics.persistenceQueueCapacity || '-'}</span>
+      <span class="stat-label">Write Buffer</span>
     </div>
     <div class="stat success">
       <span class="stat-value">{$taskStats.completed}</span>
@@ -92,4 +110,5 @@
   .success .stat-value { color: var(--success); }
   .danger .stat-value { color: var(--danger); }
   .queued .stat-value { color: var(--warning); }
+  .info .stat-value { color: var(--text-primary); }
 </style>

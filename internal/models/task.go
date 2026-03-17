@@ -74,35 +74,52 @@ type TaskStep struct {
 }
 
 // ProxyConfig holds proxy connection details for a task.
+type ProxyRoutingFallback string
+
+const (
+	ProxyFallbackStrict ProxyRoutingFallback = "strict"
+	ProxyFallbackAny    ProxyRoutingFallback = "any_healthy"
+	ProxyFallbackDirect ProxyRoutingFallback = "direct"
+)
+
 type ProxyConfig struct {
-	Server   string        `json:"server"`
-	Protocol ProxyProtocol `json:"protocol,omitempty"`
-	Username string        `json:"username,omitempty"`
-	Password string        `json:"password,omitempty"`
-	Geo      string        `json:"geo,omitempty"`
+	Server   string               `json:"server"`
+	Protocol ProxyProtocol        `json:"protocol,omitempty"`
+	Username string               `json:"username,omitempty"`
+	Password string               `json:"password,omitempty"`
+	Geo      string               `json:"geo,omitempty"`
+	Fallback ProxyRoutingFallback `json:"fallback,omitempty"`
+}
+
+type TaskLoggingPolicy struct {
+	CaptureStepLogs    *bool `json:"captureStepLogs,omitempty"`
+	CaptureNetworkLogs *bool `json:"captureNetworkLogs,omitempty"`
+	CaptureScreenshots *bool `json:"captureScreenshots,omitempty"`
+	MaxExecutionLogs   int   `json:"maxExecutionLogs,omitempty"`
 }
 
 // Task represents a single automated browser task.
 type Task struct {
-	ID          string       `json:"id"`
-	Name        string       `json:"name"`
-	URL         string       `json:"url"`
-	Steps       []TaskStep   `json:"steps"`
-	Proxy       ProxyConfig  `json:"proxy"`
-	Priority    TaskPriority `json:"priority"`
-	Status      TaskStatus   `json:"status"`
-	RetryCount  int          `json:"retryCount"`
-	MaxRetries  int          `json:"maxRetries"`
-	Timeout     int          `json:"timeout,omitempty"` // total task timeout in seconds, 0 = default (5 min)
-	Error       string       `json:"error,omitempty"`
-	Result      *TaskResult  `json:"result,omitempty"`
-	CreatedAt   time.Time    `json:"createdAt"`
-	StartedAt   *time.Time   `json:"startedAt,omitempty"`
-	CompletedAt *time.Time   `json:"completedAt,omitempty"`
-	Tags        []string     `json:"tags,omitempty"`
-	BatchID     string       `json:"batchId,omitempty"`
-	FlowID      string       `json:"flowId,omitempty"`
-	Headless    bool         `json:"headless"`
+	ID            string             `json:"id"`
+	Name          string             `json:"name"`
+	URL           string             `json:"url"`
+	Steps         []TaskStep         `json:"steps"`
+	Proxy         ProxyConfig        `json:"proxy"`
+	Priority      TaskPriority       `json:"priority"`
+	Status        TaskStatus         `json:"status"`
+	RetryCount    int                `json:"retryCount"`
+	MaxRetries    int                `json:"maxRetries"`
+	Timeout       int                `json:"timeout,omitempty"` // total task timeout in seconds, 0 = default (5 min)
+	Error         string             `json:"error,omitempty"`
+	Result        *TaskResult        `json:"result,omitempty"`
+	CreatedAt     time.Time          `json:"createdAt"`
+	StartedAt     *time.Time         `json:"startedAt,omitempty"`
+	CompletedAt   *time.Time         `json:"completedAt,omitempty"`
+	Tags          []string           `json:"tags,omitempty"`
+	BatchID       string             `json:"batchId,omitempty"`
+	FlowID        string             `json:"flowId,omitempty"`
+	Headless      bool               `json:"headless"`
+	LoggingPolicy *TaskLoggingPolicy `json:"loggingPolicy,omitempty"`
 }
 
 // TaskResult holds the output of a completed task.
@@ -116,6 +133,7 @@ type TaskResult struct {
 	NetworkLogs   []NetworkLog      `json:"networkLogs,omitempty"`
 	Duration      time.Duration     `json:"duration"`
 	Error         string            `json:"error,omitempty"`
+	LogLimit      int               `json:"-"`
 }
 
 // LogEntry is a single log message from task execution.

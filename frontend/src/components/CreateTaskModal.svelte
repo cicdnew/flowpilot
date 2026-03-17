@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { CreateTask } from '../../wailsjs/go/main/App';
-  import type { TaskStep, ProxyConfig } from '../lib/types';
+  import { CreateTask, ListProxyRoutingPresets } from '../../wailsjs/go/main/App';
+  import type { TaskStep, ProxyConfig, TaskLoggingPolicy, ProxyRoutingFallback, ProxyRoutingPreset } from '../lib/types';
   import { createEventDispatcher } from 'svelte';
 
   const dispatch = createEventDispatcher();
@@ -14,14 +14,34 @@
   let proxyUsername = '';
   let proxyPassword = '';
   let proxyGeo = '';
+  let useRandomCountryProxy = false;
+  let proxyFallback: ProxyRoutingFallback = 'strict';
+  let routingPresets: ProxyRoutingPreset[] = [];
+  let selectedPresetId = '';
 
   let taskTimeout = 0;
   let tagsInput = '';
+  let captureStepLogs = true;
+  let captureNetworkLogs = false;
+  let captureScreenshots = false;
+  let maxExecutionLogs = 250;
   let steps: TaskStep[] = [{ action: 'navigate', value: '', selector: '' }];
   let errorMessage = '';
   let submitting = false;
 
   const actions = ['navigate', 'click', 'type', 'wait', 'screenshot', 'extract', 'scroll', 'select', 'if_element', 'if_text', 'if_url', 'loop', 'end_loop', 'break_loop', 'goto', 'solve_captcha'];
+
+  ListProxyRoutingPresets().then((list) => {
+    routingPresets = (list || []) as ProxyRoutingPreset[];
+  }).catch(() => {});
+
+  function applyPreset(id: string) {
+    const preset = routingPresets.find(p => p.id === id);
+    if (!preset) return;
+    useRandomCountryProxy = preset.randomByCountry;
+    proxyGeo = preset.country || '';
+    proxyFallback = (preset.fallback as ProxyRoutingFallback) || 'strict';
+  }
 
   function addStep() {
     steps = [...steps, { action: 'click', selector: '', value: '' }];
@@ -33,15 +53,29 @@
 
   async function submit() {
     if (!name || !url) return;
+    if (useRandomCountryProxy && !proxyGeo.trim()) {
+      errorMessage = 'Country code is required for random-by-country proxy routing.';
+      return;
+    }
     submitting = true;
 
-    const proxyConfig: ProxyConfig = {
-      server: proxyServer,
-      protocol: proxyProtocol,
-      username: proxyUsername,
-      password: proxyPassword,
-      geo: proxyGeo,
-    };
+    const proxyConfig: ProxyConfig = useRandomCountryProxy
+      ? {
+          server: '',
+          protocol: '',
+          username: '',
+          password: '',
+          geo: proxyGeo.trim().toUpperCase(),
+          fallback: proxyFallback,
+        }
+      : {
+          server: proxyServer,
+          protocol: proxyProtocol,
+          username: proxyUsername,
+          password: proxyPassword,
+          geo: proxyGeo.trim().toUpperCase(),
+          fallback: proxyFallback,
+        };
 
     // Set first step's value to URL if it's a navigate step
     const taskSteps = steps.map(s => {
@@ -55,10 +89,16 @@
       .split(',')
       .map(t => t.trim())
       .filter(t => t.length > 0);
+    const loggingPolicy: TaskLoggingPolicy = {
+      captureStepLogs,
+      captureNetworkLogs,
+      captureScreenshots,
+      maxExecutionLogs,
+    };
 
     try {
       errorMessage = '';
-      await CreateTask(name, url, taskSteps, proxyConfig, priority, autoStart, tags, taskTimeout);
+      await CreateTask(name, url, taskSteps, proxyConfig, priority, autoStart, tags, taskTimeout, loggingPolicy as any);
       dispatch('created');
       dispatch('close');
     } catch (err: any) {
@@ -117,7 +157,52 @@
         <span class="hint">0 = use default (5 min). Max 3600s.</span>
       </div>
 
+      <h4>Logging Policy</h4>
+      <div class="form-row">
+        <label class="checkbox">
+          <input type="checkbox" bind:checked={captureStepLogs} />
+          Capture step logs
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" bind:checked={captureNetworkLogs} />
+          Capture network logs
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" bind:checked={captureScreenshots} />
+          Capture screenshots
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="task-max-logs">Max execution logs</label>
+        <input id="task-max-logs" type="number" bind:value={maxExecutionLogs} min="1" max="5000" />
+        <span class="hint">Limit in-memory execution logs for high-throughput runs.</span>
+      </div>
+
       <h4>Proxy (Optional)</h4>
+      {#if routingPresets.length}
+        <div class="form-group">
+          <label for="task-routing-preset">Routing Preset</label>
+          <select id="task-routing-preset" bind:value={selectedPresetId} on:change={() => applyPreset(selectedPresetId)}>
+            <option value="">Custom</option>
+            {#each routingPresets as preset}
+              <option value={preset.id}>{preset.name}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
+      <label class="checkbox">
+        <input type="checkbox" bind:checked={useRandomCountryProxy} />
+        Random healthy proxy by country
+      </label>
+      <div class="hint" style="margin-bottom:8px;">If enabled, leave server credentials unused and FlowPilot will randomly choose a healthy proxy from the selected country code, optionally falling back if that country pool is exhausted.</div>
+      <div class="form-group">
+        <label for="proxy-fallback">Fallback</label>
+        <select id="proxy-fallback" bind:value={proxyFallback}>
+          <option value="strict">Strict country only</option>
+          <option value="any_healthy">Fallback to any healthy proxy</option>
+          <option value="direct">Fallback to direct connection</option>
+        </select>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label for="proxy-protocol">Protocol</label>

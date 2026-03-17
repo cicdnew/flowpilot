@@ -14,6 +14,8 @@ type AdvancedBatchInput struct {
 	Priority       int         `json:"priority"`
 	Proxy          ProxyConfig `json:"proxy"`
 	Tags           []string    `json:"tags,omitempty"`
+	ProxyCountry   string      `json:"proxyCountry,omitempty"`
+	ProxyFallback  string      `json:"proxyFallback,omitempty"`
 	AutoStart      bool        `json:"autoStart"`
 	Headless       *bool       `json:"headless,omitempty"` // nil defaults to true for backwards compatibility
 }

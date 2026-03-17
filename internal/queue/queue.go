@@ -27,52 +27,68 @@ var ErrBatchPaused = errors.New("batch is paused")
 // Queue manages task scheduling, concurrency limiting, and execution using
 // a fixed worker pool with a priority heap. Higher-priority tasks are
 // dequeued first; within the same priority level, tasks are processed FIFO.
-type Queue struct {
-	db           *database.DB
-	runner       *browser.Runner
-	proxyManager *proxy.Manager
-	workerCount  int
-	maxPending   int
-	onEvent      EventCallback
-	metrics      models.QueueMetrics
+type taskStateWrite struct {
+	change database.TaskStateChange
+}
 
-	mu        sync.Mutex
-	cond      *sync.Cond
-	pq        taskHeap            // main priority queue
-	pausedPQ  taskHeap            // tasks from paused batches
-	heapSet   map[string]struct{} // O(1) lookup for pq
-	pausedSet map[string]struct{} // O(1) lookup for pausedPQ
-	running   map[string]context.CancelFunc
-	cancelled map[string]bool
-	paused    map[string]bool // batchID → paused
-	stopped   bool
-	stopOnce  sync.Once
-	stopCh    chan struct{}
-	workerWg  sync.WaitGroup
+type Queue struct {
+	db                    *database.DB
+	runner                *browser.Runner
+	proxyManager          *proxy.Manager
+	workerCount           int
+	maxPending            int
+	onEvent               EventCallback
+	metrics               models.QueueMetrics
+	proxyConcurrencyLimit int
+	persistenceBatchSize  int
+	persistenceInterval   time.Duration
+	persistenceCh         chan taskStateWrite
+	persistenceWg         sync.WaitGroup
+
+	mu             sync.Mutex
+	cond           *sync.Cond
+	pq             taskHeap            // main priority queue
+	pausedPQ       taskHeap            // tasks from paused batches
+	heapSet        map[string]struct{} // O(1) lookup for pq
+	pausedSet      map[string]struct{} // O(1) lookup for pausedPQ
+	running        map[string]context.CancelFunc
+	cancelled      map[string]bool
+	paused         map[string]bool // batchID → paused
+	runningProxied int
+	stopped        bool
+	stopOnce       sync.Once
+	stopCh         chan struct{}
+	workerWg       sync.WaitGroup
 }
 
 // New creates a Queue with the given concurrency limit and event callback.
 // It spawns workerCount fixed workers with a staggered 100ms warm-up delay.
 func New(db *database.DB, runner *browser.Runner, maxConcurrency int, onEvent EventCallback) *Queue {
 	q := &Queue{
-		db:          db,
-		runner:      runner,
-		workerCount: maxConcurrency,
-		maxPending:  maxConcurrency * 10, // default: 10x concurrency limit
-		onEvent:     onEvent,
-		metrics:     models.QueueMetrics{},
-		pq:          make(taskHeap, 0),
-		pausedPQ:    make(taskHeap, 0),
-		heapSet:     make(map[string]struct{}, maxConcurrency*10),
-		pausedSet:   make(map[string]struct{}, maxConcurrency*10),
-		running:     make(map[string]context.CancelFunc),
-		cancelled:   make(map[string]bool),
-		paused:      make(map[string]bool),
-		stopCh:      make(chan struct{}),
+		db:                   db,
+		runner:               runner,
+		workerCount:          maxConcurrency,
+		maxPending:           maxConcurrency * 10, // default: 10x concurrency limit
+		onEvent:              onEvent,
+		metrics:              models.QueueMetrics{},
+		persistenceBatchSize: max(16, maxConcurrency),
+		persistenceInterval:  100 * time.Millisecond,
+		persistenceCh:        make(chan taskStateWrite, max(64, maxConcurrency*4)),
+		pq:                   make(taskHeap, 0),
+		pausedPQ:             make(taskHeap, 0),
+		heapSet:              make(map[string]struct{}, maxConcurrency*10),
+		pausedSet:            make(map[string]struct{}, maxConcurrency*10),
+		running:              make(map[string]context.CancelFunc),
+		cancelled:            make(map[string]bool),
+		paused:               make(map[string]bool),
+		stopCh:               make(chan struct{}),
 	}
 	q.cond = sync.NewCond(&q.mu)
 	heap.Init(&q.pq)
 	heap.Init(&q.pausedPQ)
+
+	q.persistenceWg.Add(1)
+	go q.persistenceWorker()
 
 	// Start fixed worker pool with staggered warm-up.
 	for i := 0; i < maxConcurrency; i++ {
@@ -98,6 +114,13 @@ func (q *Queue) SetProxyManager(pm *proxy.Manager) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.proxyManager = pm
+}
+
+func (q *Queue) SetProxyConcurrencyLimit(limit int) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.proxyConcurrencyLimit = limit
+	q.cond.Broadcast()
 }
 
 func (q *Queue) getProxyManager() *proxy.Manager {
@@ -138,7 +161,7 @@ func (q *Queue) Submit(ctx context.Context, task models.Task) error {
 	q.metrics.TotalSubmitted++
 	q.mu.Unlock()
 
-	if err := q.db.UpdateTaskStatus(context.Background(), task.ID, models.TaskStatusQueued, ""); err != nil {
+	if err := q.enqueueTaskStateChange(database.TaskStateChange{TaskID: task.ID, Status: models.TaskStatusQueued}); err != nil {
 		q.mu.Lock()
 		q.removeFromHeap(task.ID)
 		q.mu.Unlock()
@@ -196,7 +219,11 @@ func (q *Queue) SubmitBatch(ctx context.Context, tasks []models.Task) error {
 	for i, t := range added {
 		taskIDs[i] = t.ID
 	}
-	if err := q.db.BatchUpdateTaskStatus(ctx, taskIDs, models.TaskStatusQueued, ""); err != nil {
+	changes := make([]database.TaskStateChange, 0, len(taskIDs))
+	for _, id := range taskIDs {
+		changes = append(changes, database.TaskStateChange{TaskID: id, Status: models.TaskStatusQueued})
+	}
+	if err := q.enqueueTaskStateChanges(changes); err != nil {
 		q.mu.Lock()
 		for _, t := range added {
 			q.removeFromHeap(t.ID)
@@ -231,7 +258,7 @@ func (q *Queue) Cancel(taskID string) error {
 		q.mu.Unlock()
 	}
 
-	if err := q.db.UpdateTaskStatus(context.Background(), taskID, models.TaskStatusCancelled, "cancelled by user"); err != nil {
+	if err := q.db.BatchApplyTaskStateChanges(context.Background(), []database.TaskStateChange{{TaskID: taskID, Status: models.TaskStatusCancelled, Error: "cancelled by user"}}); err != nil {
 		return fmt.Errorf("update task status to cancelled: %w", err)
 	}
 	q.emitEvent(taskID, models.TaskStatusCancelled, "cancelled by user")
@@ -293,6 +320,71 @@ func (q *Queue) ResumeBatch(batchID string) {
 	}
 }
 
+func (q *Queue) enqueueTaskStateChange(change database.TaskStateChange) error {
+	return q.enqueueTaskStateChanges([]database.TaskStateChange{change})
+}
+
+func (q *Queue) enqueueTaskStateChanges(changes []database.TaskStateChange) error {
+	if len(changes) == 0 {
+		return nil
+	}
+
+	q.mu.Lock()
+	stopped := q.stopped
+	q.mu.Unlock()
+	if stopped {
+		return q.db.BatchApplyTaskStateChanges(context.Background(), changes)
+	}
+
+	for _, change := range changes {
+		select {
+		case q.persistenceCh <- taskStateWrite{change: change}:
+		default:
+			if err := q.db.BatchApplyTaskStateChanges(context.Background(), []database.TaskStateChange{change}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (q *Queue) persistenceWorker() {
+	defer q.persistenceWg.Done()
+
+	ticker := time.NewTicker(q.persistenceInterval)
+	defer ticker.Stop()
+
+	batch := make([]database.TaskStateChange, 0, q.persistenceBatchSize)
+	flush := func() {
+		if len(batch) == 0 {
+			return
+		}
+		pending := append([]database.TaskStateChange(nil), batch...)
+		batch = batch[:0]
+		if err := q.db.BatchApplyTaskStateChanges(context.Background(), pending); err != nil {
+			for _, change := range pending {
+				q.emitEvent(change.TaskID, models.TaskStatusFailed, fmt.Sprintf("persist state change: %v", err))
+			}
+		}
+	}
+
+	for {
+		select {
+		case write, ok := <-q.persistenceCh:
+			if !ok {
+				flush()
+				return
+			}
+			batch = append(batch, write.change)
+			if len(batch) >= q.persistenceBatchSize {
+				flush()
+			}
+		case <-ticker.C:
+			flush()
+		}
+	}
+}
+
 // Stop cancels all running and pending tasks and prevents new submissions.
 func (q *Queue) Stop() {
 	q.stopOnce.Do(func() {
@@ -304,6 +396,7 @@ func (q *Queue) Stop() {
 			cancel()
 			delete(q.running, id)
 		}
+		q.runningProxied = 0
 
 		// Cancel all tasks in the main heap.
 		for q.pq.Len() > 0 {
@@ -326,6 +419,8 @@ func (q *Queue) Stop() {
 
 		// Wait for all workers to finish.
 		q.workerWg.Wait()
+		close(q.persistenceCh)
+		q.persistenceWg.Wait()
 	})
 }
 
@@ -347,6 +442,11 @@ func (q *Queue) Metrics() models.QueueMetrics {
 	metrics.Running = len(q.running)
 	metrics.Queued = q.pq.Len() + q.pausedPQ.Len()
 	metrics.Pending = metrics.Queued + metrics.Running
+	metrics.RunningProxied = q.runningProxied
+	metrics.ProxyConcurrencyLimit = q.proxyConcurrencyLimit
+	metrics.PersistenceQueueDepth = len(q.persistenceCh)
+	metrics.PersistenceQueueCapacity = cap(q.persistenceCh)
+	metrics.PersistenceBatchSize = q.persistenceBatchSize
 	return metrics
 }
 
@@ -358,7 +458,7 @@ func (q *Queue) RecoverStaleTasks(ctx context.Context) error {
 		return fmt.Errorf("list stale tasks: %w", err)
 	}
 	for _, task := range stale {
-		if err := q.db.UpdateTaskStatus(ctx, task.ID, models.TaskStatusPending, "recovered after restart"); err != nil {
+		if err := q.enqueueTaskStateChange(database.TaskStateChange{TaskID: task.ID, Status: models.TaskStatusPending, Error: "recovered after restart"}); err != nil {
 			return fmt.Errorf("reset stale task %s: %w", task.ID, err)
 		}
 		task.Status = models.TaskStatusPending
@@ -376,39 +476,61 @@ func (q *Queue) worker(_ int) {
 
 	for {
 		q.mu.Lock()
-		// Wait until there's work or the queue is stopped.
-		for q.pq.Len() == 0 && !q.stopped {
+		for !q.stopped {
+			item, countsAgainstProxyLimit, autoProxy := q.dequeueRunnableLocked()
+			if item != nil {
+				q.mu.Unlock()
+				q.executeTask(item.ctx, item.task, countsAgainstProxyLimit, autoProxy)
+				goto next
+			}
 			q.cond.Wait()
 		}
-		if q.stopped {
-			q.mu.Unlock()
-			return
-		}
+		q.mu.Unlock()
+		return
+	next:
+	}
+}
 
+func (q *Queue) dequeueRunnableLocked() (*heapItem, bool, bool) {
+	deferred := make([]*heapItem, 0)
+	for q.pq.Len() > 0 {
 		item := heap.Pop(&q.pq).(*heapItem)
 		delete(q.heapSet, item.task.ID)
 
-		// Skip cancelled tasks.
 		if q.cancelled[item.task.ID] {
 			delete(q.cancelled, item.task.ID)
 			item.cancel()
-			q.mu.Unlock()
 			continue
 		}
-
-		// Move paused-batch items to the paused heap.
 		if item.task.BatchID != "" && q.paused[item.task.BatchID] {
 			heap.Push(&q.pausedPQ, item)
 			q.pausedSet[item.task.ID] = struct{}{}
-			q.mu.Unlock()
 			continue
 		}
 
-		q.running[item.task.ID] = item.cancel
-		q.mu.Unlock()
+		autoProxy := item.task.Proxy.Server == "" && q.proxyManager != nil
+		countsAgainstProxyLimit := item.task.Proxy.Server != "" || autoProxy
+		if countsAgainstProxyLimit && q.proxyConcurrencyLimit > 0 && q.runningProxied >= q.proxyConcurrencyLimit {
+			deferred = append(deferred, item)
+			continue
+		}
 
-		q.executeTask(item.ctx, item.task)
+		for _, pending := range deferred {
+			heap.Push(&q.pq, pending)
+			q.heapSet[pending.task.ID] = struct{}{}
+		}
+		q.running[item.task.ID] = item.cancel
+		if countsAgainstProxyLimit {
+			q.runningProxied++
+		}
+		return item, countsAgainstProxyLimit, autoProxy
 	}
+
+	for _, pending := range deferred {
+		heap.Push(&q.pq, pending)
+		q.heapSet[pending.task.ID] = struct{}{}
+	}
+	return nil, false, false
 }
 
 type retryInfo struct {
@@ -418,12 +540,16 @@ type retryInfo struct {
 	parentCtx   context.Context
 }
 
-func (q *Queue) executeTask(ctx context.Context, task models.Task) {
+func (q *Queue) executeTask(ctx context.Context, task models.Task, countsAgainstProxyLimit bool, autoProxy bool) {
 	defer func() {
 		q.mu.Lock()
 		delete(q.running, task.ID)
 		delete(q.cancelled, task.ID)
+		if countsAgainstProxyLimit && q.runningProxied > 0 {
+			q.runningProxied--
+		}
 		q.mu.Unlock()
+		q.cond.Broadcast()
 	}()
 
 	q.mu.Lock()
@@ -451,16 +577,49 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task) {
 	q.running[task.ID] = cancel
 	q.mu.Unlock()
 
-	var selectedProxyID string
 	pm := q.getProxyManager()
-	if task.Proxy.Server == "" && pm != nil {
-		if p, err := pm.SelectProxy(task.Proxy.Geo); err == nil {
-			selectedProxyID = p.ID
-			task.Proxy = p.ToProxyConfig()
+	var reservation *proxy.Reservation
+	if autoProxy && pm != nil {
+		fallback := task.Proxy.Fallback
+		if fallback == "" {
+			fallback = models.ProxyFallbackStrict
+		}
+		lease, fallbackUsed, direct, err := pm.ReserveProxyWithFallback(task.Proxy.Geo, fallback)
+		if err == nil {
+			if lease != nil {
+				reservation = lease
+				task.Proxy = lease.ProxyConfig()
+				task.Proxy.Fallback = fallback
+			} else if direct {
+				task.Proxy = models.ProxyConfig{}
+				q.mu.Lock()
+				if countsAgainstProxyLimit && q.runningProxied > 0 {
+					q.runningProxied--
+					countsAgainstProxyLimit = false
+				}
+				q.mu.Unlock()
+				q.cond.Broadcast()
+			}
+			if fallbackUsed {
+				q.emitEvent(task.ID, models.TaskStatusQueued, fmt.Sprintf("proxy country fallback applied for %s", task.Proxy.Geo))
+			}
+		} else if errors.Is(err, proxy.ErrNoHealthyProxies) {
+			q.mu.Lock()
+			if countsAgainstProxyLimit && q.runningProxied > 0 {
+				q.runningProxied--
+				countsAgainstProxyLimit = false
+			}
+			q.mu.Unlock()
+			q.cond.Broadcast()
+			q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("reserve proxy: %v", err))
+			return
+		} else {
+			q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("reserve proxy: %v", err))
+			return
 		}
 	}
 
-	if err := q.db.UpdateTaskStatus(taskCtx, task.ID, models.TaskStatusRunning, ""); err != nil {
+	if err := q.enqueueTaskStateChange(database.TaskStateChange{TaskID: task.ID, Status: models.TaskStatusRunning}); err != nil {
 		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
 		return
 	}
@@ -468,29 +627,28 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task) {
 
 	result, err := q.runner.RunTask(taskCtx, task)
 
-	if result != nil && len(result.StepLogs) > 0 {
-		if slErr := q.db.InsertStepLogs(ctx, task.ID, result.StepLogs); slErr != nil {
-			q.emitEvent(task.ID, task.Status, fmt.Sprintf("persist step logs: %v", slErr))
-		}
-	}
-
-	if result != nil && len(result.NetworkLogs) > 0 {
-		if nlErr := q.db.InsertNetworkLogs(ctx, task.ID, result.NetworkLogs); nlErr != nil {
-			q.emitEvent(task.ID, task.Status, fmt.Sprintf("persist network logs: %v", nlErr))
-		}
-	}
-
-	if selectedProxyID != "" {
-		if pm := q.getProxyManager(); pm != nil {
-			if recordErr := pm.RecordUsage(selectedProxyID, err == nil); recordErr != nil {
-				q.emitEvent(task.ID, task.Status, fmt.Sprintf("proxy usage recording failed: %v", recordErr))
-			}
+	if reservation != nil {
+		if completeErr := reservation.Complete(err == nil); completeErr != nil {
+			q.emitEvent(task.ID, task.Status, fmt.Sprintf("proxy usage recording failed: %v", completeErr))
 		}
 	}
 
 	var retry retryInfo
 	if err != nil {
-		retry = q.handleFailure(ctx, task, err)
+		// Check if this is a cancellation error
+		if errors.Is(err, context.Canceled) {
+			// Task was cancelled, update status accordingly
+			if err := q.db.BatchApplyTaskStateChanges(context.Background(), []database.TaskStateChange{{TaskID: task.ID, Status: models.TaskStatusCancelled, Error: "cancelled by user"}}); err != nil {
+				q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
+			} else {
+				q.mu.Lock()
+				q.metrics.TotalFailed++ // Still count as failed for metrics
+				q.mu.Unlock()
+			}
+			q.emitEvent(task.ID, models.TaskStatusCancelled, "cancelled by user")
+			return
+		}
+		retry = q.handleFailure(ctx, task, err, result)
 	} else {
 		q.handleSuccess(task, result)
 	}
@@ -500,9 +658,21 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task) {
 	}
 }
 
-func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execErr error) retryInfo {
+func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execErr error, result *models.TaskResult) retryInfo {
 	if task.RetryCount < task.MaxRetries {
-		if err := q.db.IncrementRetry(context.Background(), task.ID); err != nil {
+		if result != nil {
+			if len(result.StepLogs) > 0 {
+				if slErr := q.db.InsertStepLogs(parentCtx, task.ID, result.StepLogs); slErr != nil {
+					q.emitEvent(task.ID, task.Status, fmt.Sprintf("persist step logs: %v", slErr))
+				}
+			}
+			if len(result.NetworkLogs) > 0 {
+				if nlErr := q.db.InsertNetworkLogs(parentCtx, task.ID, result.NetworkLogs); nlErr != nil {
+					q.emitEvent(task.ID, task.Status, fmt.Sprintf("persist network logs: %v", nlErr))
+				}
+			}
+		}
+		if err := q.enqueueTaskStateChange(database.TaskStateChange{TaskID: task.ID, Status: models.TaskStatusRetrying, Error: execErr.Error(), IncrementRetry: true}); err != nil {
 			q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("increment retry: %v", err))
 			return retryInfo{}
 		}
@@ -528,7 +698,13 @@ func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execE
 		}
 	}
 
-	if err := q.db.UpdateTaskStatus(context.Background(), task.ID, models.TaskStatusFailed, execErr.Error()); err != nil {
+	stepLogs := []models.StepLog(nil)
+	networkLogs := []models.NetworkLog(nil)
+	if result != nil {
+		stepLogs = result.StepLogs
+		networkLogs = result.NetworkLogs
+	}
+	if err := q.db.FinalizeTaskFailure(context.Background(), task.ID, execErr.Error(), stepLogs, networkLogs); err != nil {
 		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
 		return retryInfo{}
 	}
@@ -545,13 +721,13 @@ func (q *Queue) scheduleRetry(ri retryInfo) {
 	case <-timer.C:
 	case <-q.stopCh:
 		timer.Stop()
-		if err := q.db.UpdateTaskStatus(context.Background(), ri.task.ID, models.TaskStatusCancelled, "cancelled during retry backoff (queue stopped)"); err != nil {
+		if err := q.db.BatchApplyTaskStateChanges(context.Background(), []database.TaskStateChange{{TaskID: ri.task.ID, Status: models.TaskStatusCancelled, Error: "cancelled during retry backoff (queue stopped)"}}); err != nil {
 			q.emitEvent(ri.task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
 		}
 		return
 	case <-ri.parentCtx.Done():
 		timer.Stop()
-		if err := q.db.UpdateTaskStatus(context.Background(), ri.task.ID, models.TaskStatusCancelled, "cancelled during retry backoff"); err != nil {
+		if err := q.db.BatchApplyTaskStateChanges(context.Background(), []database.TaskStateChange{{TaskID: ri.task.ID, Status: models.TaskStatusCancelled, Error: "cancelled during retry backoff"}}); err != nil {
 			q.emitEvent(ri.task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
 		}
 		return
@@ -559,7 +735,7 @@ func (q *Queue) scheduleRetry(ri retryInfo) {
 
 	// Re-submit via the heap instead of spawning another goroutine.
 	if err := q.Submit(ri.parentCtx, ri.task); err != nil {
-		if err2 := q.db.UpdateTaskStatus(context.Background(), ri.task.ID, models.TaskStatusFailed, fmt.Sprintf("retry re-submit: %v", err)); err2 != nil {
+		if err2 := q.db.BatchApplyTaskStateChanges(context.Background(), []database.TaskStateChange{{TaskID: ri.task.ID, Status: models.TaskStatusFailed, Error: fmt.Sprintf("retry re-submit: %v", err)}}); err2 != nil {
 			q.emitEvent(ri.task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err2))
 		}
 		q.emitEvent(ri.task.ID, models.TaskStatusFailed, fmt.Sprintf("retry re-submit: %v", err))
@@ -567,12 +743,12 @@ func (q *Queue) scheduleRetry(ri retryInfo) {
 }
 
 func (q *Queue) handleSuccess(task models.Task, result *models.TaskResult) {
-	if err := q.db.UpdateTaskResult(context.Background(), task.ID, *result); err != nil {
-		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("save result: %v", err))
+	if result == nil {
+		q.emitEvent(task.ID, models.TaskStatusFailed, "save result: missing task result")
 		return
 	}
-	if err := q.db.UpdateTaskStatus(context.Background(), task.ID, models.TaskStatusCompleted, ""); err != nil {
-		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
+	if err := q.db.FinalizeTaskSuccess(context.Background(), task.ID, *result); err != nil {
+		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("save result: %v", err))
 		return
 	}
 	q.mu.Lock()

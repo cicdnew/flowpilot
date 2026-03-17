@@ -11,7 +11,7 @@ import (
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-func (a *App) CreateTask(name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority int, autoStart bool, tags []string, timeout int) (*models.Task, error) {
+func (a *App) CreateTask(name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority int, autoStart bool, tags []string, timeout int, loggingPolicy *models.TaskLoggingPolicy) (*models.Task, error) {
 	if err := a.ready(); err != nil {
 		return nil, err
 	}
@@ -26,17 +26,18 @@ func (a *App) CreateTask(name, url string, steps []models.TaskStep, proxyConfig 
 	}
 
 	task := models.Task{
-		ID:         uuid.New().String(),
-		Name:       name,
-		URL:        url,
-		Steps:      steps,
-		Proxy:      proxyConfig,
-		Priority:   models.TaskPriority(priority),
-		Status:     models.TaskStatusPending,
-		MaxRetries: 3,
-		Timeout:    timeout,
-		Tags:       tags,
-		CreatedAt:  time.Now(),
+		ID:            uuid.New().String(),
+		Name:          name,
+		URL:           url,
+		Steps:         steps,
+		Proxy:         proxyConfig,
+		Priority:      models.TaskPriority(priority),
+		Status:        models.TaskStatusPending,
+		MaxRetries:    3,
+		Timeout:       timeout,
+		Tags:          tags,
+		CreatedAt:     time.Now(),
+		LoggingPolicy: loggingPolicy,
 	}
 
 	if err := a.db.CreateTask(a.ctx, task); err != nil {
@@ -124,7 +125,7 @@ func (a *App) CancelTask(id string) error {
 	return a.queue.Cancel(id)
 }
 
-func (a *App) UpdateTask(id, name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority int, tags []string, timeout int) error {
+func (a *App) UpdateTask(id, name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority int, tags []string, timeout int, loggingPolicy *models.TaskLoggingPolicy) error {
 	if err := a.ready(); err != nil {
 		return err
 	}
@@ -137,7 +138,7 @@ func (a *App) UpdateTask(id, name, url string, steps []models.TaskStep, proxyCon
 	if err := validation.ValidateTimeout(timeout); err != nil {
 		return fmt.Errorf("update task: %w", err)
 	}
-	return a.db.UpdateTask(a.ctx, id, name, url, steps, proxyConfig, models.TaskPriority(priority), tags, timeout)
+	return a.db.UpdateTask(a.ctx, id, name, url, steps, proxyConfig, models.TaskPriority(priority), tags, timeout, loggingPolicy)
 }
 
 func (a *App) DeleteTask(id string) error {

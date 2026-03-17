@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { selectedTask, tasks } from '../lib/store';
-  import { UpdateTask, GetTask, ListTaskEvents } from '../../wailsjs/go/main/App';
-  import type { Task, TaskStep, ProxyConfig, TaskLifecycleEvent } from '../lib/types';
+  import { selectedTask, replaceTaskInStore } from '../lib/store';
+  import { UpdateTask, GetTask, ListTaskEvents, ListProxyRoutingPresets } from '../../wailsjs/go/main/App';
+  import type { Task, TaskStep, ProxyConfig, TaskLifecycleEvent, TaskLoggingPolicy, ProxyRoutingFallback, ProxyRoutingPreset } from '../lib/types';
 
   let editing = false;
   let editName = '';
@@ -13,14 +13,35 @@
   let editProxyUsername = '';
   let editProxyPassword = '';
   let editProxyGeo = '';
+  let editUseRandomCountryProxy = false;
+  let editProxyFallback: ProxyRoutingFallback = 'strict';
+  let routingPresets: ProxyRoutingPreset[] = [];
+  let selectedPresetId = '';
   let editTags = '';
   let editTimeout = 0;
+  let editCaptureStepLogs = true;
+  let editCaptureNetworkLogs = false;
+  let editCaptureScreenshots = false;
+  let editMaxExecutionLogs = 250;
   let editError = '';
   let saving = false;
   let auditEvents: TaskLifecycleEvent[] = [];
   let auditLoading = false;
+  let hydratingTaskId: string | null = null;
 
   const actions = ['navigate', 'click', 'type', 'wait', 'screenshot', 'extract', 'scroll', 'select'];
+
+  ListProxyRoutingPresets().then((list) => {
+    routingPresets = (list || []) as ProxyRoutingPreset[];
+  }).catch(() => {});
+
+  function applyPreset(id: string) {
+    const preset = routingPresets.find(p => p.id === id);
+    if (!preset) return;
+    editUseRandomCountryProxy = preset.randomByCountry;
+    editProxyGeo = preset.country || '';
+    editProxyFallback = (preset.fallback as ProxyRoutingFallback) || 'strict';
+  }
 
   function startEdit() {
     if (!$selectedTask) return;
@@ -33,8 +54,14 @@
     editProxyUsername = $selectedTask.proxy?.username || '';
     editProxyPassword = $selectedTask.proxy?.password || '';
     editProxyGeo = $selectedTask.proxy?.geo || '';
+    editUseRandomCountryProxy = !($selectedTask.proxy?.server);
+    editProxyFallback = ($selectedTask.proxy?.fallback as ProxyRoutingFallback) || 'strict';
     editTags = ($selectedTask.tags ?? []).join(', ');
     editTimeout = $selectedTask.timeout ?? 0;
+    editCaptureStepLogs = $selectedTask.loggingPolicy?.captureStepLogs ?? true;
+    editCaptureNetworkLogs = $selectedTask.loggingPolicy?.captureNetworkLogs ?? false;
+    editCaptureScreenshots = $selectedTask.loggingPolicy?.captureScreenshots ?? false;
+    editMaxExecutionLogs = $selectedTask.loggingPolicy?.maxExecutionLogs ?? 250;
     editError = '';
     editing = true;
   }
@@ -55,19 +82,40 @@
   async function saveEdit() {
     if (!$selectedTask) return;
     saving = true;
-    const proxyConfig: ProxyConfig = {
-      server: editProxyServer,
-      protocol: editProxyProtocol,
-      username: editProxyUsername,
-      password: editProxyPassword,
-      geo: editProxyGeo,
-    };
+    if (editUseRandomCountryProxy && !editProxyGeo.trim()) {
+      editError = 'Country code is required for random-by-country proxy routing.';
+      saving = false;
+      return;
+    }
+    const proxyConfig: ProxyConfig = editUseRandomCountryProxy
+      ? {
+          server: '',
+          protocol: '',
+          username: '',
+          password: '',
+          geo: editProxyGeo.trim().toUpperCase(),
+          fallback: editProxyFallback,
+        }
+      : {
+          server: editProxyServer,
+          protocol: editProxyProtocol,
+          username: editProxyUsername,
+          password: editProxyPassword,
+          geo: editProxyGeo.trim().toUpperCase(),
+          fallback: editProxyFallback,
+        };
     try {
       editError = '';
       const tags = editTags.split(',').map(t => t.trim()).filter(t => t.length > 0);
-      await UpdateTask($selectedTask.id, editName, editUrl, editSteps, proxyConfig, editPriority, tags, editTimeout);
+      const loggingPolicy: TaskLoggingPolicy = {
+        captureStepLogs: editCaptureStepLogs,
+        captureNetworkLogs: editCaptureNetworkLogs,
+        captureScreenshots: editCaptureScreenshots,
+        maxExecutionLogs: editMaxExecutionLogs,
+      };
+      await UpdateTask($selectedTask.id, editName, editUrl, editSteps, proxyConfig, editPriority, tags, editTimeout, loggingPolicy as any);
       const updated = await GetTask($selectedTask.id) as Task;
-      tasks.update(list => list.map(t => t.id === updated.id ? updated : t));
+      replaceTaskInStore(updated);
       editing = false;
     } catch (err: any) {
       editError = err?.message || String(err);
@@ -98,10 +146,28 @@
     }
   }
 
+  async function hydrateSelectedTask(task: Task) {
+    if (hydratingTaskId === task.id) return;
+    hydratingTaskId = task.id;
+    try {
+      const full = await GetTask(task.id) as Task;
+      replaceTaskInStore(full);
+    } catch (_) {
+    } finally {
+      if (hydratingTaskId === task.id) {
+        hydratingTaskId = null;
+      }
+    }
+  }
+
   $: if ($selectedTask) {
     loadAudit();
+    if (($selectedTask.steps?.length ?? 0) === 0 && hydratingTaskId !== $selectedTask.id) {
+      hydrateSelectedTask($selectedTask as Task);
+    }
   } else {
     auditEvents = [];
+    hydratingTaskId = null;
   }
 </script>
 
@@ -136,6 +202,27 @@
           </select>
         </div>
         <h4>Proxy</h4>
+        {#if routingPresets.length}
+          <div class="form-group">
+            <label for="edit-routing-preset">Routing Preset</label>
+            <select id="edit-routing-preset" bind:value={selectedPresetId} on:change={() => applyPreset(selectedPresetId)}>
+              <option value="">Custom</option>
+              {#each routingPresets as preset}
+                <option value={preset.id}>{preset.name}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+        <label class="checkbox"><input type="checkbox" bind:checked={editUseRandomCountryProxy} /> Random healthy proxy by country</label>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">If enabled, FlowPilot will ignore the server credentials and randomly choose a healthy proxy from the selected country.</div>
+        <div class="form-group">
+          <label for="edit-proxy-fallback">Fallback</label>
+          <select id="edit-proxy-fallback" bind:value={editProxyFallback}>
+            <option value="strict">Strict country only</option>
+            <option value="any_healthy">Fallback to any healthy proxy</option>
+            <option value="direct">Fallback to direct connection</option>
+          </select>
+        </div>
         <div class="form-row-sm">
           <select bind:value={editProxyProtocol} style="min-width:80px">
             <option value="http">http</option>
@@ -158,6 +245,16 @@
           <label for="edit-timeout">Timeout (seconds)</label>
           <input id="edit-timeout" type="number" bind:value={editTimeout} min="0" max="3600" placeholder="0 = default (5 min)" />
           <span style="font-size:11px;color:var(--text-muted)">0 = use default (5 min). Max 3600s.</span>
+        </div>
+        <h4>Logging Policy</h4>
+        <div class="form-row-sm">
+          <label class="checkbox"><input type="checkbox" bind:checked={editCaptureStepLogs} /> Step logs</label>
+          <label class="checkbox"><input type="checkbox" bind:checked={editCaptureNetworkLogs} /> Network logs</label>
+          <label class="checkbox"><input type="checkbox" bind:checked={editCaptureScreenshots} /> Screenshots</label>
+        </div>
+        <div class="form-group">
+          <label for="edit-max-logs">Max execution logs</label>
+          <input id="edit-max-logs" type="number" bind:value={editMaxExecutionLogs} min="1" max="5000" />
         </div>
         <h4>Steps</h4>
         {#each editSteps as step, i}

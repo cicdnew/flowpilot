@@ -16,9 +16,16 @@ type scanner interface {
 	Scan(dest ...any) error
 }
 
+type TaskStateChange struct {
+	TaskID         string
+	Status         models.TaskStatus
+	Error          string
+	IncrementRetry bool
+}
+
 func (db *DB) scanTask(row scanner) (*models.Task, error) {
 	var t models.Task
-	var stepsJSON, resultJSON, tagsJSON string
+	var stepsJSON, resultJSON, tagsJSON, loggingPolicyJSON string
 	var startedAt, completedAt sql.NullTime
 	var headlessInt int
 
@@ -26,7 +33,7 @@ func (db *DB) scanTask(row scanner) (*models.Task, error) {
 		&t.ID, &t.Name, &t.URL, &stepsJSON, &t.BatchID, &t.FlowID, &headlessInt,
 		&t.Proxy.Server, &t.Proxy.Username, &t.Proxy.Password, &t.Proxy.Geo, &t.Proxy.Protocol,
 		&t.Priority, &t.Status, &t.RetryCount, &t.MaxRetries, &t.Timeout, &t.Error,
-		&resultJSON, &tagsJSON, &t.CreatedAt, &startedAt, &completedAt,
+		&resultJSON, &tagsJSON, &loggingPolicyJSON, &t.CreatedAt, &startedAt, &completedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -58,6 +65,13 @@ func (db *DB) scanTask(row scanner) (*models.Task, error) {
 			return nil, fmt.Errorf("parse tags JSON: %w", err)
 		}
 	}
+	if loggingPolicyJSON != "" {
+		var policy models.TaskLoggingPolicy
+		if err := json.Unmarshal([]byte(loggingPolicyJSON), &policy); err != nil {
+			return nil, fmt.Errorf("parse logging policy JSON: %w", err)
+		}
+		t.LoggingPolicy = &policy
+	}
 
 	if decUser, err := crypto.Decrypt(t.Proxy.Username); err == nil {
 		t.Proxy.Username = decUser
@@ -73,6 +87,51 @@ func (db *DB) scanTaskRow(rows *sql.Rows) (*models.Task, error) {
 	return db.scanTask(rows)
 }
 
+func (db *DB) scanTaskSummary(row scanner) (*models.Task, error) {
+	var t models.Task
+	var tagsJSON, loggingPolicyJSON string
+	var startedAt, completedAt sql.NullTime
+	var headlessInt int
+
+	err := row.Scan(
+		&t.ID, &t.Name, &t.URL, &t.BatchID, &t.FlowID, &headlessInt,
+		&t.Proxy.Server, &t.Proxy.Geo, &t.Proxy.Protocol,
+		&t.Priority, &t.Status, &t.RetryCount, &t.MaxRetries, &t.Timeout, &t.Error,
+		&tagsJSON, &loggingPolicyJSON, &t.CreatedAt, &startedAt, &completedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if startedAt.Valid {
+		t.StartedAt = &startedAt.Time
+	}
+	if completedAt.Valid {
+		t.CompletedAt = &completedAt.Time
+	}
+
+	t.Headless = headlessInt != 0
+
+	if tagsJSON != "" {
+		if err := json.Unmarshal([]byte(tagsJSON), &t.Tags); err != nil {
+			return nil, fmt.Errorf("parse tags JSON: %w", err)
+		}
+	}
+	if loggingPolicyJSON != "" {
+		var policy models.TaskLoggingPolicy
+		if err := json.Unmarshal([]byte(loggingPolicyJSON), &policy); err != nil {
+			return nil, fmt.Errorf("parse logging policy JSON: %w", err)
+		}
+		t.LoggingPolicy = &policy
+	}
+
+	return &t, nil
+}
+
+func (db *DB) scanTaskSummaryRow(rows *sql.Rows) (*models.Task, error) {
+	return db.scanTaskSummary(rows)
+}
+
 func (db *DB) CreateTask(ctx context.Context, task models.Task) error {
 	stepsJSON, err := json.Marshal(task.Steps)
 	if err != nil {
@@ -81,6 +140,10 @@ func (db *DB) CreateTask(ctx context.Context, task models.Task) error {
 	tagsJSON, err := json.Marshal(task.Tags)
 	if err != nil {
 		return fmt.Errorf("marshal tags: %w", err)
+	}
+	loggingPolicyJSON, err := json.Marshal(task.LoggingPolicy)
+	if err != nil {
+		return fmt.Errorf("marshal logging policy: %w", err)
 	}
 
 	encUsername, err := crypto.Encrypt(task.Proxy.Username)
@@ -98,11 +161,11 @@ func (db *DB) CreateTask(ctx context.Context, task models.Task) error {
 	}
 
 	_, err = db.conn.ExecContext(ctx, `
-		INSERT INTO tasks (id, name, url, steps, batch_id, flow_id, headless, proxy_server, proxy_username, proxy_password, proxy_geo, proxy_protocol, priority, status, max_retries, timeout_seconds, tags, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO tasks (id, name, url, steps, batch_id, flow_id, headless, proxy_server, proxy_username, proxy_password, proxy_geo, proxy_protocol, priority, status, max_retries, timeout_seconds, tags, logging_policy, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.ID, task.Name, task.URL, string(stepsJSON), task.BatchID, task.FlowID, headless,
 		task.Proxy.Server, encUsername, encPassword, task.Proxy.Geo, task.Proxy.Protocol,
-		task.Priority, task.Status, task.MaxRetries, task.Timeout, string(tagsJSON), task.CreatedAt,
+		task.Priority, task.Status, task.MaxRetries, task.Timeout, string(tagsJSON), string(loggingPolicyJSON), task.CreatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("insert task %s: %w", task.ID, err)
@@ -118,6 +181,10 @@ func (db *DB) CreateTaskTx(ctx context.Context, tx *sql.Tx, task models.Task) er
 	tagsJSON, err := json.Marshal(task.Tags)
 	if err != nil {
 		return fmt.Errorf("marshal tags: %w", err)
+	}
+	loggingPolicyJSON, err := json.Marshal(task.LoggingPolicy)
+	if err != nil {
+		return fmt.Errorf("marshal logging policy: %w", err)
 	}
 
 	encUsername, err := crypto.Encrypt(task.Proxy.Username)
@@ -135,11 +202,11 @@ func (db *DB) CreateTaskTx(ctx context.Context, tx *sql.Tx, task models.Task) er
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO tasks (id, name, url, steps, batch_id, flow_id, headless, proxy_server, proxy_username, proxy_password, proxy_geo, proxy_protocol, priority, status, max_retries, timeout_seconds, tags, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO tasks (id, name, url, steps, batch_id, flow_id, headless, proxy_server, proxy_username, proxy_password, proxy_geo, proxy_protocol, priority, status, max_retries, timeout_seconds, tags, logging_policy, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.ID, task.Name, task.URL, string(stepsJSON), task.BatchID, task.FlowID, headless,
 		task.Proxy.Server, encUsername, encPassword, task.Proxy.Geo, task.Proxy.Protocol,
-		task.Priority, task.Status, task.MaxRetries, task.Timeout, string(tagsJSON), task.CreatedAt,
+		task.Priority, task.Status, task.MaxRetries, task.Timeout, string(tagsJSON), string(loggingPolicyJSON), task.CreatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("insert task %s: %w", task.ID, err)
@@ -149,7 +216,7 @@ func (db *DB) CreateTaskTx(ctx context.Context, tx *sql.Tx, task models.Task) er
 
 func (db *DB) GetTask(ctx context.Context, id string) (*models.Task, error) {
 	row := db.readConn.QueryRowContext(ctx, `SELECT id, name, url, steps, batch_id, flow_id, headless, proxy_server, proxy_username, proxy_password, proxy_geo, proxy_protocol,
-		priority, status, retry_count, max_retries, timeout_seconds, error, result, tags, created_at, started_at, completed_at
+		priority, status, retry_count, max_retries, timeout_seconds, error, result, tags, logging_policy, created_at, started_at, completed_at
 		FROM tasks WHERE id = ?`, id)
 	task, err := db.scanTask(row)
 	if err != nil {
@@ -160,7 +227,7 @@ func (db *DB) GetTask(ctx context.Context, id string) (*models.Task, error) {
 
 func (db *DB) ListTasks(ctx context.Context) ([]models.Task, error) {
 	rows, err := db.readConn.QueryContext(ctx, `SELECT id, name, url, steps, batch_id, flow_id, headless, proxy_server, proxy_username, proxy_password, proxy_geo, proxy_protocol,
-		priority, status, retry_count, max_retries, timeout_seconds, error, result, tags, created_at, started_at, completed_at
+		priority, status, retry_count, max_retries, timeout_seconds, error, result, tags, logging_policy, created_at, started_at, completed_at
 		FROM tasks ORDER BY priority DESC, created_at DESC`)
 	if err != nil {
 		return nil, fmt.Errorf("query tasks: %w", err)
@@ -183,7 +250,7 @@ func (db *DB) ListTasks(ctx context.Context) ([]models.Task, error) {
 
 func (db *DB) ListTasksByStatus(ctx context.Context, status models.TaskStatus) ([]models.Task, error) {
 	rows, err := db.readConn.QueryContext(ctx, `SELECT id, name, url, steps, batch_id, flow_id, headless, proxy_server, proxy_username, proxy_password, proxy_geo, proxy_protocol,
-		priority, status, retry_count, max_retries, timeout_seconds, error, result, tags, created_at, started_at, completed_at
+		priority, status, retry_count, max_retries, timeout_seconds, error, result, tags, logging_policy, created_at, started_at, completed_at
 		FROM tasks WHERE status = ? ORDER BY priority DESC, created_at DESC`, status)
 	if err != nil {
 		return nil, fmt.Errorf("query tasks by status %s: %w", status, err)
@@ -250,7 +317,7 @@ func (db *DB) UpdateTaskStatus(ctx context.Context, id string, status models.Tas
 }
 
 func (db *DB) UpdateTaskResult(ctx context.Context, id string, result models.TaskResult) error {
-	resultJSON, err := json.Marshal(result)
+	resultJSON, err := json.Marshal(slimTaskResult(result))
 	if err != nil {
 		return fmt.Errorf("marshal result: %w", err)
 	}
@@ -298,7 +365,7 @@ func (db *DB) ResetRetryCount(ctx context.Context, id string) error {
 	return nil
 }
 
-func (db *DB) UpdateTask(ctx context.Context, id, name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority models.TaskPriority, tags []string, timeout int) error {
+func (db *DB) UpdateTask(ctx context.Context, id, name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority models.TaskPriority, tags []string, timeout int, loggingPolicy *models.TaskLoggingPolicy) error {
 	stepsJSON, err := json.Marshal(steps)
 	if err != nil {
 		return fmt.Errorf("marshal steps: %w", err)
@@ -306,6 +373,10 @@ func (db *DB) UpdateTask(ctx context.Context, id, name, url string, steps []mode
 	tagsJSON, err := json.Marshal(tags)
 	if err != nil {
 		return fmt.Errorf("marshal tags: %w", err)
+	}
+	loggingPolicyJSON, err := json.Marshal(loggingPolicy)
+	if err != nil {
+		return fmt.Errorf("marshal logging policy: %w", err)
 	}
 
 	encUsername, err := crypto.Encrypt(proxyConfig.Username)
@@ -317,8 +388,8 @@ func (db *DB) UpdateTask(ctx context.Context, id, name, url string, steps []mode
 		return fmt.Errorf("encrypt proxy password: %w", err)
 	}
 
-	res, err := db.conn.ExecContext(ctx, `UPDATE tasks SET name = ?, url = ?, steps = ?, proxy_server = ?, proxy_username = ?, proxy_password = ?, proxy_geo = ?, proxy_protocol = ?, priority = ?, tags = ?, timeout_seconds = ? WHERE id = ? AND status IN (?, ?)`,
-		name, url, string(stepsJSON), proxyConfig.Server, encUsername, encPassword, proxyConfig.Geo, proxyConfig.Protocol, priority, string(tagsJSON), timeout, id,
+	res, err := db.conn.ExecContext(ctx, `UPDATE tasks SET name = ?, url = ?, steps = ?, proxy_server = ?, proxy_username = ?, proxy_password = ?, proxy_geo = ?, proxy_protocol = ?, priority = ?, tags = ?, timeout_seconds = ?, logging_policy = ? WHERE id = ? AND status IN (?, ?)`,
+		name, url, string(stepsJSON), proxyConfig.Server, encUsername, encPassword, proxyConfig.Geo, proxyConfig.Protocol, priority, string(tagsJSON), timeout, string(loggingPolicyJSON), id,
 		models.TaskStatusPending, models.TaskStatusFailed)
 	if err != nil {
 		return fmt.Errorf("update task %s: %w", id, err)
@@ -419,8 +490,8 @@ func (db *DB) ListTasksPaginated(ctx context.Context, page, pageSize int, status
 	totalPages := (total + pageSize - 1) / pageSize
 	offset := (page - 1) * pageSize
 
-	query := `SELECT id, name, url, steps, batch_id, flow_id, headless, proxy_server, proxy_username, proxy_password, proxy_geo, proxy_protocol,
-		priority, status, retry_count, max_retries, timeout_seconds, error, result, tags, created_at, started_at, completed_at
+	query := `SELECT id, name, url, batch_id, flow_id, headless, proxy_server, proxy_geo, proxy_protocol,
+		priority, status, retry_count, max_retries, timeout_seconds, error, tags, logging_policy, created_at, started_at, completed_at
 		FROM tasks ` + where + ` ORDER BY priority DESC, created_at DESC LIMIT ? OFFSET ?`
 	queryArgs := make([]any, 0, len(args)+2)
 	queryArgs = append(queryArgs, args...)
@@ -434,7 +505,7 @@ func (db *DB) ListTasksPaginated(ctx context.Context, page, pageSize int, status
 
 	tasks := []models.Task{}
 	for rows.Next() {
-		task, err := db.scanTaskRow(rows)
+		task, err := db.scanTaskSummaryRow(rows)
 		if err != nil {
 			return models.PaginatedTasks{}, fmt.Errorf("scan task row: %w", err)
 		}
@@ -457,7 +528,7 @@ func (db *DB) ListTasksPaginated(ctx context.Context, page, pageSize int, status
 // These are typically left over from a previous crash and need recovery.
 func (db *DB) ListStaleTasks(ctx context.Context) ([]models.Task, error) {
 	rows, err := db.readConn.QueryContext(ctx, `SELECT id, name, url, steps, batch_id, flow_id, headless, proxy_server, proxy_username, proxy_password, proxy_geo, proxy_protocol,
-		priority, status, retry_count, max_retries, timeout_seconds, error, result, tags, created_at, started_at, completed_at
+		priority, status, retry_count, max_retries, timeout_seconds, error, result, tags, logging_policy, created_at, started_at, completed_at
 		FROM tasks WHERE status IN (?, ?) ORDER BY priority DESC, created_at ASC`,
 		models.TaskStatusRunning, models.TaskStatusQueued)
 	if err != nil {
@@ -480,29 +551,101 @@ func (db *DB) ListStaleTasks(ctx context.Context) ([]models.Task, error) {
 }
 
 // BatchUpdateTaskStatus updates the status of multiple tasks in a single transaction.
+func (db *DB) BatchApplyTaskStateChanges(ctx context.Context, changes []TaskStateChange) error {
+	if len(changes) == 0 {
+		return nil
+	}
+
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin batch state tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	runningStmt, err := tx.PrepareContext(ctx, `UPDATE tasks SET status = ?, started_at = ? WHERE id = ?`)
+	if err != nil {
+		return fmt.Errorf("prepare running status update: %w", err)
+	}
+	defer runningStmt.Close()
+	terminalStmt, err := tx.PrepareContext(ctx, `UPDATE tasks SET status = ?, error = ?, completed_at = ? WHERE id = ?`)
+	if err != nil {
+		return fmt.Errorf("prepare terminal status update: %w", err)
+	}
+	defer terminalStmt.Close()
+	defaultStmt, err := tx.PrepareContext(ctx, `UPDATE tasks SET status = ?, error = ? WHERE id = ?`)
+	if err != nil {
+		return fmt.Errorf("prepare default status update: %w", err)
+	}
+	defer defaultStmt.Close()
+	retryStmt, err := tx.PrepareContext(ctx, `UPDATE tasks SET retry_count = retry_count + 1, status = ? WHERE id = ?`)
+	if err != nil {
+		return fmt.Errorf("prepare retry status update: %w", err)
+	}
+	defer retryStmt.Close()
+
+	events := make([]models.TaskLifecycleEvent, 0, len(changes))
+	for _, change := range changes {
+		var fromStatus models.TaskStatus
+		var batchID string
+		if err := tx.QueryRowContext(ctx, `SELECT status, batch_id FROM tasks WHERE id = ?`, change.TaskID).Scan(&fromStatus, &batchID); err != nil {
+			return fmt.Errorf("task %s not found", change.TaskID)
+		}
+
+		if (fromStatus == models.TaskStatusCancelled || fromStatus == models.TaskStatusCompleted || fromStatus == models.TaskStatusFailed) &&
+			change.Status != models.TaskStatusCancelled && change.Status != models.TaskStatusCompleted && change.Status != models.TaskStatusFailed {
+			continue
+		}
+
+		now := time.Now()
+		var res sql.Result
+		switch {
+		case change.IncrementRetry:
+			res, err = retryStmt.ExecContext(ctx, models.TaskStatusRetrying, change.TaskID)
+		case change.Status == models.TaskStatusRunning:
+			res, err = runningStmt.ExecContext(ctx, change.Status, now, change.TaskID)
+		case change.Status == models.TaskStatusCompleted || change.Status == models.TaskStatusFailed || change.Status == models.TaskStatusCancelled:
+			res, err = terminalStmt.ExecContext(ctx, change.Status, change.Error, now, change.TaskID)
+		default:
+			res, err = defaultStmt.ExecContext(ctx, change.Status, change.Error, change.TaskID)
+		}
+		if err != nil {
+			return fmt.Errorf("batch update task %s status to %s: %w", change.TaskID, change.Status, err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("check batch update result for task %s: %w", change.TaskID, err)
+		}
+		if n == 0 {
+			return fmt.Errorf("task %s not found", change.TaskID)
+		}
+
+		events = append(events, models.TaskLifecycleEvent{
+			ID:        fmt.Sprintf("evt_%d", time.Now().UnixNano()),
+			TaskID:    change.TaskID,
+			BatchID:   batchID,
+			FromState: fromStatus,
+			ToState:   change.Status,
+			Error:     change.Error,
+			Timestamp: now,
+		})
+	}
+
+	if err := insertTaskEventsTx(ctx, tx, events); err != nil {
+		return fmt.Errorf("insert task events: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit batch state update: %w", err)
+	}
+	return nil
+}
+
 func (db *DB) BatchUpdateTaskStatus(ctx context.Context, taskIDs []string, status models.TaskStatus, errMsg string) error {
 	if len(taskIDs) == 0 {
 		return nil
 	}
-	tx, err := db.conn.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin batch status tx: %w", err)
-	}
-	stmt, err := tx.PrepareContext(ctx, `UPDATE tasks SET status = ?, error = ? WHERE id = ?`)
-	if err != nil {
-		_ = tx.Rollback()
-		return fmt.Errorf("prepare batch status update: %w", err)
-	}
-	defer stmt.Close()
-
+	changes := make([]TaskStateChange, 0, len(taskIDs))
 	for _, id := range taskIDs {
-		if _, err := stmt.ExecContext(ctx, status, errMsg, id); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("batch update task %s: %w", id, err)
-		}
+		changes = append(changes, TaskStateChange{TaskID: id, Status: status, Error: errMsg})
 	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit batch status update: %w", err)
-	}
-	return nil
+	return db.BatchApplyTaskStateChanges(ctx, changes)
 }

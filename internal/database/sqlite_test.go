@@ -271,6 +271,8 @@ func TestUpdateTaskResult(t *testing.T) {
 			"title": "Example",
 		},
 		Screenshots: []string{"/tmp/shot1.png"},
+		StepLogs:    []models.StepLog{{TaskID: task.ID, StepIndex: 0, Action: models.ActionNavigate}},
+		NetworkLogs: []models.NetworkLog{{TaskID: task.ID, StepIndex: 0, RequestURL: "https://example.com", Method: "GET"}},
 		Duration:    5 * time.Second,
 	}
 
@@ -287,6 +289,12 @@ func TestUpdateTaskResult(t *testing.T) {
 	}
 	if !got.Result.Success {
 		t.Error("Result.Success should be true")
+	}
+	if len(got.Result.StepLogs) != 0 {
+		t.Errorf("StepLogs should not be stored in task result, got %d", len(got.Result.StepLogs))
+	}
+	if len(got.Result.NetworkLogs) != 0 {
+		t.Errorf("NetworkLogs should not be stored in task result, got %d", len(got.Result.NetworkLogs))
 	}
 	if got.Result.ExtractedData["title"] != "Example" {
 		t.Errorf("ExtractedData[title]: got %q, want %q", got.Result.ExtractedData["title"], "Example")
@@ -670,7 +678,7 @@ func TestUpdateTask(t *testing.T) {
 	}
 	newProxy := models.ProxyConfig{Server: "new.proxy:9090", Username: "u2", Password: "p2"}
 
-	if err := db.UpdateTask(context.Background(), "upd-1", "Updated", "https://updated.com", newSteps, newProxy, models.PriorityHigh, []string{"updated-tag"}, 0); err != nil {
+	if err := db.UpdateTask(context.Background(), "upd-1", "Updated", "https://updated.com", newSteps, newProxy, models.PriorityHigh, []string{"updated-tag"}, 0, nil); err != nil {
 		t.Fatalf("UpdateTask: %v", err)
 	}
 
@@ -736,6 +744,14 @@ func TestListTasksPaginated(t *testing.T) {
 	}
 	if result.TotalPages != 3 {
 		t.Errorf("TotalPages: got %d, want 3", result.TotalPages)
+	}
+	for _, task := range result.Tasks {
+		if len(task.Steps) != 0 {
+			t.Errorf("paginated task %s should not include steps", task.ID)
+		}
+		if task.Result != nil {
+			t.Errorf("paginated task %s should not include result", task.ID)
+		}
 	}
 
 	result2, err := db.ListTasksPaginated(context.Background(), 3, 5, "", "")
@@ -834,7 +850,7 @@ func TestUpdateTaskRejectsRunning(t *testing.T) {
 		t.Fatalf("UpdateTaskStatus: %v", err)
 	}
 
-	err := db.UpdateTask(context.Background(), "upd-run-1", "New Name", "https://x.com", nil, models.ProxyConfig{}, models.PriorityNormal, nil, 0)
+	err := db.UpdateTask(context.Background(), "upd-run-1", "New Name", "https://x.com", nil, models.ProxyConfig{}, models.PriorityNormal, nil, 0, nil)
 	if err == nil {
 		t.Fatal("expected error when updating running task")
 	}
@@ -1576,7 +1592,7 @@ func TestUpdateProxyHealthNotFound(t *testing.T) {
 
 func TestUpdateTaskNotFound(t *testing.T) {
 	db := setupTestDB(t)
-	err := db.UpdateTask(context.Background(), "nonexistent", "Name", "https://example.com", nil, models.ProxyConfig{}, models.PriorityNormal, nil, 0)
+	err := db.UpdateTask(context.Background(), "nonexistent", "Name", "https://example.com", nil, models.ProxyConfig{}, models.PriorityNormal, nil, 0, nil)
 	if err == nil {
 		t.Fatal("expected error for nonexistent task update")
 	}
@@ -1632,7 +1648,7 @@ func TestUpdateTaskOnFailedTask(t *testing.T) {
 
 	err := db.UpdateTask(context.Background(), "upd-failed-1", "Retried", "https://example.com", []models.TaskStep{
 		{Action: models.ActionNavigate, Value: "https://example.com"},
-	}, models.ProxyConfig{}, models.PriorityNormal, nil, 0)
+	}, models.ProxyConfig{}, models.PriorityNormal, nil, 0, nil)
 	if err != nil {
 		t.Fatalf("UpdateTask on failed task should succeed: %v", err)
 	}
@@ -2637,7 +2653,7 @@ func TestListRecordedFlowsCorruptedSteps(t *testing.T) {
 	}
 }
 
-func TestListTasksPaginatedCorruptedJSON(t *testing.T) {
+func TestListTasksPaginatedIgnoresCorruptedHeavyJSON(t *testing.T) {
 	db := setupTestDB(t)
 
 	task := models.Task{
@@ -2655,10 +2671,22 @@ func TestListTasksPaginatedCorruptedJSON(t *testing.T) {
 	if _, err := db.conn.Exec(`UPDATE tasks SET steps = '<<<invalid>>>' WHERE id = ?`, "corrupt-pag-1"); err != nil {
 		t.Fatalf("corrupt steps: %v", err)
 	}
+	if _, err := db.conn.Exec(`UPDATE tasks SET result = '<<<invalid>>>' WHERE id = ?`, "corrupt-pag-1"); err != nil {
+		t.Fatalf("corrupt result: %v", err)
+	}
 
-	_, err := db.ListTasksPaginated(context.Background(), 1, 10, "all", "")
-	if err == nil {
-		t.Fatal("expected error from ListTasksPaginated with corrupted JSON")
+	result, err := db.ListTasksPaginated(context.Background(), 1, 10, "all", "")
+	if err != nil {
+		t.Fatalf("ListTasksPaginated: %v", err)
+	}
+	if len(result.Tasks) != 1 {
+		t.Fatalf("Tasks length: got %d, want 1", len(result.Tasks))
+	}
+	if len(result.Tasks[0].Steps) != 0 {
+		t.Fatalf("paginated task should omit steps, got %d", len(result.Tasks[0].Steps))
+	}
+	if result.Tasks[0].Result != nil {
+		t.Fatal("paginated task should omit result")
 	}
 }
 

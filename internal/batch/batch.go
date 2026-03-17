@@ -56,6 +56,17 @@ func (e *Engine) CreateBatchFromFlow(ctx context.Context, flow models.RecordedFl
 		name := ApplyTemplate(nameTemplate, vars)
 		vars.Name = name
 
+		proxyConfig := input.Proxy
+		if strings.TrimSpace(input.ProxyCountry) != "" {
+			proxyConfig.Server = ""
+			proxyConfig.Username = ""
+			proxyConfig.Password = ""
+			proxyConfig.Geo = strings.ToUpper(strings.TrimSpace(input.ProxyCountry))
+		}
+		if strings.TrimSpace(input.ProxyFallback) != "" {
+			proxyConfig.Fallback = models.ProxyRoutingFallback(input.ProxyFallback)
+		}
+
 		adjustedSteps := make([]models.TaskStep, len(steps))
 		for sIdx, step := range steps {
 			stepCopy := step
@@ -73,7 +84,7 @@ func (e *Engine) CreateBatchFromFlow(ctx context.Context, flow models.RecordedFl
 			Name:       name,
 			URL:        rawURL,
 			Steps:      adjustedSteps,
-			Proxy:      input.Proxy,
+			Proxy:      proxyConfig,
 			Priority:   models.TaskPriority(input.Priority),
 			Status:     models.TaskStatusPending,
 			MaxRetries: 3,

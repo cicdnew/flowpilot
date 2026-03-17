@@ -12,7 +12,7 @@ export function CreateBatchFromFlow(arg1:models.AdvancedBatchInput):Promise<mode
 
 export function CreateRecordedFlow(arg1:string,arg2:string,arg3:string,arg4:Array<models.RecordedStep>):Promise<models.RecordedFlow>;
 
-export function CreateTask(arg1:string,arg2:string,arg3:Array<models.TaskStep>,arg4:models.ProxyConfig,arg5:number,arg6:boolean,arg7:Array<string>,arg8:number):Promise<models.Task>;
+export function CreateTask(arg1:string,arg2:string,arg3:Array<models.TaskStep>,arg4:models.ProxyConfig,arg5:number,arg6:boolean,arg7:Array<string>,arg8:number,arg9:models.TaskLoggingPolicy | null):Promise<models.Task>;
 
 export function CreateTaskFromFlow(arg1:string,arg2:string,arg3:string,arg4:models.ProxyConfig,arg5:number,arg6:boolean,arg7:Array<string>):Promise<models.Task>;
 
@@ -52,6 +52,12 @@ export function ListDOMSnapshots(arg1:string):Promise<Array<models.DOMSnapshot>>
 
 export function ListProxies():Promise<Array<models.Proxy>>;
 
+export function ListProxyCountryStats():Promise<Array<models.ProxyCountryStats>>;
+export function CreateProxyRoutingPreset(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<models.ProxyRoutingPreset>;
+export function ListProxyRoutingPresets():Promise<Array<models.ProxyRoutingPreset>>;
+export function DeleteProxyRoutingPreset(arg1:string):Promise<void>;
+export function GetLocalProxyGatewayStats():Promise<models.LocalProxyGatewayStats>;
+
 export function ListRecordedFlows():Promise<Array<models.RecordedFlow>>;
 
 export function ListTaskEvents(arg1:string):Promise<Array<models.TaskLifecycleEvent>>;
@@ -86,7 +92,7 @@ export function StopRecording():Promise<Array<models.RecordedStep>>;
 
 export function UpdateRecordedFlow(arg1:models.RecordedFlow):Promise<void>;
 
-export function UpdateTask(arg1:string,arg2:string,arg3:string,arg4:Array<models.TaskStep>,arg5:models.ProxyConfig,arg6:number,arg7:Array<string>,arg8:number):Promise<void>;
+export function UpdateTask(arg1:string,arg2:string,arg3:string,arg4:Array<models.TaskStep>,arg5:models.ProxyConfig,arg6:number,arg7:Array<string>,arg8:number,arg9:models.TaskLoggingPolicy | null):Promise<void>;
 
 export function CreateSchedule(arg1:string,arg2:string,arg3:string,arg4:string,arg5:models.ProxyConfig,arg6:number,arg7:boolean,arg8:Array<string>):Promise<models.Schedule>;
 

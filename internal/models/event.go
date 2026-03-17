@@ -21,10 +21,15 @@ type TaskLifecycleEvent struct {
 //   - Pending: total tasks not yet finished (Queued + Running).
 //   - TotalSubmitted/TotalCompleted/TotalFailed: lifetime counters since queue creation.
 type QueueMetrics struct {
-	Running        int   `json:"running"`
-	Queued         int   `json:"queued"`
-	Pending        int   `json:"pending"`
-	TotalSubmitted int64 `json:"totalSubmitted"`
-	TotalCompleted int64 `json:"totalCompleted"`
-	TotalFailed    int64 `json:"totalFailed"`
+	Running                  int   `json:"running"`
+	Queued                   int   `json:"queued"`
+	Pending                  int   `json:"pending"`
+	TotalSubmitted           int64 `json:"totalSubmitted"`
+	TotalCompleted           int64 `json:"totalCompleted"`
+	TotalFailed              int64 `json:"totalFailed"`
+	RunningProxied           int   `json:"runningProxied"`
+	ProxyConcurrencyLimit    int   `json:"proxyConcurrencyLimit"`
+	PersistenceQueueDepth    int   `json:"persistenceQueueDepth"`
+	PersistenceQueueCapacity int   `json:"persistenceQueueCapacity"`
+	PersistenceBatchSize     int   `json:"persistenceBatchSize"`
 }

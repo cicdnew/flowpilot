@@ -332,36 +332,6 @@ func TestFlowToTaskStepsPreservesOrder(t *testing.T) {
 	}
 }
 
-// --- SupportedVariables Tests ---
-
-func TestSupportedVariables(t *testing.T) {
-	vars := SupportedVariables()
-	if len(vars) != 4 {
-		t.Fatalf("SupportedVariables: got %d, want 4", len(vars))
-	}
-
-	expected := map[string]string{
-		"url":    "{{url}}",
-		"domain": "{{domain}}",
-		"index":  "{{index}}",
-		"name":   "{{name}}",
-	}
-
-	for _, v := range vars {
-		wantPlaceholder, ok := expected[v.Name]
-		if !ok {
-			t.Errorf("unexpected variable name: %s", v.Name)
-			continue
-		}
-		if v.Placeholder != wantPlaceholder {
-			t.Errorf("variable %s: placeholder got %q, want %q", v.Name, v.Placeholder, wantPlaceholder)
-		}
-		if v.Description == "" {
-			t.Errorf("variable %s: description should not be empty", v.Name)
-		}
-	}
-}
-
 // --- BatchHeadless Tests ---
 
 func TestBatchHeadlessDefault(t *testing.T) {

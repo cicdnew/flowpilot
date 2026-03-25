@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { schedules, recordedFlows } from '../lib/store';
-  import type { ProxyConfig } from '../lib/types';
-  import { ListSchedules, CreateSchedule, ToggleSchedule, DeleteSchedule, ListRecordedFlows } from '../../wailsjs/go/main/App';
+  import type { ProxyConfig, ProxyRoutingFallback, ProxyRoutingPreset } from '../lib/types';
+  import { ListSchedules, CreateSchedule, ToggleSchedule, DeleteSchedule, ListRecordedFlows, ListProxyRoutingPresets } from '../../wailsjs/go/main/App';
 
   let name = '';
   let cronExpr = '';
@@ -11,12 +11,22 @@
   let priority = 5;
   let headless = true;
   let tagsInput = '';
+  let proxyServer = '';
+  let proxyProtocol = 'http';
+  let proxyUsername = '';
+  let proxyPassword = '';
+  let proxyGeo = '';
+  let useRandomCountryProxy = false;
+  let proxyFallback: ProxyRoutingFallback = 'strict';
+  let routingPresets: ProxyRoutingPreset[] = [];
+  let selectedPresetId = '';
   let errorMessage = '';
   let creating = false;
 
   onMount(async () => {
     await refresh();
     await refreshFlows();
+    await refreshRoutingPresets();
   });
 
   async function refresh() {
@@ -36,10 +46,53 @@
     } catch (_) {}
   }
 
+  async function refreshRoutingPresets() {
+    try {
+      routingPresets = (await ListProxyRoutingPresets() || []) as ProxyRoutingPreset[];
+    } catch (_) {}
+  }
+
+  function applyPreset(id: string) {
+    const preset = routingPresets.find(p => p.id === id);
+    if (!preset) return;
+    useRandomCountryProxy = preset.randomByCountry;
+    proxyGeo = preset.country || '';
+    proxyFallback = (preset.fallback as ProxyRoutingFallback) || 'strict';
+  }
+
   async function create() {
     if (!name || !cronExpr || !selectedFlowId || !url) return;
+    if (useRandomCountryProxy && !proxyGeo.trim()) {
+      errorMessage = 'Country code is required for random-by-country proxy routing.';
+      return;
+    }
     creating = true;
-    const proxy: ProxyConfig = { server: '' };
+    const trimmedProxyServer = proxyServer.trim();
+    const normalizedProxyGeo = proxyGeo.trim().toUpperCase();
+    const proxy: ProxyConfig = useRandomCountryProxy
+      ? {
+          server: '',
+          protocol: '',
+          username: '',
+          password: '',
+          geo: normalizedProxyGeo,
+          fallback: proxyFallback,
+        }
+      : trimmedProxyServer
+        ? {
+            server: trimmedProxyServer,
+            protocol: proxyProtocol,
+            username: proxyUsername,
+            password: proxyPassword,
+            geo: normalizedProxyGeo,
+            fallback: proxyFallback,
+          }
+        : {
+            server: '',
+            protocol: '',
+            username: '',
+            password: '',
+          };
     const tags = tagsInput
       .split(',')
       .map(t => t.trim())
@@ -52,6 +105,14 @@
       selectedFlowId = '';
       url = '';
       tagsInput = '';
+      proxyServer = '';
+      proxyProtocol = 'http';
+      proxyUsername = '';
+      proxyPassword = '';
+      proxyGeo = '';
+      useRandomCountryProxy = false;
+      proxyFallback = 'strict';
+      selectedPresetId = '';
       await refresh();
     } catch (err: any) {
       errorMessage = err?.message || String(err);
@@ -148,6 +209,44 @@
         <input id="sched-tags" bind:value={tagsInput} placeholder="tag1, tag2" />
       </div>
     </div>
+    <h4>Proxy</h4>
+    {#if routingPresets.length}
+      <div class="form-group">
+        <label for="sched-routing-preset">Routing Preset</label>
+        <select id="sched-routing-preset" bind:value={selectedPresetId} on:change={() => applyPreset(selectedPresetId)}>
+          <option value="">Custom</option>
+          {#each routingPresets as preset}
+            <option value={preset.id}>{preset.name}</option>
+          {/each}
+        </select>
+      </div>
+    {/if}
+    <label class="checkbox">
+      <input type="checkbox" bind:checked={useRandomCountryProxy} />
+      Random healthy proxy by country
+    </label>
+    <div class="helper-text">If enabled, FlowPilot ignores the server credentials and chooses a healthy proxy from the selected country.</div>
+    <div class="form-group">
+      <label for="sched-proxy-fallback">Fallback</label>
+      <select id="sched-proxy-fallback" bind:value={proxyFallback}>
+        <option value="strict">Strict country only</option>
+        <option value="any_healthy">Fallback to any healthy proxy</option>
+        <option value="direct">Fallback to direct connection</option>
+      </select>
+    </div>
+    <div class="form-row-sm">
+      <select bind:value={proxyProtocol} style="min-width:80px">
+        <option value="http">http</option>
+        <option value="https">https</option>
+        <option value="socks5">socks5</option>
+      </select>
+      <input bind:value={proxyServer} placeholder="host:port" />
+    </div>
+    <div class="form-row-sm">
+      <input bind:value={proxyUsername} placeholder="Username" />
+      <input type="password" bind:value={proxyPassword} placeholder="Password" />
+      <input bind:value={proxyGeo} placeholder="Geo" style="width:60px" />
+    </div>
     <div class="form-actions">
       <button class="btn-primary btn-sm" on:click={create} disabled={!name || !cronExpr || !selectedFlowId || !url || creating}>
         {creating ? 'Creating...' : 'Create Schedule'}
@@ -220,6 +319,19 @@
   .form-group input,
   .form-group select {
     width: 100%;
+  }
+  .form-row-sm {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .form-row-sm > * {
+    flex: 1;
+  }
+  .helper-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
   }
   .form-actions {
     display: flex;

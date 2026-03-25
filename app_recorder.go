@@ -44,7 +44,7 @@ func (a *App) StartRecording(url string) error {
 
 	snapshotDir := filepath.Join(a.dataDir, "snapshots", flowID)
 	if snapshotter, err := recorder.NewSnapshotter(snapshotDir); err != nil {
-		wailsRuntime.LogWarningf(a.ctx, "snapshot init failed: %v", err)
+		logWarningf(a.ctx, "snapshot init failed: %v", err)
 	} else {
 		a.activeRecorder.SetSnapshotter(snapshotter)
 	}
@@ -59,7 +59,7 @@ func (a *App) StartRecording(url string) error {
 		wailsRuntime.EventsEmit(a.ctx, "recorder:websocket", log)
 	})
 
-	wailsRuntime.LogInfof(a.ctx, "Recording started for flow %s at %s", flowID, url)
+	logInfof(a.ctx, "Recording started for flow %s at %s", flowID, url)
 	return nil
 }
 
@@ -93,21 +93,21 @@ func (a *App) StopRecording() ([]models.RecordedStep, error) {
 
 	if len(netLogs) > 0 && a.db != nil {
 		if err := a.db.InsertNetworkLogs(a.ctx, flowID, netLogs); err != nil {
-			wailsRuntime.LogWarningf(a.ctx, "failed to persist network logs: %v", err)
+			logWarningf(a.ctx, "failed to persist network logs: %v", err)
 		}
 	}
 
 	if len(wsLogs) > 0 && a.db != nil {
 		if err := a.db.InsertWebSocketLogs(a.ctx, flowID, wsLogs); err != nil {
-			wailsRuntime.LogWarningf(a.ctx, "failed to persist websocket logs: %v", err)
+			logWarningf(a.ctx, "failed to persist websocket logs: %v", err)
 		}
 	}
 
-	wailsRuntime.LogInfof(a.ctx, "Recording stopped, captured %d steps, %d network requests, %d websocket events", len(steps), len(netLogs), len(wsLogs))
+	logInfof(a.ctx, "Recording stopped, captured %d steps, %d network requests, %d websocket events", len(steps), len(netLogs), len(wsLogs))
 	return steps, nil
 }
 
-func (a *App) PlayRecordedFlow(flowID, url string, headless bool) (*models.Task, error) {
+func (a *App) PlayRecordedFlow(flowID, url string, headless bool, timeout int, loggingPolicy *models.TaskLoggingPolicy) (*models.Task, error) {
 	if err := a.ready(); err != nil {
 		return nil, err
 	}
@@ -134,10 +134,22 @@ func (a *App) PlayRecordedFlow(flowID, url string, headless bool) (*models.Task,
 		Steps:      steps,
 		Priority:   models.PriorityNormal,
 		Status:     models.TaskStatusPending,
-		MaxRetries: 0,
+		MaxRetries: models.DefaultMaxRetries,
 		Headless:   headless,
 		FlowID:     flowID,
+		Timeout:    timeout,
 		CreatedAt:  time.Now(),
+		LoggingPolicy: func() *models.TaskLoggingPolicy {
+			if loggingPolicy != nil {
+				return loggingPolicy
+			}
+			return &models.TaskLoggingPolicy{
+				CaptureStepLogs:    &a.config.CaptureStepLogs,
+				CaptureNetworkLogs: &a.config.CaptureNetworkLogs,
+				CaptureScreenshots: &a.config.CaptureScreenshots,
+				MaxExecutionLogs:   a.config.MaxExecutionLogs,
+			}
+		}(),
 	}
 
 	if err := a.db.CreateTask(a.ctx, task); err != nil {

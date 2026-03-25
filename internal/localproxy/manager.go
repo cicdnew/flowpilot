@@ -28,6 +28,7 @@ type Manager struct {
 	endpoints         map[string]*endpointEntry
 	idleTimeout       time.Duration
 	stopCh            chan struct{}
+	stopOnce          sync.Once
 	wg                sync.WaitGroup
 	endpointCreations int64
 	endpointReuses    int64
@@ -125,8 +126,8 @@ func (m *Manager) serve(key string, entry *endpointEntry) {
 		m.mu.Lock()
 		entry.active++
 		entry.lastUsed = time.Now()
-		m.mu.Unlock()
 		m.wg.Add(1)
+		m.mu.Unlock()
 		go func() {
 			defer m.wg.Done()
 			defer conn.Close()
@@ -179,15 +180,17 @@ func (m *Manager) pruneIdle() {
 }
 
 func (m *Manager) Stop() {
-	close(m.stopCh)
-	m.mu.Lock()
-	for key, entry := range m.endpoints {
-		entry.stopping = true
-		_ = entry.listener.Close()
-		delete(m.endpoints, key)
-	}
-	m.mu.Unlock()
-	m.wg.Wait()
+	m.stopOnce.Do(func() {
+		close(m.stopCh)
+		m.mu.Lock()
+		for key, entry := range m.endpoints {
+			entry.stopping = true
+			_ = entry.listener.Close()
+			delete(m.endpoints, key)
+		}
+		m.mu.Unlock()
+		m.wg.Wait()
+	})
 }
 
 func (m *Manager) EndpointStatsByProxy(proxies []models.Proxy) map[string]int {

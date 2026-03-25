@@ -249,11 +249,8 @@ func (p *BrowserPool) evictIdle() {
 	active := make([]*pooledBrowser, 0, len(p.browsers))
 	for _, b := range p.browsers {
 		if b.inUse == 0 && now.Sub(b.lastUsed) > p.idleTimeout {
-			// Use chromedp.Cancel for graceful browser shutdown, allowing
-			// Chrome to save state and exit cleanly instead of force-killing.
-			gracefulCtx, gracefulCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			chromedp.Cancel(gracefulCtx)
-			gracefulCancel()
+			// Cancel the allocator context to gracefully shut down the browser,
+			// allowing Chrome to save state and exit cleanly.
 			b.allocCancel()
 		} else {
 			active = append(active, b)
@@ -281,21 +278,25 @@ func (p *BrowserPool) Stop() {
 	p.wg.Wait()
 }
 
-func (p *BrowserPool) Stats() PoolStats {
+func (p *BrowserPool) stats() PoolStats {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	stats := PoolStats{
+	s := PoolStats{
 		TotalBrowsers: len(p.browsers),
 		MaxBrowsers:   p.poolSize,
 	}
 	for _, b := range p.browsers {
-		stats.ActiveTabs += b.inUse
+		s.ActiveTabs += b.inUse
 		if b.inUse == 0 {
-			stats.IdleBrowsers++
+			s.IdleBrowsers++
 		}
 	}
-	return stats
+	return s
+}
+
+func (p *BrowserPool) Stats() PoolStats {
+	return p.stats()
 }
 
 type PoolStats struct {

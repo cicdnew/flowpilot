@@ -30,29 +30,6 @@ func NewExporter(db *database.DB, outputDir string) (*Exporter, error) {
 	return &Exporter{db: db, output: outputDir}, nil
 }
 
-// ExportTaskLogs writes JSONL and CSV files for a task and returns the file paths.
-func (e *Exporter) ExportTaskLogs(ctx context.Context, taskID string) (string, string, error) {
-	stepLogs, err := e.db.ListStepLogs(ctx, taskID)
-	if err != nil {
-		return "", "", err
-	}
-	networkLogs, err := e.db.ListNetworkLogs(ctx, taskID)
-	if err != nil {
-		return "", "", err
-	}
-
-	jsonlPath := filepath.Join(e.output, fmt.Sprintf("task_%s_%d.jsonl", taskID, time.Now().Unix()))
-	if err := writeJSONL(jsonlPath, stepLogs, networkLogs); err != nil {
-		return "", "", err
-	}
-
-	csvPath := filepath.Join(e.output, fmt.Sprintf("task_%s_%d.csv", taskID, time.Now().Unix()))
-	if err := writeCSV(csvPath, stepLogs, networkLogs); err != nil {
-		return "", "", err
-	}
-	return jsonlPath, csvPath, nil
-}
-
 func (e *Exporter) ExportTaskLogsZip(ctx context.Context, taskID string) (string, error) {
 	stepLogs, err := e.db.ListStepLogs(ctx, taskID)
 	if err != nil {

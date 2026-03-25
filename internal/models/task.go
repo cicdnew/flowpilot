@@ -15,6 +15,8 @@ const (
 	TaskStatusRetrying  TaskStatus = "retrying"
 )
 
+const DefaultMaxRetries = 3
+
 // TaskPriority controls queue ordering.
 type TaskPriority int
 
@@ -60,6 +62,40 @@ const (
 	ActionGetTitle        StepAction = "get_title"
 	ActionGetAttributes   StepAction = "get_attributes"
 	ActionClickAd         StepAction = "click_ad"
+	ActionHover           StepAction = "hover"
+	ActionDragDrop        StepAction = "drag_drop"
+	ActionContextClick    StepAction = "context_click"
+	ActionHighlight       StepAction = "highlight"
+	ActionGetCookies      StepAction = "get_cookies"
+	ActionSetCookie       StepAction = "set_cookie"
+	ActionDeleteCookies   StepAction = "delete_cookies"
+	ActionGetStorage      StepAction = "get_storage"
+	ActionSetStorage      StepAction = "set_storage"
+	ActionDeleteStorage   StepAction = "delete_storage"
+	ActionDownload        StepAction = "download"
+	ActionSelectRandom    StepAction = "select_random"
+	ActionWhile           StepAction = "while_condition"
+	ActionEndWhile        StepAction = "end_while"
+	ActionIfExists        StepAction = "if_exists"
+	ActionIfNotExists     StepAction = "if_not_exists"
+	ActionIfVisible       StepAction = "if_visible"
+	ActionIfEnabled       StepAction = "if_enabled"
+	ActionVariableSet     StepAction = "variable_set"
+	ActionVariableMath    StepAction = "variable_math"
+	ActionVariableString  StepAction = "variable_string"
+	ActionDebugStep       StepAction = "debug_step"
+	ActionDebugPause      StepAction = "debug_pause"
+	ActionDebugResume     StepAction = "debug_resume"
+	ActionAntiBot         StepAction = "anti_bot"
+	ActionRandomMouse     StepAction = "random_mouse"
+	ActionHumanTyping     StepAction = "human_typing"
+	ActionGetSession      StepAction = "get_session"
+	ActionSetSession      StepAction = "set_session"
+	ActionLoadSession     StepAction = "load_session"
+	ActionSaveSession     StepAction = "save_session"
+	ActionCacheGet        StepAction = "cache_get"
+	ActionCacheSet        StepAction = "cache_set"
+	ActionCacheClear      StepAction = "cache_clear"
 )
 
 func ExecutableStepActions() []StepAction {
@@ -89,6 +125,34 @@ func ExecutableStepActions() []StepAction {
 		ActionGetTitle,
 		ActionGetAttributes,
 		ActionClickAd,
+		ActionHover,
+		ActionDragDrop,
+		ActionContextClick,
+		ActionHighlight,
+		ActionGetCookies,
+		ActionSetCookie,
+		ActionDeleteCookies,
+		ActionGetStorage,
+		ActionSetStorage,
+		ActionDeleteStorage,
+		ActionDownload,
+		ActionSelectRandom,
+		ActionVariableSet,
+		ActionVariableMath,
+		ActionVariableString,
+		ActionDebugStep,
+		ActionDebugPause,
+		ActionDebugResume,
+		ActionAntiBot,
+		ActionRandomMouse,
+		ActionHumanTyping,
+		ActionGetSession,
+		ActionSetSession,
+		ActionLoadSession,
+		ActionSaveSession,
+		ActionCacheGet,
+		ActionCacheSet,
+		ActionCacheClear,
 	}
 }
 
@@ -101,6 +165,12 @@ func ControlFlowStepActions() []StepAction {
 		ActionEndLoop,
 		ActionBreakLoop,
 		ActionGoto,
+		ActionWhile,
+		ActionEndWhile,
+		ActionIfExists,
+		ActionIfNotExists,
+		ActionIfVisible,
+		ActionIfEnabled,
 	}
 }
 
@@ -111,16 +181,35 @@ func SupportedStepActions() []StepAction {
 	return actions
 }
 
+func IsKnownAction(action StepAction) bool {
+	knownActions := make(map[StepAction]bool)
+	for _, a := range SupportedStepActions() {
+		knownActions[a] = true
+	}
+	return knownActions[action]
+}
+
 // TaskStep represents a single browser action within a task.
 type TaskStep struct {
 	Action    StepAction `json:"action"`
 	Selector  string     `json:"selector,omitempty"`
 	Value     string     `json:"value,omitempty"`
-	Timeout   int        `json:"timeout,omitempty"` // milliseconds
+	Timeout   int        `json:"timeout,omitempty"`
 	Condition string     `json:"condition,omitempty"`
 	Label     string     `json:"label,omitempty"`
 	JumpTo    string     `json:"jumpTo,omitempty"`
 	VarName   string     `json:"varName,omitempty"`
+	Operator  string     `json:"operator,omitempty"`
+	MaxLoops  int        `json:"maxLoops,omitempty"`
+	Target    string     `json:"target,omitempty"`
+	Source    string     `json:"source,omitempty"`
+	Keys      string     `json:"keys,omitempty"`
+	Duration  int        `json:"duration,omitempty"`
+	Domain    string     `json:"domain,omitempty"`
+	Name      string     `json:"name,omitempty"`
+	Path      string     `json:"path,omitempty"`
+	Data      string     `json:"data,omitempty"`
+	Strategy  string     `json:"strategy,omitempty"`
 }
 
 // ProxyConfig holds proxy connection details for a task.
@@ -150,26 +239,28 @@ type TaskLoggingPolicy struct {
 
 // Task represents a single automated browser task.
 type Task struct {
-	ID            string             `json:"id"`
-	Name          string             `json:"name"`
-	URL           string             `json:"url"`
-	Steps         []TaskStep         `json:"steps"`
-	Proxy         ProxyConfig        `json:"proxy"`
-	Priority      TaskPriority       `json:"priority"`
-	Status        TaskStatus         `json:"status"`
-	RetryCount    int                `json:"retryCount"`
-	MaxRetries    int                `json:"maxRetries"`
-	Timeout       int                `json:"timeout,omitempty"` // total task timeout in seconds, 0 = default (5 min)
-	Error         string             `json:"error,omitempty"`
-	Result        *TaskResult        `json:"result,omitempty"`
-	CreatedAt     time.Time          `json:"createdAt"`
-	StartedAt     *time.Time         `json:"startedAt,omitempty"`
-	CompletedAt   *time.Time         `json:"completedAt,omitempty"`
-	Tags          []string           `json:"tags,omitempty"`
-	BatchID       string             `json:"batchId,omitempty"`
-	FlowID        string             `json:"flowId,omitempty"`
-	Headless      bool               `json:"headless"`
-	LoggingPolicy *TaskLoggingPolicy `json:"loggingPolicy,omitempty"`
+	ID             string             `json:"id"`
+	Name           string             `json:"name"`
+	URL            string             `json:"url"`
+	Steps          []TaskStep         `json:"steps"`
+	Proxy          ProxyConfig        `json:"proxy"`
+	Priority       TaskPriority       `json:"priority"`
+	Status         TaskStatus         `json:"status"`
+	RetryCount     int                `json:"retryCount"`
+	MaxRetries     int                `json:"maxRetries"`
+	Timeout        int                `json:"timeout,omitempty"` // total task timeout in seconds, 0 = default (5 min)
+	Error          string             `json:"error,omitempty"`
+	Result         *TaskResult        `json:"result,omitempty"`
+	CreatedAt      time.Time          `json:"createdAt"`
+	StartedAt      *time.Time         `json:"startedAt,omitempty"`
+	CompletedAt    *time.Time         `json:"completedAt,omitempty"`
+	Tags           []string           `json:"tags,omitempty"`
+	BatchID        string             `json:"batchId,omitempty"`
+	FlowID         string             `json:"flowId,omitempty"`
+	Headless       bool               `json:"headless"`
+	LoggingPolicy  *TaskLoggingPolicy `json:"loggingPolicy,omitempty"`
+	WebhookURL     string             `json:"webhookUrl,omitempty"`
+	WebhookEvents  []string           `json:"webhookEvents,omitempty"`
 }
 
 // TaskResult holds the output of a completed task.
@@ -203,11 +294,15 @@ type TaskEvent struct {
 
 // BatchTaskInput holds the input fields for creating a single task in a batch.
 type BatchTaskInput struct {
-	Name     string      `json:"name"`
-	URL      string      `json:"url"`
-	Steps    []TaskStep  `json:"steps"`
-	Proxy    ProxyConfig `json:"proxy"`
-	Priority int         `json:"priority"`
+	Name          string             `json:"name"`
+	URL           string             `json:"url"`
+	Steps         []TaskStep         `json:"steps"`
+	Proxy         ProxyConfig        `json:"proxy"`
+	Priority      int                `json:"priority"`
+	Timeout       int                `json:"timeout,omitempty"`
+	Tags          []string           `json:"tags,omitempty"`
+	LoggingPolicy *TaskLoggingPolicy `json:"loggingPolicy,omitempty"`
+	Headless      bool               `json:"headless"`
 }
 
 // BatchConfig is used to create multiple tasks at once.
@@ -223,4 +318,29 @@ type PaginatedTasks struct {
 	Page       int    `json:"page"`
 	PageSize   int    `json:"pageSize"`
 	TotalPages int    `json:"totalPages"`
+}
+
+type ScheduledTask struct {
+	ID         string    `json:"id"`
+	TaskID     string    `json:"taskId"`
+	CronExpr   string    `json:"cronExpr,omitempty"`
+	IntervalMs int64     `json:"intervalMs,omitempty"`
+	Enabled    bool      `json:"enabled"`
+	NextRun    time.Time `json:"nextRun,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+type TaskExport struct {
+	Version    string    `json:"version"`
+	ExportedAt time.Time `json:"exportedAt"`
+	Name       string    `json:"name"`
+	Task       Task      `json:"task"`
+}
+
+type FlowExport struct {
+	Version       string         `json:"version"`
+	ExportedAt    time.Time      `json:"exportedAt"`
+	FlowName      string         `json:"flowName"`
+	RecordedSteps []RecordedStep `json:"recordedSteps,omitempty"`
+	Tasks         []Task         `json:"tasks"`
 }

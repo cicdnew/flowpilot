@@ -18,6 +18,7 @@ type TaskSubmitter interface {
 
 type ScheduleDB interface {
 	ListDueSchedules(ctx context.Context, now time.Time) ([]models.Schedule, error)
+	ListSchedules(ctx context.Context) ([]models.Schedule, error)
 	UpdateScheduleRun(ctx context.Context, id string, lastRun, nextRun time.Time) error
 	GetRecordedFlow(ctx context.Context, id string) (*models.RecordedFlow, error)
 }
@@ -55,19 +56,63 @@ func (s *Scheduler) Start(ctx context.Context) {
 		return
 	}
 	s.running = true
+	s.stopCh = make(chan struct{})
 	s.mu.Unlock()
 
+	s.Recover(ctx)
 	go s.loop(ctx)
+}
+
+// Recover queries all enabled schedules and immediately submits any whose
+// next_run is in the past (i.e. missed while the application was offline).
+func (s *Scheduler) Recover(ctx context.Context) {
+	schedules, err := s.db.ListSchedules(ctx)
+	if err != nil {
+		s.logError("scheduler: recover: list schedules: %v", err)
+		return
+	}
+
+	now := time.Now()
+	recovered := 0
+	for _, sched := range schedules {
+		if !sched.Enabled {
+			continue
+		}
+		if sched.NextRunAt.IsZero() || !sched.NextRunAt.Before(now) {
+			continue
+		}
+
+		if submitErr := s.submitter.SubmitScheduledTask(ctx, sched); submitErr != nil {
+			s.logError("scheduler: recover: submit schedule %s: %v", sched.ID, submitErr)
+			continue
+		}
+
+		cronSched, err := ParseCron(sched.CronExpr)
+		if err != nil {
+			s.logError("scheduler: recover: parse cron for schedule %s: %v", sched.ID, err)
+			continue
+		}
+		nextRun := cronSched.Next(now)
+		if err := s.db.UpdateScheduleRun(ctx, sched.ID, now, nextRun); err != nil {
+			s.logError("scheduler: recover: update schedule %s run: %v", sched.ID, err)
+		}
+		recovered++
+	}
+
+	if recovered > 0 {
+		s.logError("scheduler: recovered %d missed schedule(s)", recovered)
+	}
 }
 
 func (s *Scheduler) Stop() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if !s.running {
+		s.mu.Unlock()
 		return
 	}
 	s.running = false
 	close(s.stopCh)
+	s.mu.Unlock()
 }
 
 func (s *Scheduler) loop(ctx context.Context) {

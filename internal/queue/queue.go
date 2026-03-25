@@ -1,16 +1,23 @@
 package queue
 
 import (
+	"bytes"
 	"container/heap"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"log/slog"
 	"math"
+	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"flowpilot/internal/browser"
 	"flowpilot/internal/database"
+	"flowpilot/internal/logs"
 	"flowpilot/internal/models"
 	"flowpilot/internal/proxy"
 )
@@ -40,10 +47,14 @@ type Queue struct {
 	onEvent               EventCallback
 	metrics               models.QueueMetrics
 	proxyConcurrencyLimit int
+	retryBackoffBaseMs    int
+	drainTimeout          time.Duration
 	persistenceBatchSize  int
 	persistenceInterval   time.Duration
 	persistenceCh         chan taskStateWrite
 	persistenceWg         sync.WaitGroup
+
+	taskMetrics atomic.Value // stores models.TaskMetrics
 
 	mu             sync.Mutex
 	cond           *sync.Cond
@@ -59,6 +70,7 @@ type Queue struct {
 	stopOnce       sync.Once
 	stopCh         chan struct{}
 	workerWg       sync.WaitGroup
+	proxyWakeTimer *time.Timer
 }
 
 // New creates a Queue with the given concurrency limit and event callback.
@@ -129,6 +141,20 @@ func (q *Queue) SetProxyConcurrencyLimit(limit int) {
 	defer q.mu.Unlock()
 	q.proxyConcurrencyLimit = limit
 	q.cond.Broadcast()
+}
+
+func (q *Queue) SetRetryBackoffBaseMs(ms int) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.retryBackoffBaseMs = ms
+}
+
+// SetDrainTimeout configures how long Stop() will wait for running tasks to
+// complete before force-cancelling them. Zero means no drain (cancel immediately).
+func (q *Queue) SetDrainTimeout(d time.Duration) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.drainTimeout = d
 }
 
 func (q *Queue) getProxyManager() *proxy.Manager {
@@ -403,40 +429,92 @@ func (q *Queue) persistenceWorker() {
 	}
 }
 
-// Stop cancels all running and pending tasks and prevents new submissions.
+// Stop prevents new submissions and drains running tasks. If a drain timeout
+// was configured via SetDrainTimeout, it waits up to that long for running
+// tasks to finish naturally before force-cancelling them. Pending (queued)
+// tasks are cancelled immediately. Stop is idempotent.
 func (q *Queue) Stop() {
 	q.stopOnce.Do(func() {
 		q.mu.Lock()
 		q.stopped = true
+		drainTimeout := q.drainTimeout
 
-		// Cancel all running tasks.
-		for id, cancel := range q.running {
-			cancel()
-			delete(q.running, id)
-		}
-		q.runningProxied = 0
-
-		// Cancel all tasks in the main heap.
+		// Cancel all pending tasks in the main heap.
 		for q.pq.Len() > 0 {
 			item := heap.Pop(&q.pq).(*heapItem)
 			delete(q.heapSet, item.task.ID)
 			item.cancel()
 		}
 
-		// Cancel all tasks in the paused heap.
+		// Cancel all pending tasks in the paused heap.
 		for q.pausedPQ.Len() > 0 {
 			item := heap.Pop(&q.pausedPQ).(*heapItem)
 			delete(q.pausedSet, item.task.ID)
 			item.cancel()
 		}
+
+		// Snapshot the IDs of currently running tasks for drain tracking.
+		runningIDs := make([]string, 0, len(q.running))
+		for id := range q.running {
+			runningIDs = append(runningIDs, id)
+		}
 		q.mu.Unlock()
 
-		// Wake all workers so they can exit.
+		// Wake all workers so they can exit their wait loops.
 		q.cond.Broadcast()
 		close(q.stopCh)
 
-		// Wait for all workers to finish.
-		q.workerWg.Wait()
+		if drainTimeout > 0 && len(runningIDs) > 0 {
+			// Wait for running tasks to finish, up to the drain timeout.
+			drained := make(chan struct{})
+			go func() {
+				q.workerWg.Wait()
+				close(drained)
+			}()
+
+			timer := time.NewTimer(drainTimeout)
+			defer timer.Stop()
+
+			select {
+			case <-drained:
+				log.Printf("queue drain: all %d running tasks finished cleanly", len(runningIDs))
+			case <-timer.C:
+				// Timeout expired — force-cancel any tasks still running.
+				q.mu.Lock()
+				forceCancelled := make([]string, 0, len(q.running))
+				for id, cancel := range q.running {
+					cancel()
+					delete(q.running, id)
+					forceCancelled = append(forceCancelled, id)
+				}
+				q.runningProxied = 0
+				q.mu.Unlock()
+				q.cond.Broadcast()
+				if len(forceCancelled) > 0 {
+					log.Printf("queue drain: timeout after %s, force-cancelled %d task(s): %v", drainTimeout, len(forceCancelled), forceCancelled)
+				}
+				q.workerWg.Wait()
+			}
+		} else {
+			// No drain timeout — cancel all running tasks immediately.
+			q.mu.Lock()
+			for id, cancel := range q.running {
+				cancel()
+				delete(q.running, id)
+			}
+			q.runningProxied = 0
+			q.mu.Unlock()
+			q.cond.Broadcast()
+
+			q.workerWg.Wait()
+		}
+
+		q.mu.Lock()
+		if q.proxyWakeTimer != nil {
+			q.proxyWakeTimer.Stop()
+			q.proxyWakeTimer = nil
+		}
+		q.mu.Unlock()
 		close(q.persistenceCh)
 		q.persistenceWg.Wait()
 	})
@@ -489,6 +567,24 @@ func (q *Queue) RecoverStaleTasks(ctx context.Context) error {
 
 // worker is the main loop for a fixed pool worker. It blocks on the
 // condition variable until a task is available, then executes it.
+func (q *Queue) scheduleProxyWake(delay time.Duration) {
+	if delay <= 0 {
+		delay = 100 * time.Millisecond
+	}
+	if q.stopped {
+		return
+	}
+	if q.proxyWakeTimer != nil {
+		q.proxyWakeTimer.Stop()
+	}
+	q.proxyWakeTimer = time.AfterFunc(delay, func() {
+		q.mu.Lock()
+		q.proxyWakeTimer = nil
+		q.mu.Unlock()
+		q.cond.Broadcast()
+	})
+}
+
 func (q *Queue) worker(_ int) {
 	defer q.workerWg.Done()
 
@@ -526,11 +622,23 @@ func (q *Queue) dequeueRunnableLocked() (*heapItem, bool, bool) {
 			continue
 		}
 
-		autoProxy := item.task.Proxy.Server == "" && q.proxyManager != nil
+		autoProxy := item.task.Proxy.Server == "" && q.proxyManager != nil && (item.task.Proxy.Geo != "" || item.task.Proxy.Fallback != "")
 		countsAgainstProxyLimit := item.task.Proxy.Server != "" || autoProxy
 		if countsAgainstProxyLimit && q.proxyConcurrencyLimit > 0 && q.runningProxied >= q.proxyConcurrencyLimit {
 			deferred = append(deferred, item)
 			continue
+		}
+		if autoProxy && q.proxyManager != nil {
+			fallback := item.task.Proxy.Fallback
+			if fallback == "" {
+				fallback = models.ProxyFallbackStrict
+			}
+			available, wait, err := q.proxyManager.HasAvailableProxy(item.task.Proxy.Geo, fallback)
+			if err == nil && !available {
+				deferred = append(deferred, item)
+				q.scheduleProxyWake(wait)
+				continue
+			}
 		}
 
 		for _, pending := range deferred {
@@ -679,6 +787,24 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task, countsAgainst
 	}
 }
 
+// UpdateMetrics updates the in-memory TaskMetrics snapshot.
+func (q *Queue) UpdateMetrics(completed, failed, avgDurationMs, queueDepth int) {
+	q.taskMetrics.Store(models.TaskMetrics{
+		Completed:     completed,
+		Failed:        failed,
+		AvgDurationMs: avgDurationMs,
+		QueueDepth:    queueDepth,
+	})
+}
+
+// TaskMetrics returns the latest TaskMetrics snapshot.
+func (q *Queue) TaskMetrics() models.TaskMetrics {
+	if v := q.taskMetrics.Load(); v != nil {
+		return v.(models.TaskMetrics)
+	}
+	return models.TaskMetrics{}
+}
+
 func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execErr error, result *models.TaskResult) retryInfo {
 	if task.RetryCount < task.MaxRetries {
 		if result != nil {
@@ -699,11 +825,26 @@ func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execE
 		}
 		q.emitEvent(task.ID, models.TaskStatusRetrying, execErr.Error())
 
-		backoffSec := math.Pow(2, float64(task.RetryCount))
-		if backoffSec > 60 {
-			backoffSec = 60
+		q.mu.Lock()
+		baseMs := q.retryBackoffBaseMs
+		q.mu.Unlock()
+		if baseMs <= 0 {
+			baseMs = 5000
 		}
-		backoff := time.Duration(backoffSec) * time.Second
+		backoffMs := float64(baseMs) * math.Pow(2, float64(task.RetryCount))
+		const maxBackoffMs = 300000 // 5 minutes
+		if backoffMs > maxBackoffMs {
+			backoffMs = maxBackoffMs
+		}
+		backoff := time.Duration(backoffMs) * time.Millisecond
+
+		logs.Logger.Info("task retrying",
+			slog.String("task_id", task.ID),
+			slog.String("action", "retry"),
+			slog.Int("retry_count", task.RetryCount+1),
+			slog.Int("max_retries", task.MaxRetries),
+			slog.String("error", execErr.Error()),
+		)
 
 		retryTask := task
 		retryTask.RetryCount++
@@ -721,9 +862,11 @@ func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execE
 
 	stepLogs := []models.StepLog(nil)
 	networkLogs := []models.NetworkLog(nil)
+	var duration time.Duration
 	if result != nil {
 		stepLogs = result.StepLogs
 		networkLogs = result.NetworkLogs
+		duration = result.Duration
 	}
 	dbCtx, cancel := q.dbWriteContext(parentCtx)
 	defer cancel()
@@ -734,8 +877,52 @@ func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execE
 	q.mu.Lock()
 	q.metrics.TotalFailed++
 	q.mu.Unlock()
+	logs.Logger.Error("task failed",
+		slog.String("task_id", task.ID),
+		slog.String("action", "failure"),
+		slog.String("error", execErr.Error()),
+		slog.Int64("duration_ms", duration.Milliseconds()),
+	)
 	q.emitEvent(task.ID, models.TaskStatusFailed, execErr.Error())
+	if task.WebhookURL != "" && webhookEventEnabled(task.WebhookEvents, string(models.TaskStatusFailed)) {
+		var extractedDataKeys []string
+		if result != nil {
+			for k := range result.ExtractedData {
+				extractedDataKeys = append(extractedDataKeys, k)
+			}
+		}
+		go fireWebhook(task.WebhookURL, task.ID, models.TaskStatusFailed, duration, execErr.Error(), extractedDataKeys)
+	}
 	return retryInfo{}
+}
+
+func (q *Queue) handleSuccess(execCtx context.Context, task models.Task, result *models.TaskResult) {
+	if result == nil {
+		q.emitEvent(task.ID, models.TaskStatusFailed, "save result: missing task result")
+		return
+	}
+	dbCtx, cancel := q.dbWriteContext(execCtx)
+	defer cancel()
+	if err := q.db.FinalizeTaskSuccess(dbCtx, task.ID, *result); err != nil {
+		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("save result: %v", err))
+		return
+	}
+	q.mu.Lock()
+	q.metrics.TotalCompleted++
+	q.mu.Unlock()
+	logs.Logger.Info("task completed",
+		slog.String("task_id", task.ID),
+		slog.String("action", "success"),
+		slog.Int64("duration_ms", result.Duration.Milliseconds()),
+	)
+	q.emitEvent(task.ID, models.TaskStatusCompleted, "")
+	if task.WebhookURL != "" && webhookEventEnabled(task.WebhookEvents, string(models.TaskStatusCompleted)) {
+		var extractedDataKeys []string
+		for k := range result.ExtractedData {
+			extractedDataKeys = append(extractedDataKeys, k)
+		}
+		go fireWebhook(task.WebhookURL, task.ID, models.TaskStatusCompleted, result.Duration, "", extractedDataKeys)
+	}
 }
 
 func (q *Queue) scheduleRetry(ri retryInfo) {
@@ -774,23 +961,6 @@ func (q *Queue) scheduleRetry(ri retryInfo) {
 	}
 }
 
-func (q *Queue) handleSuccess(execCtx context.Context, task models.Task, result *models.TaskResult) {
-	if result == nil {
-		q.emitEvent(task.ID, models.TaskStatusFailed, "save result: missing task result")
-		return
-	}
-	dbCtx, cancel := q.dbWriteContext(execCtx)
-	defer cancel()
-	if err := q.db.FinalizeTaskSuccess(dbCtx, task.ID, *result); err != nil {
-		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("save result: %v", err))
-		return
-	}
-	q.mu.Lock()
-	q.metrics.TotalCompleted++
-	q.mu.Unlock()
-	q.emitEvent(task.ID, models.TaskStatusCompleted, "")
-}
-
 func (q *Queue) emitEvent(taskID string, status models.TaskStatus, errMsg string) {
 	if q.onEvent != nil {
 		q.onEvent(models.TaskEvent{
@@ -798,6 +968,51 @@ func (q *Queue) emitEvent(taskID string, status models.TaskStatus, errMsg string
 			Status: status,
 			Error:  errMsg,
 		})
+	}
+}
+
+func webhookEventEnabled(events []string, event string) bool {
+	if len(events) == 0 {
+		return true
+	}
+	for _, e := range events {
+		if e == event {
+			return true
+		}
+	}
+	return false
+}
+
+type webhookPayload struct {
+	TaskID            string   `json:"taskId"`
+	Status            string   `json:"status"`
+	DurationMs        int64    `json:"durationMs"`
+	Error             string   `json:"error,omitempty"`
+	ExtractedDataKeys []string `json:"extractedDataKeys,omitempty"`
+}
+
+func fireWebhook(url, taskID string, status models.TaskStatus, duration time.Duration, errMsg string, extractedDataKeys []string) {
+	payload := webhookPayload{
+		TaskID:            taskID,
+		Status:            string(status),
+		DurationMs:        duration.Milliseconds(),
+		Error:             errMsg,
+		ExtractedDataKeys: extractedDataKeys,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("webhook marshal error for task %s: %v", taskID, err)
+		return
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		log.Printf("webhook POST error for task %s: %v", taskID, err)
+		return
+	}
+	resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		log.Printf("webhook non-2xx response for task %s: %d", taskID, resp.StatusCode)
 	}
 }
 

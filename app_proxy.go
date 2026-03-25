@@ -12,22 +12,30 @@ import (
 )
 
 func (a *App) AddProxy(server, protocol, username, password, geo string) (*models.Proxy, error) {
+	return a.AddProxyWithRateLimit(server, protocol, username, password, geo, 0)
+}
+
+func (a *App) AddProxyWithRateLimit(server, protocol, username, password, geo string, maxRequestsPerMinute int) (*models.Proxy, error) {
 	if err := a.ready(); err != nil {
 		return nil, err
 	}
 	if err := validation.ValidateProxy(server, models.ProxyProtocol(protocol)); err != nil {
 		return nil, fmt.Errorf("add proxy: %w", err)
 	}
+	if maxRequestsPerMinute < 0 {
+		return nil, fmt.Errorf("add proxy: maxRequestsPerMinute must be >= 0")
+	}
 
 	p := models.Proxy{
-		ID:        uuid.New().String(),
-		Server:    server,
-		Protocol:  models.ProxyProtocol(protocol),
-		Username:  username,
-		Password:  password,
-		Geo:       strings.ToUpper(strings.TrimSpace(geo)),
-		Status:    models.ProxyStatusUnknown,
-		CreatedAt: time.Now(),
+		ID:                   uuid.New().String(),
+		Server:               server,
+		Protocol:             models.ProxyProtocol(protocol),
+		Username:             username,
+		Password:             password,
+		Geo:                  strings.ToUpper(strings.TrimSpace(geo)),
+		Status:               models.ProxyStatusUnknown,
+		MaxRequestsPerMinute: maxRequestsPerMinute,
+		CreatedAt:            time.Now(),
 	}
 
 	if err := a.db.CreateProxy(a.ctx, p); err != nil {

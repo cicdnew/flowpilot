@@ -7,27 +7,29 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"flowpilot/internal/models"
 )
 
-const (
-	antiCaptchaBaseURL   = "https://api.anti-captcha.com"
-	antiCaptchaPollDelay = 5 * time.Second
-	antiCaptchaMaxWait   = 120 * time.Second
-	antiCaptchaBackoff   = 15 * time.Second
-)
-
 type AntiCaptcha struct {
-	apiKey string
-	client *http.Client
+	apiKey    string
+	client    *http.Client
+	baseURL   string
+	pollDelay time.Duration
+	maxWait   time.Duration
+	backoff   time.Duration
 }
 
 func NewAntiCaptcha(apiKey string) *AntiCaptcha {
 	return &AntiCaptcha{
-		apiKey: apiKey,
-		client: &http.Client{Timeout: 30 * time.Second},
+		apiKey:    apiKey,
+		client:    &http.Client{Timeout: 30 * time.Second},
+		baseURL:   "https://api.anti-captcha.com",
+		pollDelay: 5 * time.Second,
+		maxWait:   120 * time.Second,
+		backoff:   15 * time.Second,
 	}
 }
 
@@ -114,7 +116,7 @@ func (a *AntiCaptcha) createTask(ctx context.Context, req models.CaptchaSolveReq
 		Task:      task,
 	}
 
-	resp, err := a.doPost(ctx, antiCaptchaBaseURL+"/createTask", body)
+	resp, err := a.doPost(ctx, a.baseURL+"/createTask", body)
 	if err != nil {
 		return 0, err
 	}
@@ -125,18 +127,20 @@ func (a *AntiCaptcha) createTask(ctx context.Context, req models.CaptchaSolveReq
 }
 
 func (a *AntiCaptcha) pollResult(ctx context.Context, taskID int64) (string, error) {
-	deadline := time.Now().Add(antiCaptchaMaxWait)
-	delay := antiCaptchaPollDelay
+	deadline := time.Now().Add(a.maxWait)
+	delay := a.pollDelay
 
 	for {
 		if time.Now().After(deadline) {
-			return "", fmt.Errorf("captcha solve timed out after %s", antiCaptchaMaxWait)
+			return "", fmt.Errorf("captcha solve timed out after %s", a.maxWait)
 		}
 
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return "", ctx.Err()
-		case <-time.After(delay):
+		case <-timer.C:
 		}
 
 		body := antiCaptchaRequest{
@@ -144,7 +148,7 @@ func (a *AntiCaptcha) pollResult(ctx context.Context, taskID int64) (string, err
 			TaskID:    taskID,
 		}
 
-		resp, err := a.doPost(ctx, antiCaptchaBaseURL+"/getTaskResult", body)
+		resp, err := a.doPost(ctx, a.baseURL+"/getTaskResult", body)
 		if err != nil {
 			return "", err
 		}
@@ -154,7 +158,7 @@ func (a *AntiCaptcha) pollResult(ctx context.Context, taskID int64) (string, err
 
 		switch resp.Status {
 		case "processing":
-			delay = min(delay*2, antiCaptchaBackoff)
+			delay = min(delay*2, a.backoff)
 			continue
 		case "ready":
 			token := resp.Solution.GRecaptchaResponse
@@ -176,7 +180,7 @@ func (a *AntiCaptcha) Balance(ctx context.Context) (float64, error) {
 		ClientKey: a.apiKey,
 	}
 
-	resp, err := a.doPost(ctx, antiCaptchaBaseURL+"/getBalance", body)
+	resp, err := a.doPost(ctx, a.baseURL+"/getBalance", body)
 	if err != nil {
 		return 0, err
 	}
@@ -204,7 +208,12 @@ func (a *AntiCaptcha) doPost(ctx context.Context, url string, payload interface{
 	}
 	defer httpResp.Body.Close()
 
-	respBody, err := io.ReadAll(httpResp.Body)
+	if httpResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(httpResp.Body, 512))
+		return nil, fmt.Errorf("HTTP %d: %s — %s", httpResp.StatusCode, httpResp.Status, strings.TrimSpace(string(body)))
+	}
+
+	respBody, err := io.ReadAll(io.LimitReader(httpResp.Body, 1<<20)) // 1 MiB limit
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}

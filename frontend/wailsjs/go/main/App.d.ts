@@ -41,9 +41,13 @@ export function DeleteVisualBaseline(arg1:string):Promise<void>;
 
 export function ExportBatchLogs(arg1:string):Promise<string>;
 
+export function ExportFlow(arg1:string):Promise<string>;
+
 export function ExportResultsCSV():Promise<string>;
 
 export function ExportResultsJSON():Promise<string>;
+
+export function ExportTask(arg1:string):Promise<string>;
 
 export function ExportTaskLogs(arg1:string):Promise<string>;
 
@@ -68,6 +72,10 @@ export function GetTask(arg1:string):Promise<models.Task>;
 export function GetTaskStats():Promise<Record<string, number>>;
 
 export function GetVisualDiff(arg1:string):Promise<models.VisualDiff>;
+
+export function ImportFlow(arg1:string):Promise<Array<models.Task>>;
+
+export function ImportTask(arg1:string):Promise<models.Task>;
 
 export function IsRecording():Promise<boolean>;
 

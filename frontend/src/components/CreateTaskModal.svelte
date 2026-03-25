@@ -1,7 +1,8 @@
 <script lang="ts">
   import { CreateTask, ListProxyRoutingPresets } from '../../wailsjs/go/main/App';
   import type { TaskStep, ProxyConfig, TaskLoggingPolicy, ProxyRoutingFallback, ProxyRoutingPreset } from '../lib/types';
-  import { createEventDispatcher } from 'svelte';
+  import { ensureStepActionStateLoaded, getStepActionOptions, stepActionState } from '../lib/step-actions';
+  import { createEventDispatcher, onMount } from 'svelte';
 
   const dispatch = createEventDispatcher();
 
@@ -29,7 +30,9 @@
   let errorMessage = '';
   let submitting = false;
 
-  const actions = ['navigate', 'click', 'type', 'wait', 'screenshot', 'extract', 'scroll', 'select', 'if_element', 'if_text', 'if_url', 'loop', 'end_loop', 'break_loop', 'goto', 'solve_captcha', 'click_ad'];
+  onMount(() => {
+    ensureStepActionStateLoaded().catch(() => {});
+  });
 
   ListProxyRoutingPresets().then((list) => {
     routingPresets = (list || []) as ProxyRoutingPreset[];
@@ -59,23 +62,32 @@
     }
     submitting = true;
 
+    const trimmedProxyServer = proxyServer.trim();
+    const normalizedProxyGeo = proxyGeo.trim().toUpperCase();
     const proxyConfig: ProxyConfig = useRandomCountryProxy
       ? {
           server: '',
           protocol: '',
           username: '',
           password: '',
-          geo: proxyGeo.trim().toUpperCase(),
+          geo: normalizedProxyGeo,
           fallback: proxyFallback,
         }
-      : {
-          server: proxyServer,
-          protocol: proxyProtocol,
-          username: proxyUsername,
-          password: proxyPassword,
-          geo: proxyGeo.trim().toUpperCase(),
-          fallback: proxyFallback,
-        };
+      : trimmedProxyServer
+        ? {
+            server: trimmedProxyServer,
+            protocol: proxyProtocol,
+            username: proxyUsername,
+            password: proxyPassword,
+            geo: normalizedProxyGeo,
+            fallback: proxyFallback,
+          }
+        : {
+            server: '',
+            protocol: '',
+            username: '',
+            password: '',
+          };
 
     // Set first step's value to URL if it's a navigate step
     const taskSteps = steps.map(s => {
@@ -174,8 +186,8 @@
       </div>
       <div class="form-group">
         <label for="task-max-logs">Max execution logs</label>
-        <input id="task-max-logs" type="number" bind:value={maxExecutionLogs} min="1" max="5000" />
-        <span class="hint">Limit in-memory execution logs for high-throughput runs.</span>
+        <input id="task-max-logs" type="number" bind:value={maxExecutionLogs} min="0" max="5000" placeholder="0 = default" />
+        <span class="hint">0 = use the default log limit. Otherwise limit in-memory execution logs for high-throughput runs.</span>
       </div>
 
       <h4>Proxy (Optional)</h4>
@@ -233,10 +245,13 @@
       </div>
 
       <h4>Steps</h4>
+      {#if $stepActionState.warning}
+        <div class="action-warning">{$stepActionState.warning}</div>
+      {/if}
       {#each steps as step, i}
         <div class="step-row">
           <select bind:value={step.action}>
-            {#each actions as action}
+            {#each getStepActionOptions(step.action, $stepActionState.actions) as action}
               <option value={action}>{action}</option>
             {/each}
           </select>
@@ -352,6 +367,15 @@
     color: var(--text-muted);
     margin-top: 2px;
     display: block;
+  }
+  .action-warning {
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    background: rgba(245, 158, 11, 0.12);
+    color: #fde68a;
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    font-size: 12px;
   }
   .error-banner {
     padding: 8px 20px;

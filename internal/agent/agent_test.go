@@ -127,7 +127,6 @@ func TestRunRespondsToContextCancel(t *testing.T) {
 		done <- a.Run(ctx)
 	}()
 
-	time.Sleep(300 * time.Millisecond)
 	cancel()
 
 	select {
@@ -192,14 +191,19 @@ func TestProcessPendingWithTasks(t *testing.T) {
 
 	a.processPending(context.Background())
 
-	time.Sleep(200 * time.Millisecond)
-
-	got, err := a.db.GetTask(context.Background(), "agent-task-1")
-	if err != nil {
-		t.Fatalf("GetTask: %v", err)
-	}
-	if got.Status == models.TaskStatusPending {
-		t.Error("task should no longer be pending after processPending")
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		got, err := a.db.GetTask(context.Background(), "agent-task-1")
+		if err != nil {
+			t.Fatalf("GetTask: %v", err)
+		}
+		if got.Status != models.TaskStatusPending {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("task should no longer be pending after processPending")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

@@ -54,6 +54,11 @@ func setupTestQueue(t *testing.T, maxConcurrency int, events *[]models.TaskEvent
 	return q, db
 }
 
+func setupTestQueueNoWorkers(t *testing.T, events *[]models.TaskEvent, mu *sync.Mutex) (*Queue, *database.DB) {
+	t.Helper()
+	return setupTestQueue(t, 0, events, mu)
+}
+
 func makeTestTask(id string) models.Task {
 	return models.Task{
 		ID:   id,
@@ -172,7 +177,7 @@ func TestCancel(t *testing.T) {
 }
 
 func TestStopCancelsAllRunning(t *testing.T) {
-	q, _ := setupTestQueue(t, 10, nil, nil)
+	q, _ := setupTestQueueNoWorkers(t, nil, nil)
 
 	q.mu.Lock()
 	cancel1Done := make(chan struct{})
@@ -237,7 +242,7 @@ func TestSubmitBatch(t *testing.T) {
 }
 
 func TestRunningCount(t *testing.T) {
-	q, _ := setupTestQueue(t, 10, nil, nil)
+	q, _ := setupTestQueueNoWorkers(t, nil, nil)
 	defer q.Stop()
 
 	if q.RunningCount() != 0 {
@@ -440,7 +445,7 @@ func TestMetricsInitialState(t *testing.T) {
 }
 
 func TestMetricsRunningAndQueued(t *testing.T) {
-	q, _ := setupTestQueue(t, 10, nil, nil)
+	q, _ := setupTestQueueNoWorkers(t, nil, nil)
 	defer q.Stop()
 
 	q.mu.Lock()
@@ -468,7 +473,7 @@ func TestMetricsRunningAndQueued(t *testing.T) {
 }
 
 func TestMetricsPendingEqualsQueuedPlusRunning(t *testing.T) {
-	q, _ := setupTestQueue(t, 10, nil, nil)
+	q, _ := setupTestQueueNoWorkers(t, nil, nil)
 	defer q.Stop()
 
 	q.mu.Lock()
@@ -514,7 +519,7 @@ func TestMetricsTotalSubmittedIncrementsOnSubmit(t *testing.T) {
 }
 
 func TestMetricsAfterStop(t *testing.T) {
-	q, _ := setupTestQueue(t, 10, nil, nil)
+	q, _ := setupTestQueueNoWorkers(t, nil, nil)
 
 	q.mu.Lock()
 	q.running["r-1"] = func() {}
@@ -537,7 +542,7 @@ func TestMetricsAfterStop(t *testing.T) {
 }
 
 func TestSubmitDuplicateRunning(t *testing.T) {
-	q, db := setupTestQueue(t, 10, nil, nil)
+	q, db := setupTestQueueNoWorkers(t, nil, nil)
 	defer q.Stop()
 
 	task := makeTestTask("dup-run-1")
@@ -559,7 +564,7 @@ func TestSubmitDuplicateRunning(t *testing.T) {
 }
 
 func TestSubmitDuplicatePending(t *testing.T) {
-	q, db := setupTestQueue(t, 10, nil, nil)
+	q, db := setupTestQueueNoWorkers(t, nil, nil)
 	defer q.Stop()
 
 	task := makeTestTask("dup-pend-1")
@@ -631,7 +636,7 @@ func TestCancelNonExistentTask(t *testing.T) {
 func TestCancelPendingTaskInHeap(t *testing.T) {
 	var events []models.TaskEvent
 	var mu sync.Mutex
-	q, db := setupTestQueue(t, 10, &events, &mu)
+	q, db := setupTestQueueNoWorkers(t, &events, &mu)
 	defer q.Stop()
 
 	task := makeTestTask("cancel-heap-1")
@@ -687,7 +692,7 @@ func TestCancelPendingTaskInHeap(t *testing.T) {
 func TestCancelRunningTaskUpdatesStateAndEmitsEvent(t *testing.T) {
 	var events []models.TaskEvent
 	var mu sync.Mutex
-	q, db := setupTestQueue(t, 10, &events, &mu)
+	q, db := setupTestQueueNoWorkers(t, &events, &mu)
 	defer q.Stop()
 
 	task := makeTestTask("cancel-running-1")
@@ -1013,7 +1018,7 @@ func TestHandleFailureRetryStoppedByContextCancel(t *testing.T) {
 }
 
 func TestStopClearsHeapTasks(t *testing.T) {
-	q, _ := setupTestQueue(t, 10, nil, nil)
+	q, _ := setupTestQueueNoWorkers(t, nil, nil)
 
 	cancel1Done := make(chan struct{})
 	cancel2Done := make(chan struct{})
@@ -1145,7 +1150,7 @@ func TestPriorityOrdering(t *testing.T) {
 }
 
 func TestPauseBatch(t *testing.T) {
-	q, _ := setupTestQueue(t, 10, nil, nil)
+	q, _ := setupTestQueueNoWorkers(t, nil, nil)
 	defer q.Stop()
 
 	now := time.Now()
@@ -1178,7 +1183,7 @@ func TestPauseBatch(t *testing.T) {
 }
 
 func TestResumeBatch(t *testing.T) {
-	q, _ := setupTestQueue(t, 10, nil, nil)
+	q, _ := setupTestQueueNoWorkers(t, nil, nil)
 	defer q.Stop()
 
 	now := time.Now()
@@ -1217,7 +1222,7 @@ func TestResumeBatch(t *testing.T) {
 }
 
 func TestPauseBatchDoesNotAffectOther(t *testing.T) {
-	q, _ := setupTestQueue(t, 10, nil, nil)
+	q, _ := setupTestQueueNoWorkers(t, nil, nil)
 	defer q.Stop()
 
 	now := time.Now()
@@ -1292,7 +1297,7 @@ func TestRecoverStaleTasks(t *testing.T) {
 }
 
 func TestStopClearsPausedHeap(t *testing.T) {
-	q, _ := setupTestQueue(t, 10, nil, nil)
+	q, _ := setupTestQueueNoWorkers(t, nil, nil)
 
 	cancelDone := make(chan struct{})
 	q.mu.Lock()
@@ -1322,7 +1327,7 @@ func TestStopClearsPausedHeap(t *testing.T) {
 }
 
 func TestStopClearsMainHeapTasks(t *testing.T) {
-	q, _ := setupTestQueue(t, 10, nil, nil)
+	q, _ := setupTestQueueNoWorkers(t, nil, nil)
 
 	cancel1Done := make(chan struct{})
 	cancel2Done := make(chan struct{})
@@ -1361,7 +1366,7 @@ func TestStopClearsMainHeapTasks(t *testing.T) {
 }
 
 func TestCancelTaskInPausedHeap(t *testing.T) {
-	q, db := setupTestQueue(t, 10, nil, nil)
+	q, db := setupTestQueueNoWorkers(t, nil, nil)
 	defer q.Stop()
 
 	task := makeTestTask("cancel-paused-1")
@@ -1398,7 +1403,7 @@ func TestCancelTaskInPausedHeap(t *testing.T) {
 }
 
 func TestQueueFullCountsBothHeaps(t *testing.T) {
-	q, _ := setupTestQueue(t, 1, nil, nil)
+	q, _ := setupTestQueueNoWorkers(t, nil, nil)
 	defer q.Stop()
 
 	q.maxPending = 3
@@ -1420,7 +1425,7 @@ func TestQueueFullCountsBothHeaps(t *testing.T) {
 }
 
 func TestMetricsIncludesPausedInQueued(t *testing.T) {
-	q, _ := setupTestQueue(t, 10, nil, nil)
+	q, _ := setupTestQueueNoWorkers(t, nil, nil)
 	defer q.Stop()
 
 	q.mu.Lock()
@@ -1437,7 +1442,7 @@ func TestMetricsIncludesPausedInQueued(t *testing.T) {
 }
 
 func TestDequeueRunnableLockedSkipsProxyWhenProxySlotsFull(t *testing.T) {
-	q, _ := setupTestQueue(t, 2, nil, nil)
+	q, _ := setupTestQueueNoWorkers(t, nil, nil)
 	defer q.Stop()
 
 	proxied := makeTestTask("proxy-task")
@@ -1478,7 +1483,7 @@ func TestDequeueRunnableLockedSkipsProxyWhenProxySlotsFull(t *testing.T) {
 }
 
 func TestDequeueRunnableLockedTreatsAutoProxyTasksAsProxyLimited(t *testing.T) {
-	q, db := setupTestQueue(t, 2, nil, nil)
+	q, db := setupTestQueueNoWorkers(t, nil, nil)
 	defer q.Stop()
 
 	pm := proxy.NewManager(db, models.ProxyPoolConfig{Strategy: models.RotationRoundRobin})
@@ -1486,7 +1491,11 @@ func TestDequeueRunnableLockedTreatsAutoProxyTasksAsProxyLimited(t *testing.T) {
 	q.SetProxyManager(pm)
 
 	autoProxyTask := makeTestTask("auto-proxy-task")
+	autoProxyTask.Proxy.Geo = "US"
+	autoProxyTask.Proxy.Fallback = models.ProxyFallbackStrict
 	anotherAutoProxyTask := makeTestTask("auto-proxy-task-2")
+	anotherAutoProxyTask.Proxy.Geo = "CA"
+	anotherAutoProxyTask.Proxy.Fallback = models.ProxyFallbackAny
 	anotherAutoProxyTask.Priority = models.PriorityLow
 
 	q.mu.Lock()
@@ -1515,5 +1524,38 @@ func TestDequeueRunnableLockedTreatsAutoProxyTasksAsProxyLimited(t *testing.T) {
 	q.mu.Unlock()
 	if !stillQueued {
 		t.Fatal("expected auto-proxy tasks to remain queued while proxy slots are full")
+	}
+}
+
+func TestDequeueRunnableLockedDoesNotAutoProxyEmptyProxyConfig(t *testing.T) {
+	q, db := setupTestQueueNoWorkers(t, nil, nil)
+	defer q.Stop()
+
+	pm := proxy.NewManager(db, models.ProxyPoolConfig{Strategy: models.RotationRoundRobin})
+	defer pm.Stop()
+	q.SetProxyManager(pm)
+
+	directTask := makeTestTask("direct-task")
+
+	q.mu.Lock()
+	q.proxyConcurrencyLimit = 1
+	q.runningProxied = 1
+	heap.Push(&q.pq, &heapItem{task: directTask, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
+	q.heapSet[directTask.ID] = struct{}{}
+
+	item, countsAgainstProxyLimit, autoProxy := q.dequeueRunnableLocked()
+	q.mu.Unlock()
+
+	if item == nil {
+		t.Fatal("expected direct task to remain runnable without proxy routing hints")
+	}
+	if item.task.ID != directTask.ID {
+		t.Fatalf("expected direct task, got %s", item.task.ID)
+	}
+	if countsAgainstProxyLimit {
+		t.Fatal("expected direct task to bypass proxy concurrency limit")
+	}
+	if autoProxy {
+		t.Fatal("expected empty proxy config to mean direct connection, not auto proxy")
 	}
 }

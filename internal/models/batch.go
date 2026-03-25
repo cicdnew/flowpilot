@@ -8,16 +8,18 @@ const MaxBatchSize = 10000
 // AdvancedBatchInput holds the configuration for creating batch tasks
 // from a recorded flow with shared steps.
 type AdvancedBatchInput struct {
-	FlowID         string      `json:"flowId"`
-	URLs           []string    `json:"urls"`
-	NamingTemplate string      `json:"namingTemplate"` // e.g. "{{index}} - {{domain}}"
-	Priority       int         `json:"priority"`
-	Proxy          ProxyConfig `json:"proxy"`
-	Tags           []string    `json:"tags,omitempty"`
-	ProxyCountry   string      `json:"proxyCountry,omitempty"`
-	ProxyFallback  string      `json:"proxyFallback,omitempty"`
-	AutoStart      bool        `json:"autoStart"`
-	Headless       *bool       `json:"headless,omitempty"` // nil defaults to true for backwards compatibility
+	FlowID         string             `json:"flowId"`
+	URLs           []string           `json:"urls"`
+	NamingTemplate string             `json:"namingTemplate"` // e.g. "{{index}} - {{domain}}"
+	Priority       int                `json:"priority"`
+	Proxy          ProxyConfig        `json:"proxy"`
+	Tags           []string           `json:"tags,omitempty"`
+	ProxyCountry   string             `json:"proxyCountry,omitempty"`
+	ProxyFallback  string             `json:"proxyFallback,omitempty"`
+	AutoStart      bool               `json:"autoStart"`
+	Headless       *bool              `json:"headless,omitempty"` // nil defaults to true for backwards compatibility
+	Timeout        int                `json:"timeout,omitempty"`  // total task timeout in seconds, 0 = default
+	LoggingPolicy  *TaskLoggingPolicy `json:"loggingPolicy,omitempty"`
 }
 
 // BatchHeadless returns the effective headless setting.
@@ -49,24 +51,6 @@ type BatchProgress struct {
 	Completed int    `json:"completed"`
 	Failed    int    `json:"failed"`
 	Cancelled int    `json:"cancelled"`
-}
-
-// TemplateVariable defines a supported substitution variable for batch naming
-// and step value templates.
-type TemplateVariable struct {
-	Name        string `json:"name"`        // e.g. "url"
-	Placeholder string `json:"placeholder"` // e.g. "{{url}}"
-	Description string `json:"description"`
-}
-
-// SupportedVariables returns all template variables available for substitution.
-func SupportedVariables() []TemplateVariable {
-	return []TemplateVariable{
-		{Name: "url", Placeholder: "{{url}}", Description: "Full URL of the task"},
-		{Name: "domain", Placeholder: "{{domain}}", Description: "Domain extracted from URL"},
-		{Name: "index", Placeholder: "{{index}}", Description: "1-based index in the batch"},
-		{Name: "name", Placeholder: "{{name}}", Description: "Generated task name"},
-	}
 }
 
 // ValidateBatchTemplate checks that only supported variables are used in a template string.

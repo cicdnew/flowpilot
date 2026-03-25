@@ -13,23 +13,27 @@ import (
 )
 
 const (
-	twoCaptchaBaseURL    = "https://2captcha.com"
-	twoCaptchaInPath     = "/in.php"
-	twoCaptchaResPath    = "/res.php"
-	twoCaptchaPollDelay  = 5 * time.Second
-	twoCaptchaMaxWait    = 120 * time.Second
-	twoCaptchaBackoffMax = 15 * time.Second
+	twoCaptchaInPath  = "/in.php"
+	twoCaptchaResPath = "/res.php"
 )
 
 type TwoCaptcha struct {
-	apiKey string
-	client *http.Client
+	apiKey      string
+	client      *http.Client
+	baseURL     string
+	pollDelay   time.Duration
+	maxWait     time.Duration
+	backoffMax  time.Duration
 }
 
 func NewTwoCaptcha(apiKey string) *TwoCaptcha {
 	return &TwoCaptcha{
-		apiKey: apiKey,
-		client: &http.Client{Timeout: 30 * time.Second},
+		apiKey:     apiKey,
+		client:     &http.Client{Timeout: 30 * time.Second},
+		baseURL:    "https://2captcha.com",
+		pollDelay:  5 * time.Second,
+		maxWait:    120 * time.Second,
+		backoffMax: 15 * time.Second,
 	}
 }
 
@@ -85,7 +89,7 @@ func (t *TwoCaptcha) submit(ctx context.Context, req models.CaptchaSolveRequest)
 		return "", fmt.Errorf("unsupported captcha type: %s", req.Type)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, twoCaptchaBaseURL+twoCaptchaInPath, strings.NewReader(params.Encode()))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, t.baseURL+twoCaptchaInPath, strings.NewReader(params.Encode()))
 	if err != nil {
 		return "", fmt.Errorf("create submit request: %w", err)
 	}
@@ -97,7 +101,12 @@ func (t *TwoCaptcha) submit(ctx context.Context, req models.CaptchaSolveRequest)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return "", fmt.Errorf("HTTP %d: %s — %s", resp.StatusCode, resp.Status, strings.TrimSpace(string(body)))
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MiB limit
 	if err != nil {
 		return "", fmt.Errorf("read submit response: %w", err)
 	}
@@ -111,18 +120,20 @@ func (t *TwoCaptcha) submit(ctx context.Context, req models.CaptchaSolveRequest)
 }
 
 func (t *TwoCaptcha) poll(ctx context.Context, taskID string) (string, error) {
-	deadline := time.Now().Add(twoCaptchaMaxWait)
-	delay := twoCaptchaPollDelay
+	deadline := time.Now().Add(t.maxWait)
+	delay := t.pollDelay
 
 	for {
 		if time.Now().After(deadline) {
-			return "", fmt.Errorf("captcha solve timed out after %s", twoCaptchaMaxWait)
+			return "", fmt.Errorf("captcha solve timed out after %s", t.maxWait)
 		}
 
+		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return "", ctx.Err()
-		case <-time.After(delay):
+		case <-timer.C:
 		}
 
 		params := url.Values{
@@ -132,7 +143,7 @@ func (t *TwoCaptcha) poll(ctx context.Context, taskID string) (string, error) {
 			"json":   {"0"},
 		}
 
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, twoCaptchaBaseURL+twoCaptchaResPath+"?"+params.Encode(), nil)
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, t.baseURL+twoCaptchaResPath+"?"+params.Encode(), nil)
 		if err != nil {
 			return "", fmt.Errorf("create poll request: %w", err)
 		}
@@ -142,7 +153,13 @@ func (t *TwoCaptcha) poll(ctx context.Context, taskID string) (string, error) {
 			return "", fmt.Errorf("send poll request: %w", err)
 		}
 
-		body, err := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			resp.Body.Close()
+			return "", fmt.Errorf("HTTP %d: %s — %s", resp.StatusCode, resp.Status, strings.TrimSpace(string(body)))
+		}
+
+		body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MiB limit
 		resp.Body.Close()
 		if err != nil {
 			return "", fmt.Errorf("read poll response: %w", err)
@@ -150,7 +167,7 @@ func (t *TwoCaptcha) poll(ctx context.Context, taskID string) (string, error) {
 
 		text := strings.TrimSpace(string(body))
 		if text == "CAPCHA_NOT_READY" {
-			delay = min(delay*2, twoCaptchaBackoffMax)
+			delay = min(delay*2, t.backoffMax)
 			continue
 		}
 		if strings.HasPrefix(text, "OK|") {
@@ -167,7 +184,7 @@ func (t *TwoCaptcha) Balance(ctx context.Context) (float64, error) {
 		"json":   {"0"},
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, twoCaptchaBaseURL+twoCaptchaResPath+"?"+params.Encode(), nil)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, t.baseURL+twoCaptchaResPath+"?"+params.Encode(), nil)
 	if err != nil {
 		return 0, fmt.Errorf("create balance request: %w", err)
 	}
@@ -178,7 +195,12 @@ func (t *TwoCaptcha) Balance(ctx context.Context) (float64, error) {
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return 0, fmt.Errorf("HTTP %d: %s — %s", resp.StatusCode, resp.Status, strings.TrimSpace(string(body)))
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1 MiB limit
 	if err != nil {
 		return 0, fmt.Errorf("read balance response: %w", err)
 	}

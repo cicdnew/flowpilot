@@ -78,12 +78,20 @@ export function ExportBatchLogs(arg1) {
   return window['go']['main']['App']['ExportBatchLogs'](arg1);
 }
 
+export function ExportFlow(arg1) {
+  return window['go']['main']['App']['ExportFlow'](arg1);
+}
+
 export function ExportResultsCSV() {
   return window['go']['main']['App']['ExportResultsCSV']();
 }
 
 export function ExportResultsJSON() {
   return window['go']['main']['App']['ExportResultsJSON']();
+}
+
+export function ExportTask(arg1) {
+  return window['go']['main']['App']['ExportTask'](arg1);
 }
 
 export function ExportTaskLogs(arg1) {
@@ -132,6 +140,14 @@ export function GetTaskStats() {
 
 export function GetVisualDiff(arg1) {
   return window['go']['main']['App']['GetVisualDiff'](arg1);
+}
+
+export function ImportFlow(arg1) {
+  return window['go']['main']['App']['ImportFlow'](arg1);
+}
+
+export function ImportTask(arg1) {
+  return window['go']['main']['App']['ImportTask'](arg1);
 }
 
 export function IsRecording() {

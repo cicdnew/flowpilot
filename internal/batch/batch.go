@@ -80,19 +80,21 @@ func (e *Engine) CreateBatchFromFlow(ctx context.Context, flow models.RecordedFl
 		}
 
 		task := models.Task{
-			ID:         uuid.New().String(),
-			Name:       name,
-			URL:        rawURL,
-			Steps:      adjustedSteps,
-			Proxy:      proxyConfig,
-			Priority:   models.TaskPriority(input.Priority),
-			Status:     models.TaskStatusPending,
-			MaxRetries: 3,
-			Tags:       input.Tags,
-			CreatedAt:  time.Now(),
-			BatchID:    batchID,
-			FlowID:     flow.ID,
-			Headless:   input.BatchHeadless(),
+			ID:            uuid.New().String(),
+			Name:          name,
+			URL:           rawURL,
+			Steps:         adjustedSteps,
+			Proxy:         proxyConfig,
+			Priority:      models.TaskPriority(input.Priority),
+			Status:        models.TaskStatusPending,
+			MaxRetries:    3,
+			Tags:          input.Tags,
+			CreatedAt:     time.Now(),
+			BatchID:       batchID,
+			FlowID:        flow.ID,
+			Headless:      input.BatchHeadless(),
+			Timeout:       input.Timeout,
+			LoggingPolicy: input.LoggingPolicy,
 		}
 
 		if err := e.db.CreateTaskTx(ctx, tx, task); err != nil {

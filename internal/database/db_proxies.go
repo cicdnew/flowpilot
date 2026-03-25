@@ -16,7 +16,7 @@ func (db *DB) scanProxyRow(rows *sql.Rows) (*models.Proxy, error) {
 
 	err := rows.Scan(
 		&p.ID, &p.Server, &p.Protocol, &p.Username, &p.Password,
-		&p.Geo, &p.Status, &p.Latency, &p.SuccessRate, &p.TotalUsed,
+		&p.Geo, &p.Status, &p.Latency, &p.SuccessRate, &p.TotalUsed, &p.MaxRequestsPerMinute,
 		&lastChecked, &p.CreatedAt,
 	)
 	if err != nil {
@@ -47,10 +47,10 @@ func (db *DB) CreateProxy(ctx context.Context, proxy models.Proxy) error {
 	}
 
 	_, err = db.conn.ExecContext(ctx, `
-		INSERT INTO proxies (id, server, protocol, username, password, geo, status, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO proxies (id, server, protocol, username, password, geo, status, max_requests_per_minute, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		proxy.ID, proxy.Server, proxy.Protocol, encUsername, encPassword,
-		proxy.Geo, proxy.Status, proxy.CreatedAt,
+		proxy.Geo, proxy.Status, proxy.MaxRequestsPerMinute, proxy.CreatedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("insert proxy %s: %w", proxy.ID, err)
@@ -59,7 +59,7 @@ func (db *DB) CreateProxy(ctx context.Context, proxy models.Proxy) error {
 }
 
 func (db *DB) ListProxies(ctx context.Context) ([]models.Proxy, error) {
-	rows, err := db.readConn.QueryContext(ctx, `SELECT id, server, protocol, username, password, geo, status, latency, success_rate, total_used, last_checked, created_at
+	rows, err := db.readConn.QueryContext(ctx, `SELECT id, server, protocol, username, password, geo, status, latency, success_rate, total_used, max_requests_per_minute, last_checked, created_at
 		FROM proxies ORDER BY success_rate DESC, latency ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("query proxies: %w", err)
@@ -81,7 +81,7 @@ func (db *DB) ListProxies(ctx context.Context) ([]models.Proxy, error) {
 }
 
 func (db *DB) ListHealthyProxies(ctx context.Context) ([]models.Proxy, error) {
-	rows, err := db.readConn.QueryContext(ctx, `SELECT id, server, protocol, username, password, geo, status, latency, success_rate, total_used, last_checked, created_at
+	rows, err := db.readConn.QueryContext(ctx, `SELECT id, server, protocol, username, password, geo, status, latency, success_rate, total_used, max_requests_per_minute, last_checked, created_at
 		FROM proxies WHERE status = 'healthy' ORDER BY success_rate DESC, latency ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("query healthy proxies: %w", err)

@@ -8,7 +8,6 @@ import (
 	"flowpilot/internal/validation"
 
 	"github.com/google/uuid"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 func (a *App) CreateTask(name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority int, autoStart bool, tags []string, timeout int, loggingPolicy *models.TaskLoggingPolicy) (*models.Task, error) {
@@ -24,6 +23,12 @@ func (a *App) CreateTask(name, url string, steps []models.TaskStep, proxyConfig 
 	if err := validation.ValidateTimeout(timeout); err != nil {
 		return nil, fmt.Errorf("create task: %w", err)
 	}
+	if err := validation.ValidateProxyConfig(proxyConfig); err != nil {
+		return nil, fmt.Errorf("create task: %w", err)
+	}
+	if err := validation.ValidateTaskLoggingPolicy(loggingPolicy); err != nil {
+		return nil, fmt.Errorf("create task: %w", err)
+	}
 
 	task := models.Task{
 		ID:            uuid.New().String(),
@@ -33,7 +38,7 @@ func (a *App) CreateTask(name, url string, steps []models.TaskStep, proxyConfig 
 		Proxy:         proxyConfig,
 		Priority:      models.TaskPriority(priority),
 		Status:        models.TaskStatusPending,
-		MaxRetries:    3,
+		MaxRetries:    models.DefaultMaxRetries,
 		Timeout:       timeout,
 		Tags:          tags,
 		CreatedAt:     time.Now(),
@@ -138,6 +143,12 @@ func (a *App) UpdateTask(id, name, url string, steps []models.TaskStep, proxyCon
 	if err := validation.ValidateTimeout(timeout); err != nil {
 		return fmt.Errorf("update task: %w", err)
 	}
+	if err := validation.ValidateProxyConfig(proxyConfig); err != nil {
+		return fmt.Errorf("update task: %w", err)
+	}
+	if err := validation.ValidateTaskLoggingPolicy(loggingPolicy); err != nil {
+		return fmt.Errorf("update task: %w", err)
+	}
 	return a.db.UpdateTask(a.ctx, id, name, url, steps, proxyConfig, models.TaskPriority(priority), tags, timeout, loggingPolicy)
 }
 
@@ -150,7 +161,7 @@ func (a *App) DeleteTask(id string) error {
 	}
 	if a.queue != nil {
 		if err := a.queue.Cancel(id); err != nil {
-			wailsRuntime.LogWarningf(a.ctx, "cancel before delete for task %s: %v", id, err)
+			logWarningf(a.ctx, "cancel before delete for task %s: %v", id, err)
 		}
 	}
 	return a.db.DeleteTask(a.ctx, id)
@@ -191,20 +202,27 @@ func (a *App) CreateBatch(inputs []models.BatchTaskInput, autoStart bool) ([]mod
 		if err := validation.ValidateTask(input.Name, input.URL, input.Steps, models.TaskPriority(input.Priority), false); err != nil {
 			return nil, fmt.Errorf("task %d: %w", i, err)
 		}
+		if err := validation.ValidateProxyConfig(input.Proxy); err != nil {
+			return nil, fmt.Errorf("task %d: %w", i, err)
+		}
 	}
 
 	created := make([]models.Task, 0, len(inputs))
 	for _, input := range inputs {
 		task := models.Task{
-			ID:         uuid.New().String(),
-			Name:       input.Name,
-			URL:        input.URL,
-			Steps:      input.Steps,
-			Proxy:      input.Proxy,
-			Priority:   models.TaskPriority(input.Priority),
-			Status:     models.TaskStatusPending,
-			MaxRetries: 3,
-			CreatedAt:  time.Now(),
+			ID:            uuid.New().String(),
+			Name:          input.Name,
+			URL:           input.URL,
+			Steps:         input.Steps,
+			Proxy:         input.Proxy,
+			Priority:      models.TaskPriority(input.Priority),
+			Status:        models.TaskStatusPending,
+			MaxRetries:    models.DefaultMaxRetries,
+			Timeout:       input.Timeout,
+			Tags:          input.Tags,
+			LoggingPolicy: input.LoggingPolicy,
+			Headless:      input.Headless,
+			CreatedAt:     time.Now(),
 		}
 		if err := a.db.CreateTask(a.ctx, task); err != nil {
 			return created, fmt.Errorf("create task %d: %w", len(created), err)

@@ -127,6 +127,17 @@ export namespace models {
 	    label?: string;
 	    jumpTo?: string;
 	    varName?: string;
+	    operator?: string;
+	    maxLoops?: number;
+	    target?: string;
+	    source?: string;
+	    keys?: string;
+	    duration?: number;
+	    domain?: string;
+	    name?: string;
+	    path?: string;
+	    data?: string;
+	    strategy?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new TaskStep(source);
@@ -142,6 +153,17 @@ export namespace models {
 	        this.label = source["label"];
 	        this.jumpTo = source["jumpTo"];
 	        this.varName = source["varName"];
+	        this.operator = source["operator"];
+	        this.maxLoops = source["maxLoops"];
+	        this.target = source["target"];
+	        this.source = source["source"];
+	        this.keys = source["keys"];
+	        this.duration = source["duration"];
+	        this.domain = source["domain"];
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.data = source["data"];
+	        this.strategy = source["strategy"];
 	    }
 	}
 	export class BatchTaskInput {

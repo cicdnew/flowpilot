@@ -9,6 +9,7 @@
   let username = '';
   let password = '';
   let geo = '';
+  let maxRequestsPerMinute = 0;
   let errorMessage = '';
   let adding = false;
   let countryStats: ProxyCountryStats[] = [];
@@ -81,11 +82,17 @@
     adding = true;
     try {
       errorMessage = '';
-      await AddProxy(server, protocol, username, password, geo.trim().toUpperCase());
+      const app = (window as Window & { go?: { main?: { App?: { AddProxyWithRateLimit?: (...args: any[]) => Promise<any> } } } }).go?.main?.App;
+      if (app?.AddProxyWithRateLimit) {
+        await app.AddProxyWithRateLimit(server, protocol, username, password, geo.trim().toUpperCase(), Math.max(0, maxRequestsPerMinute || 0));
+      } else {
+        await AddProxy(server, protocol, username, password, geo.trim().toUpperCase());
+      }
       server = '';
       username = '';
       password = '';
       geo = '';
+      maxRequestsPerMinute = 0;
       await refresh();
     } catch (err: any) {
       errorMessage = err?.message || String(err);
@@ -183,6 +190,7 @@
     <div class="form-row mt-2">
       <input bind:value={username} placeholder="Username" />
       <input type="password" bind:value={password} placeholder="Password" />
+      <input type="number" min="0" bind:value={maxRequestsPerMinute} placeholder="Req/min" style="width: 100px" />
       <button class="btn-primary btn-sm" on:click={addProxy} disabled={!server || adding}>{adding ? "..." : "Add"}</button>
     </div>
     {#if errorMessage}
@@ -201,6 +209,9 @@
             | {proxy.latency}ms
             | {(proxy.successRate * 100).toFixed(0)}% success
             | used {proxy.totalUsed}x
+            {#if proxy.maxRequestsPerMinute}
+              | limit {proxy.maxRequestsPerMinute}/min
+            {/if}
             {#if proxy.localEndpointOn}
               | local {proxy.localEndpoint} ({proxy.activeLocalUsers || 0} active){proxy.localAuthEnabled ? ' auth' : ''}
             {/if}

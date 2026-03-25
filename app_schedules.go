@@ -39,6 +39,9 @@ func (a *App) CreateSchedule(name, cronExpr, flowID, url string, proxyConfig mod
 	if err := validation.ValidateTags(tags); err != nil {
 		return nil, fmt.Errorf("create schedule: %w", err)
 	}
+	if err := validation.ValidateProxyConfig(proxyConfig); err != nil {
+		return nil, fmt.Errorf("create schedule: %w", err)
+	}
 
 	now := time.Now()
 	nextRun := cronSched.Next(now)
@@ -109,6 +112,9 @@ func (a *App) UpdateSchedule(id, name, cronExpr, flowID, url string, proxyConfig
 		return fmt.Errorf("update schedule: %w", err)
 	}
 	if err := validation.ValidateTags(tags); err != nil {
+		return fmt.Errorf("update schedule: %w", err)
+	}
+	if err := validation.ValidateProxyConfig(proxyConfig); err != nil {
 		return fmt.Errorf("update schedule: %w", err)
 	}
 

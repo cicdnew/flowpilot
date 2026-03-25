@@ -19,6 +19,7 @@ import (
 
 // Manager handles proxy pool selection, rotation, and health checks.
 var ErrNoHealthyProxies = errors.New("no healthy proxies available")
+var ErrProxyRateLimited = errors.New("all matching proxies are currently rate limited")
 
 type Reservation struct {
 	manager *Manager
@@ -59,6 +60,8 @@ type Manager struct {
 	rrIndex              int // round-robin index
 	activeReservations   map[string]int
 	countryFallbackCount map[string]int
+	requestTimes         map[string][]time.Time
+	now                  func() time.Time
 	stopOnce             sync.Once
 	stopCh               chan struct{}
 }
@@ -80,6 +83,8 @@ func NewManager(db *database.DB, config models.ProxyPoolConfig) *Manager {
 		config:               config,
 		activeReservations:   make(map[string]int),
 		countryFallbackCount: make(map[string]int),
+		requestTimes:         make(map[string][]time.Time),
+		now:                  time.Now,
 		stopCh:               make(chan struct{}),
 	}
 }
@@ -117,6 +122,19 @@ func (m *Manager) Stop() {
 	m.stopOnce.Do(func() {
 		close(m.stopCh)
 	})
+}
+
+// UpdateHealthCheckConfig updates the health check interval (in seconds) and URL
+// for future health check cycles. Changes take effect on the next tick.
+func (m *Manager) UpdateHealthCheckConfig(intervalSeconds int, url string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if intervalSeconds > 0 {
+		m.config.HealthCheckInterval = intervalSeconds
+	}
+	if url != "" {
+		m.config.HealthCheckURL = url
+	}
 }
 
 // SelectProxy picks a proxy based on the configured rotation strategy.
@@ -191,6 +209,39 @@ func (m *Manager) ReserveProxy(geo string) (*Reservation, error) {
 }
 
 func (m *Manager) ReserveProxyWithFallback(geo string, fallback models.ProxyRoutingFallback) (*Reservation, bool, bool, error) {
+	filtered, fallbackUsed, direct, err := m.availableProxies(geo, fallback)
+	if err != nil || direct {
+		return nil, fallbackUsed, direct, err
+	}
+	if fallbackUsed {
+		m.recordFallback(geo)
+	}
+
+	selected := m.selectWithReservations(filtered, strings.TrimSpace(geo) != "")
+	m.mu.Lock()
+	m.activeReservations[selected.ID]++
+	m.recordSelectionLocked(selected)
+	m.mu.Unlock()
+
+	return &Reservation{manager: m, proxy: selected}, fallbackUsed, false, nil
+}
+
+func (m *Manager) HasAvailableProxy(geo string, fallback models.ProxyRoutingFallback) (bool, time.Duration, error) {
+	filtered, _, direct, err := m.availableProxies(geo, fallback)
+	if direct {
+		return true, 0, nil
+	}
+	if err != nil {
+		if errors.Is(err, ErrProxyRateLimited) {
+			_, wait := m.rateLimitStatus(filtered)
+			return false, wait, nil
+		}
+		return false, 0, err
+	}
+	return true, 0, nil
+}
+
+func (m *Manager) availableProxies(geo string, fallback models.ProxyRoutingFallback) ([]models.Proxy, bool, bool, error) {
 	proxies, err := m.db.ListHealthyProxies(context.Background())
 	if err != nil {
 		return nil, false, false, fmt.Errorf("list healthy proxies: %w", err)
@@ -212,16 +263,61 @@ func (m *Manager) ReserveProxyWithFallback(geo string, fallback models.ProxyRout
 	if len(filtered) == 0 {
 		return nil, false, false, fmt.Errorf("%w (geo=%s)", ErrNoHealthyProxies, geo)
 	}
-	if fallbackUsed {
-		m.recordFallback(geo)
+	available, wait := m.rateLimitStatus(filtered)
+	if len(available) == 0 {
+		return filtered, fallbackUsed, false, fmt.Errorf("%w (geo=%s, retry_after=%s)", ErrProxyRateLimited, geo, wait)
 	}
+	return available, fallbackUsed, false, nil
+}
 
-	selected := m.selectWithReservations(filtered, strings.TrimSpace(geo) != "")
+func (m *Manager) rateLimitStatus(proxies []models.Proxy) ([]models.Proxy, time.Duration) {
+	now := m.now()
 	m.mu.Lock()
-	m.activeReservations[selected.ID]++
-	m.mu.Unlock()
+	defer m.mu.Unlock()
+	available := make([]models.Proxy, 0, len(proxies))
+	var minWait time.Duration
+	for _, p := range proxies {
+		remaining, wait := m.rateLimitStatusLocked(p, now)
+		if remaining > 0 {
+			available = append(available, p)
+			continue
+		}
+		if minWait == 0 || (wait > 0 && wait < minWait) {
+			minWait = wait
+		}
+	}
+	return available, minWait
+}
 
-	return &Reservation{manager: m, proxy: selected}, fallbackUsed, false, nil
+func (m *Manager) rateLimitStatusLocked(proxy models.Proxy, now time.Time) (int, time.Duration) {
+	if proxy.MaxRequestsPerMinute <= 0 {
+		return math.MaxInt, 0
+	}
+	windowStart := now.Add(-time.Minute)
+	times := m.requestTimes[proxy.ID]
+	kept := times[:0]
+	for _, ts := range times {
+		if ts.After(windowStart) {
+			kept = append(kept, ts)
+		}
+	}
+	m.requestTimes[proxy.ID] = kept
+	remaining := proxy.MaxRequestsPerMinute - len(kept)
+	if remaining > 0 {
+		return remaining, 0
+	}
+	wait := time.Minute - now.Sub(kept[0])
+	if wait < 0 {
+		wait = 0
+	}
+	return 0, wait
+}
+
+func (m *Manager) recordSelectionLocked(proxy models.Proxy) {
+	if proxy.MaxRequestsPerMinute <= 0 {
+		return
+	}
+	m.requestTimes[proxy.ID] = append(m.requestTimes[proxy.ID], m.now())
 }
 
 func (m *Manager) completeReservation(proxyID string, success bool) error {

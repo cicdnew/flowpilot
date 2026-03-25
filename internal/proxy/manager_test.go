@@ -490,8 +490,6 @@ func TestStartHealthChecksRespondsToStop(t *testing.T) {
 		close(done)
 	}()
 
-	// Stop should cause StartHealthChecks to return
-	time.Sleep(100 * time.Millisecond)
 	m.Stop()
 
 	select {
@@ -526,7 +524,6 @@ func TestStartHealthChecksRespondsToContextCancel(t *testing.T) {
 		close(done)
 	}()
 
-	time.Sleep(100 * time.Millisecond)
 	cancel()
 
 	select {

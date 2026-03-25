@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -33,10 +36,14 @@ type AppConfig struct {
 	RetentionDays       int
 	HealthCheckInterval int
 	MaxProxyFailures    int
+	HealthCheckURL      string
 	CaptureStepLogs     bool
 	CaptureNetworkLogs  bool
 	CaptureScreenshots  bool
 	MaxExecutionLogs    int
+	RetryBackoffBaseMs  int
+	LogSlogLevel        string
+	MetricsAddr         string
 }
 
 func DefaultAppConfig() AppConfig {
@@ -48,10 +55,14 @@ func DefaultAppConfig() AppConfig {
 		RetentionDays:       90,
 		HealthCheckInterval: 30,
 		MaxProxyFailures:    2,
+		HealthCheckURL:      "https://httpbin.org/ip",
 		CaptureStepLogs:     true,
 		CaptureNetworkLogs:  false,
 		CaptureScreenshots:  false,
 		MaxExecutionLogs:    250,
+		RetryBackoffBaseMs:  5000,
+		LogSlogLevel:        "info",
+		MetricsAddr:         defaultMetricsAddr(),
 	}
 }
 
@@ -69,11 +80,18 @@ type App struct {
 	logExporter       *logs.Exporter
 	config            AppConfig
 	initErr           error
+	metricsMu         sync.Mutex
+	metricsServer     *http.Server
+	metricsListener   net.Listener
 
 	recorderMu     sync.Mutex
 	activeRecorder *recorder.Recorder
 	recorderCancel context.CancelFunc
 	recordedSteps  []models.RecordedStep
+
+	configMu      sync.Mutex
+	configPath    string
+	configModTime time.Time
 }
 
 func NewApp() *App {
@@ -89,6 +107,8 @@ func (a *App) ready() error {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	wailsRuntimeLoggingEnabled.Store(true)
+	logs.Init(a.config.LogSlogLevel)
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -99,13 +119,17 @@ func (a *App) startup(ctx context.Context) {
 	a.dataDir = filepath.Join(home, ".flowpilot")
 	if err := os.MkdirAll(a.dataDir, 0o700); err != nil {
 		a.initErr = fmt.Errorf("create data directory: %w", err)
-		wailsRuntime.LogErrorf(ctx, "startup failed: %v", a.initErr)
+		logErrorf(ctx, "startup failed: %v", a.initErr)
 		return
 	}
 
+	a.configMu.Lock()
+	a.config.MetricsAddr = normalizeMetricsAddr(a.config.MetricsAddr)
+	a.configMu.Unlock()
+
 	if err := crypto.InitKey(a.dataDir); err != nil {
 		a.initErr = fmt.Errorf("init encryption: %w", err)
-		wailsRuntime.LogErrorf(ctx, "startup failed: %v", a.initErr)
+		logErrorf(ctx, "startup failed: %v", a.initErr)
 		return
 	}
 
@@ -113,7 +137,7 @@ func (a *App) startup(ctx context.Context) {
 	db, err := database.New(dbPath)
 	if err != nil {
 		a.initErr = fmt.Errorf("init database: %w", err)
-		wailsRuntime.LogErrorf(ctx, "startup failed: %v", a.initErr)
+		logErrorf(ctx, "startup failed: %v", a.initErr)
 		return
 	}
 	a.db = db
@@ -122,7 +146,7 @@ func (a *App) startup(ctx context.Context) {
 	runner, err := browser.NewRunner(screenshotDir)
 	if err != nil {
 		a.initErr = fmt.Errorf("init browser runner: %w", err)
-		wailsRuntime.LogErrorf(ctx, "startup failed: %v", a.initErr)
+		logErrorf(ctx, "startup failed: %v", a.initErr)
 		return
 	}
 	a.runner = runner
@@ -157,6 +181,7 @@ func (a *App) startup(ctx context.Context) {
 		Strategy:            models.RotationRoundRobin,
 		HealthCheckInterval: a.config.HealthCheckInterval,
 		MaxFailures:         a.config.MaxProxyFailures,
+		HealthCheckURL:      a.config.HealthCheckURL,
 	})
 	go a.proxyManager.StartHealthChecks(ctx)
 
@@ -165,10 +190,11 @@ func (a *App) startup(ctx context.Context) {
 	})
 	a.queue.SetProxyManager(a.proxyManager)
 	a.queue.SetProxyConcurrencyLimit(a.config.ProxyConcurrency)
+	a.queue.SetRetryBackoffBaseMs(a.config.RetryBackoffBaseMs)
 
 	// Recover tasks stuck in running/queued from a previous crash.
 	if err := a.queue.RecoverStaleTasks(ctx); err != nil {
-		wailsRuntime.LogWarningf(ctx, "recover stale tasks: %v", err)
+		logWarningf(ctx, "recover stale tasks: %v", err)
 	}
 
 	a.batchEngine = batch.New(db)
@@ -177,17 +203,26 @@ func (a *App) startup(ctx context.Context) {
 	logExporter, err := logs.NewExporter(db, logsDir)
 	if err != nil {
 		a.initErr = fmt.Errorf("init log exporter: %w", err)
-		wailsRuntime.LogErrorf(ctx, "startup failed: %v", a.initErr)
+		logErrorf(ctx, "startup failed: %v", a.initErr)
 		return
 	}
 	a.logExporter = logExporter
 
 	a.scheduler = scheduler.New(a.db, a, 30*time.Second)
 	a.scheduler.Start(ctx)
+	a.startMetricsServer(ctx)
 
 	go a.runRetentionCleanup(ctx)
 
-	wailsRuntime.LogInfo(ctx, "Application started successfully")
+	// Set up config file path for hot-reload watching.
+	a.configMu.Lock()
+	a.configPath = filepath.Join(a.dataDir, "config.json")
+	if info, err := os.Stat(a.configPath); err == nil {
+		a.configModTime = info.ModTime()
+	}
+	a.configMu.Unlock()
+
+	logInfof(ctx, "Application started successfully")
 }
 
 func (a *App) runRetentionCleanup(ctx context.Context) {
@@ -212,20 +247,132 @@ func (a *App) purgeOnce() {
 	}
 	n, err := a.db.PurgeOldRecords(a.ctx, a.config.RetentionDays)
 	if err != nil {
-		wailsRuntime.LogWarningf(a.ctx, "retention cleanup error: %v", err)
+		logWarningf(a.ctx, "retention cleanup error: %v", err)
 		return
 	}
 	if n > 0 {
-		wailsRuntime.LogInfof(a.ctx, "retention cleanup purged %d old records", n)
+		logInfof(a.ctx, "retention cleanup purged %d old records", n)
 	}
 }
 
+// WatchConfig polls the config file every 30 seconds for changes (by mtime).
+// If the file has been modified, it reloads hot-reloadable settings:
+// ProxyConcurrency, HealthCheckInterval, and HealthCheckURL are applied live.
+// QueueConcurrency and BrowserPoolSize changes are logged as requiring a restart.
+func (a *App) WatchConfig(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			a.checkAndReloadConfig(ctx)
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+func (a *App) checkAndReloadConfig(ctx context.Context) {
+	a.configMu.Lock()
+	configPath := a.configPath
+	lastMod := a.configModTime
+	a.configMu.Unlock()
+
+	if configPath == "" {
+		return
+	}
+
+	info, err := os.Stat(configPath)
+	if err != nil {
+		return
+	}
+	if !info.ModTime().After(lastMod) {
+		return
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		logWarningf(ctx, "config hot-reload: read file: %v", err)
+		return
+	}
+
+	var newCfg AppConfig
+	if err := json.Unmarshal(data, &newCfg); err != nil {
+		logWarningf(ctx, "config hot-reload: parse JSON: %v", err)
+		return
+	}
+
+	a.configMu.Lock()
+	a.configModTime = info.ModTime()
+	old := a.config
+	a.configMu.Unlock()
+
+	if newCfg.QueueConcurrency != 0 && newCfg.QueueConcurrency != old.QueueConcurrency {
+		logInfof(ctx, "config hot-reload: QueueConcurrency changed (%d → %d): restart required", old.QueueConcurrency, newCfg.QueueConcurrency)
+	}
+	if newCfg.BrowserPoolSize != 0 && newCfg.BrowserPoolSize != old.BrowserPoolSize {
+		logInfof(ctx, "config hot-reload: BrowserPoolSize changed (%d → %d): restart required", old.BrowserPoolSize, newCfg.BrowserPoolSize)
+	}
+
+	if newCfg.ProxyConcurrency != 0 && newCfg.ProxyConcurrency != old.ProxyConcurrency {
+		if a.queue != nil {
+			a.queue.SetProxyConcurrencyLimit(newCfg.ProxyConcurrency)
+		}
+		logInfof(ctx, "config hot-reload: ProxyConcurrency updated (%d → %d)", old.ProxyConcurrency, newCfg.ProxyConcurrency)
+	}
+
+	if (newCfg.HealthCheckInterval != 0 && newCfg.HealthCheckInterval != old.HealthCheckInterval) ||
+		(newCfg.HealthCheckURL != "" && newCfg.HealthCheckURL != old.HealthCheckURL) {
+		if a.proxyManager != nil {
+			interval := old.HealthCheckInterval
+			if newCfg.HealthCheckInterval != 0 {
+				interval = newCfg.HealthCheckInterval
+			}
+			url := old.HealthCheckURL
+			if newCfg.HealthCheckURL != "" {
+				url = newCfg.HealthCheckURL
+			}
+			a.proxyManager.UpdateHealthCheckConfig(interval, url)
+			logInfof(ctx, "config hot-reload: HealthCheck updated (interval=%ds, url=%s)", interval, url)
+		}
+	}
+
+	a.configMu.Lock()
+	if newCfg.ProxyConcurrency != 0 {
+		a.config.ProxyConcurrency = newCfg.ProxyConcurrency
+	}
+	if newCfg.HealthCheckInterval != 0 {
+		a.config.HealthCheckInterval = newCfg.HealthCheckInterval
+	}
+	if newCfg.HealthCheckURL != "" {
+		a.config.HealthCheckURL = newCfg.HealthCheckURL
+	}
+	if newCfg.MetricsAddr != "" {
+		a.config.MetricsAddr = normalizeMetricsAddr(newCfg.MetricsAddr)
+	}
+	a.configMu.Unlock()
+}
+
 func (a *App) cleanup() {
+	a.recorderMu.Lock()
+	if a.activeRecorder != nil {
+		a.activeRecorder.Stop()
+	}
+	if a.recorderCancel != nil {
+		a.recorderCancel()
+	}
+	a.recorderMu.Unlock()
 	if a.scheduler != nil {
 		a.scheduler.Stop()
 	}
 	if a.queue != nil {
+		a.queue.SetDrainTimeout(30 * time.Second)
 		a.queue.Stop()
+	}
+	a.stopMetricsServer(a.ctx)
+	if a.runner != nil {
+		a.runner.StopProxyPools()
 	}
 	if a.pool != nil {
 		a.pool.Stop()
@@ -243,6 +390,14 @@ func (a *App) cleanup() {
 
 func (a *App) shutdown(ctx context.Context) {
 	a.cleanup()
+}
+
+// GetTaskMetrics returns the latest in-memory task metrics snapshot.
+func (a *App) GetTaskMetrics() models.TaskMetrics {
+	if a.queue == nil {
+		return models.TaskMetrics{}
+	}
+	return a.queue.TaskMetrics()
 }
 
 func (a *App) shutdownFromSignal() {

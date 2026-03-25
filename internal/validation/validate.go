@@ -12,35 +12,37 @@ import (
 )
 
 var (
-	ErrEmptyName           = errors.New("name must not be empty")
-	ErrNameTooLong         = errors.New("name must not exceed 255 characters")
-	ErrNameControlChars    = errors.New("name must not contain control characters")
-	ErrEmptyURL            = errors.New("url must not be empty")
-	ErrInvalidURLScheme    = errors.New("url must use http or https scheme")
-	ErrInvalidURL          = errors.New("url is not valid")
-	ErrNoSteps             = errors.New("at least one step is required")
-	ErrInvalidStepAction   = errors.New("invalid step action")
-	ErrStepMissingValue    = errors.New("step requires a value")
-	ErrStepInvalidURL      = errors.New("step navigate value must be a valid http/https url")
-	ErrStepMissingSelector = errors.New("step requires a non-empty selector")
-	ErrEvalNotAllowed      = errors.New("eval steps are not allowed unless explicitly enabled")
-	ErrEmptyServer         = errors.New("proxy server must not be empty")
-	ErrInvalidServer       = errors.New("proxy server must be in host:port format")
-	ErrInvalidPriority     = errors.New("priority must be 1, 5, or 10")
-	ErrInvalidProtocol     = errors.New("protocol must be http, https, or socks5")
-	ErrTooManyTags         = errors.New("too many tags (max 20)")
-	ErrTagTooLong          = errors.New("tag must not exceed 50 characters")
-	ErrTagEmpty            = errors.New("tag must not be empty")
-	ErrTagControlChars     = errors.New("tag must not contain control characters")
-	ErrInvalidStatus       = errors.New("invalid task status")
-	ErrInvalidBatchSize    = errors.New("batch size exceeds limit")
-	ErrInvalidTemplate     = errors.New("invalid naming template")
-	ErrInvalidPage         = errors.New("page must be a positive integer")
-	ErrInvalidPageSize     = errors.New("pageSize must be between 1 and 200")
-	ErrInvalidFilterStatus = errors.New("invalid filter status")
-	ErrTagFilterTooLong    = errors.New("tag filter must not exceed 50 characters")
-	ErrTagFilterControl    = errors.New("tag filter must not contain control characters")
-	ErrInvalidTimeout      = errors.New("timeout must be between 0 and 3600 seconds")
+	ErrEmptyName            = errors.New("name must not be empty")
+	ErrNameTooLong          = errors.New("name must not exceed 255 characters")
+	ErrNameControlChars     = errors.New("name must not contain control characters")
+	ErrEmptyURL             = errors.New("url must not be empty")
+	ErrInvalidURLScheme     = errors.New("url must use http or https scheme")
+	ErrInvalidURL           = errors.New("url is not valid")
+	ErrNoSteps              = errors.New("at least one step is required")
+	ErrInvalidStepAction    = errors.New("invalid step action")
+	ErrStepMissingValue     = errors.New("step requires a value")
+	ErrStepInvalidURL       = errors.New("step navigate value must be a valid http/https url")
+	ErrStepMissingSelector  = errors.New("step requires a non-empty selector")
+	ErrEvalNotAllowed       = errors.New("eval steps are not allowed unless explicitly enabled")
+	ErrEmptyServer          = errors.New("proxy server must not be empty")
+	ErrInvalidServer        = errors.New("proxy server must be in host:port format")
+	ErrInvalidPriority      = errors.New("priority must be 1, 5, or 10")
+	ErrInvalidProtocol      = errors.New("protocol must be http, https, or socks5")
+	ErrTooManyTags          = errors.New("too many tags (max 20)")
+	ErrTagTooLong           = errors.New("tag must not exceed 50 characters")
+	ErrTagEmpty             = errors.New("tag must not be empty")
+	ErrTagControlChars      = errors.New("tag must not contain control characters")
+	ErrInvalidStatus        = errors.New("invalid task status")
+	ErrInvalidBatchSize     = errors.New("batch size exceeds limit")
+	ErrInvalidTemplate      = errors.New("invalid naming template")
+	ErrInvalidPage          = errors.New("page must be a positive integer")
+	ErrInvalidPageSize      = errors.New("pageSize must be between 1 and 200")
+	ErrInvalidFilterStatus  = errors.New("invalid filter status")
+	ErrTagFilterTooLong     = errors.New("tag filter must not exceed 50 characters")
+	ErrTagFilterControl     = errors.New("tag filter must not contain control characters")
+	ErrInvalidTimeout       = errors.New("timeout must be between 0 and 3600 seconds")
+	ErrInvalidMaxExecLogs   = errors.New("maxExecutionLogs must be between 0 and 5000")
+	ErrInvalidProxyFallback = errors.New("proxy fallback must be strict, any_healthy, or direct")
 )
 
 var validActions = func() map[models.StepAction]bool {
@@ -88,6 +90,12 @@ var validProtocols = map[models.ProxyProtocol]bool{
 	models.ProxyHTTP:   true,
 	models.ProxyHTTPS:  true,
 	models.ProxySOCKS5: true,
+}
+
+var validProxyFallbacks = map[models.ProxyRoutingFallback]bool{
+	models.ProxyFallbackStrict: true,
+	models.ProxyFallbackAny:    true,
+	models.ProxyFallbackDirect: true,
 }
 
 func ValidatePagination(page, pageSize int, status, tag string) error {
@@ -157,7 +165,7 @@ func ValidateTaskSteps(steps []models.TaskStep, allowEval bool) error {
 	}
 	for i, step := range steps {
 		if !validActions[step.Action] {
-			return fmt.Errorf("step %d: %w: %s", i, ErrInvalidStepAction, step.Action)
+			return fmt.Errorf("step %d: unknown action %s: %w", i+1, step.Action, ErrInvalidStepAction)
 		}
 
 		if step.Action == models.ActionEval && !allowEval {
@@ -243,6 +251,18 @@ func ValidateTimeout(timeout int) error {
 	return nil
 }
 
+// ValidateTaskLoggingPolicy checks that optional logging limits stay within supported bounds.
+// A maxExecutionLogs value of 0 means "use default" and is valid.
+func ValidateTaskLoggingPolicy(policy *models.TaskLoggingPolicy) error {
+	if policy == nil {
+		return nil
+	}
+	if policy.MaxExecutionLogs < 0 || policy.MaxExecutionLogs > 5000 {
+		return ErrInvalidMaxExecLogs
+	}
+	return nil
+}
+
 // ValidateTask validates all fields of a task for creation.
 // allowEval controls whether eval steps are permitted.
 func ValidateTask(name, rawURL string, steps []models.TaskStep, priority models.TaskPriority, allowEval bool) error {
@@ -268,6 +288,42 @@ func ValidateProxy(server string, protocol models.ProxyProtocol) error {
 	}
 	if err := ValidateProxyProtocol(protocol); err != nil {
 		return fmt.Errorf("validate proxy: %w", err)
+	}
+	return nil
+}
+
+// ValidateProxyFallback checks that the optional auto-routing fallback mode is supported.
+func ValidateProxyFallback(fallback models.ProxyRoutingFallback) error {
+	if fallback == "" {
+		return nil
+	}
+	if !validProxyFallbacks[fallback] {
+		return ErrInvalidProxyFallback
+	}
+	return nil
+}
+
+// ValidateProxyConfig validates an optional task/schedule proxy configuration.
+// Empty config means direct connection and is valid.
+func ValidateProxyConfig(cfg models.ProxyConfig) error {
+	hasServer := strings.TrimSpace(cfg.Server) != ""
+	hasServerDependentFields := cfg.Protocol != "" || strings.TrimSpace(cfg.Username) != "" || strings.TrimSpace(cfg.Password) != ""
+
+	if hasServer {
+		if err := ValidateProxyServer(cfg.Server); err != nil {
+			return fmt.Errorf("validate proxy config: %w", err)
+		}
+		if cfg.Protocol != "" {
+			if err := ValidateProxyProtocol(cfg.Protocol); err != nil {
+				return fmt.Errorf("validate proxy config: %w", err)
+			}
+		}
+	} else if hasServerDependentFields {
+		return fmt.Errorf("validate proxy config: %w", ErrEmptyServer)
+	}
+
+	if err := ValidateProxyFallback(cfg.Fallback); err != nil {
+		return fmt.Errorf("validate proxy config: %w", err)
 	}
 	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -192,6 +191,7 @@ func (db *DB) migrate() error {
 		latency INTEGER DEFAULT 0,
 		success_rate REAL DEFAULT 0.0,
 		total_used INTEGER DEFAULT 0,
+		max_requests_per_minute INTEGER DEFAULT 0,
 		last_checked DATETIME,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -289,11 +289,7 @@ func (db *DB) migrate() error {
 	if err != nil {
 		return fmt.Errorf("exec schema: %w", err)
 	}
-	if _, err := db.conn.Exec(`ALTER TABLE tasks ADD COLUMN logging_policy TEXT DEFAULT ''`); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
-		return fmt.Errorf("add tasks.logging_policy column: %w", err)
-	}
-
-	return nil
+	return db.applyNamedMigrations(context.Background())
 }
 
 func (db *DB) BeginTx(ctx context.Context) (*sql.Tx, error) {

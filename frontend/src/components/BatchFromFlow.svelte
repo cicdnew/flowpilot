@@ -48,20 +48,27 @@
     submitting = true;
     try {
       errorMessage = '';
+      const normalizedProxyCountry = proxyCountry.trim().toUpperCase();
       await CreateBatchFromFlow({
         flowId: flow.id,
         urls,
         namingTemplate,
         priority,
-        proxy: {
-          server: '',
-          username: '',
-          password: '',
-          geo: useRandomCountryProxy ? proxyCountry.trim().toUpperCase() : '',
-          fallback: proxyFallback,
-        },
-        proxyCountry: useRandomCountryProxy ? proxyCountry.trim().toUpperCase() : '',
-        proxyFallback,
+        proxy: useRandomCountryProxy
+          ? {
+              server: '',
+              username: '',
+              password: '',
+              geo: normalizedProxyCountry,
+              fallback: proxyFallback,
+            }
+          : {
+              server: '',
+              username: '',
+              password: '',
+            },
+        proxyCountry: useRandomCountryProxy ? normalizedProxyCountry : '',
+        proxyFallback: useRandomCountryProxy ? proxyFallback : '',
         tags: [],
         autoStart,
       } as any);

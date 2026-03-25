@@ -125,6 +125,15 @@ func (m *mockScheduleDB) UpdateScheduleRun(ctx context.Context, id string, lastR
 	return nil
 }
 
+func (m *mockScheduleDB) ListSchedules(ctx context.Context) ([]models.Schedule, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	return append([]models.Schedule(nil), m.schedules...), nil
+}
+
 func (m *mockScheduleDB) GetRecordedFlow(ctx context.Context, id string) (*models.RecordedFlow, error) {
 	if f, ok := m.flows[id]; ok {
 		return f, nil
@@ -180,7 +189,6 @@ func TestSchedulerStartStop(t *testing.T) {
 	s := New(db, sub, 50*time.Millisecond)
 	ctx, cancel := context.WithCancel(context.Background())
 	s.Start(ctx)
-	time.Sleep(100 * time.Millisecond)
 	s.Stop()
 	cancel()
 }

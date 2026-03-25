@@ -22,22 +22,23 @@ const (
 
 // Proxy represents a proxy server in the pool.
 type Proxy struct {
-	ID               string        `json:"id"`
-	Server           string        `json:"server"` // host:port
-	Protocol         ProxyProtocol `json:"protocol"`
-	Username         string        `json:"username,omitempty"`
-	Password         string        `json:"password,omitempty"`
-	Geo              string        `json:"geo,omitempty"` // country code
-	Status           ProxyStatus   `json:"status"`
-	Latency          int           `json:"latency"` // ms, last measured
-	SuccessRate      float64       `json:"successRate"`
-	TotalUsed        int           `json:"totalUsed"`
-	LastChecked      *time.Time    `json:"lastChecked,omitempty"`
-	CreatedAt        time.Time     `json:"createdAt"`
-	LocalEndpoint    string        `json:"localEndpoint,omitempty"`
-	LocalEndpointOn  bool          `json:"localEndpointOn,omitempty"`
-	LocalAuthEnabled bool          `json:"localAuthEnabled,omitempty"`
-	ActiveLocalUsers int           `json:"activeLocalUsers,omitempty"`
+	ID                   string        `json:"id"`
+	Server               string        `json:"server"` // host:port
+	Protocol             ProxyProtocol `json:"protocol"`
+	Username             string        `json:"username,omitempty"`
+	Password             string        `json:"password,omitempty"`
+	Geo                  string        `json:"geo,omitempty"` // country code
+	Status               ProxyStatus   `json:"status"`
+	Latency              int           `json:"latency"` // ms, last measured
+	SuccessRate          float64       `json:"successRate"`
+	TotalUsed            int           `json:"totalUsed"`
+	MaxRequestsPerMinute int           `json:"maxRequestsPerMinute,omitempty"`
+	LastChecked          *time.Time    `json:"lastChecked,omitempty"`
+	CreatedAt            time.Time     `json:"createdAt"`
+	LocalEndpoint        string        `json:"localEndpoint,omitempty"`
+	LocalEndpointOn      bool          `json:"localEndpointOn,omitempty"`
+	LocalAuthEnabled     bool          `json:"localAuthEnabled,omitempty"`
+	ActiveLocalUsers     int           `json:"activeLocalUsers,omitempty"`
 }
 
 // ProxyCountryStats summarizes proxy capacity and pressure for one country pool.

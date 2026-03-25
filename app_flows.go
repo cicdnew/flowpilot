@@ -96,5 +96,5 @@ func (a *App) CreateTaskFromFlow(flowID, name, url string, proxyConfig models.Pr
 	if len(steps) > 0 && steps[0].Action == models.ActionNavigate && steps[0].Value == "" {
 		steps[0].Value = url
 	}
-	return a.CreateTask(name, url, steps, proxyConfig, priority, autoStart, tags, 0, nil)
+	return a.CreateTask(name, url, steps, proxyConfig, priority, autoStart, tags, flow.Timeout, flow.LoggingPolicy)
 }

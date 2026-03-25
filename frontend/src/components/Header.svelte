@@ -28,6 +28,27 @@
     { label: 'Failed', value: () => $taskStats.failed, tone: 'danger' },
   ];
 
+  async function exportPrometheusMetrics() {
+    try {
+      const app = (window as Window & { go?: { main?: { App?: { GetPrometheusMetrics?: () => Promise<string> } } } }).go?.main?.App;
+      const body = await app?.GetPrometheusMetrics?.();
+      if (!body) {
+        return;
+      }
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(body);
+        return;
+      }
+      const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'flowpilot-metrics.prom';
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (_) {}
+  }
+
   const interval = setInterval(async () => {
     try {
       metrics = await GetQueueMetrics();
@@ -54,6 +75,7 @@
   </div>
 
   <div class="header-stats">
+    <button class="metric-export" on:click={exportPrometheusMetrics}>Prometheus</button>
     {#each metricCards as card}
       <div class={`stat stat--${card.tone}`}>
         <span class="stat-label">{card.label}</span>
@@ -148,6 +170,19 @@
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
+  }
+
+  .metric-export {
+    grid-column: span 4;
+    justify-self: end;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    background: rgba(15, 23, 42, 0.65);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
   }
 
   .stat {

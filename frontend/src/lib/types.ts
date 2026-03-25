@@ -152,6 +152,7 @@ export interface Proxy {
   latency: number;
   successRate: number;
   totalUsed: number;
+  maxRequestsPerMinute?: number;
   lastChecked?: string;
   createdAt: string;
   localEndpoint?: string;

@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -30,9 +31,9 @@ const (
 	maxEvalScriptSizeDisplay = "10000"
 )
 
-var ErrEvalScriptTooLarge = fmt.Errorf("eval script exceeds maximum allowed size of %s bytes", maxEvalScriptSizeDisplay)
+var errEvalScriptTooLarge = fmt.Errorf("eval script exceeds maximum allowed size of %s bytes", maxEvalScriptSizeDisplay)
 
-var ErrEvalScriptEmpty = errors.New("eval script must not be empty")
+var errEvalScriptEmpty = errors.New("eval script must not be empty")
 
 var ErrEvalNotAllowed = errors.New("eval action is not allowed: runner has allowEval=false")
 
@@ -46,17 +47,82 @@ var dangerousPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\b__filename\b`),
 }
 
+type debugController struct {
+	pauseCh  chan struct{} // closed when resuming
+	stepOnce chan struct{} // sends one signal for step
+	mu       sync.Mutex
+	paused   bool
+	pauseNew chan struct{}
+}
+
+func newDebugController() *debugController {
+	return &debugController{
+		pauseNew: make(chan struct{}, 1),
+	}
+}
+
+func (dc *debugController) pause() {
+	dc.mu.Lock()
+	if !dc.paused {
+		dc.paused = true
+		dc.pauseCh = make(chan struct{})
+	}
+	dc.mu.Unlock()
+}
+
+func (dc *debugController) resume() {
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+	if dc.paused {
+		dc.paused = false
+		close(dc.pauseCh)
+		dc.pauseCh = nil
+	}
+}
+
+func (dc *debugController) step() {
+	dc.mu.Lock()
+	defer dc.mu.Unlock()
+	if dc.paused {
+		dc.paused = false
+		close(dc.pauseCh)
+		dc.pauseCh = nil
+	}
+}
+
+func (dc *debugController) waitIfPaused(ctx context.Context) error {
+	dc.mu.Lock()
+	ch := dc.pauseCh
+	dc.mu.Unlock()
+	if ch == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-ch:
+		return nil
+	}
+}
+
+var errEvalScriptTooManyFunctions = errors.New("eval script contains too many nested function declarations (max 5)")
+
+var functionKeywordPattern = regexp.MustCompile(`\bfunction\b`)
+
 func validateEvalScript(script string) error {
 	if strings.TrimSpace(script) == "" {
-		return ErrEvalScriptEmpty
+		return errEvalScriptEmpty
 	}
 	if len(script) > MaxEvalScriptSize {
-		return ErrEvalScriptTooLarge
+		return errEvalScriptTooLarge
 	}
 	for _, pat := range dangerousPatterns {
 		if pat.MatchString(script) {
 			return fmt.Errorf("eval script contains blocked pattern: %s", pat.String())
 		}
+	}
+	if matches := functionKeywordPattern.FindAllString(script, -1); len(matches) > 5 {
+		return errEvalScriptTooManyFunctions
 	}
 	return nil
 }
@@ -70,12 +136,16 @@ type resolvedLoggingPolicy struct {
 }
 
 type Runner struct {
-	screenshotDir        string
-	allowEval            atomic.Bool
-	forceHeadless        atomic.Bool
-	exec                 Executor
+	screenshotDir string
+	allowEval     atomic.Bool
+	forceHeadless atomic.Bool
+	exec          Executor
+	debugCtrl     *debugController
+
+	mu                   sync.Mutex
 	captchaSolver        captcha.Solver
 	pool                 *BrowserPool
+	proxyPools           map[string]*BrowserPool
 	localProxyManager    *localproxy.Manager
 	defaultLoggingPolicy models.TaskLoggingPolicy
 }
@@ -87,6 +157,7 @@ func NewRunner(screenshotDir string) (*Runner, error) {
 	}
 	r := &Runner{screenshotDir: screenshotDir, exec: chromeExecutor{}}
 	r.allowEval.Store(false)
+	r.debugCtrl = newDebugController()
 	return r, nil
 }
 
@@ -97,7 +168,9 @@ func (r *Runner) SetForceHeadless(force bool) {
 
 // SetCaptchaSolver sets the CAPTCHA solver used by solve_captcha steps.
 func (r *Runner) SetCaptchaSolver(solver captcha.Solver) {
+	r.mu.Lock()
 	r.captchaSolver = solver
+	r.mu.Unlock()
 }
 
 // SetAllowEval configures whether the runner permits eval step execution.
@@ -107,15 +180,25 @@ func (r *Runner) SetAllowEval(allow bool) {
 
 // SetPool attaches a browser pool for reusing Chrome processes across tasks.
 func (r *Runner) SetPool(p *BrowserPool) {
+	r.stopProxyPools()
+	r.mu.Lock()
 	r.pool = p
+	if r.proxyPools == nil {
+		r.proxyPools = make(map[string]*BrowserPool)
+	}
+	r.mu.Unlock()
 }
 
 func (r *Runner) SetLocalProxyManager(m *localproxy.Manager) {
+	r.mu.Lock()
 	r.localProxyManager = m
+	r.mu.Unlock()
 }
 
 func (r *Runner) SetDefaultLoggingPolicy(policy models.TaskLoggingPolicy) {
+	r.mu.Lock()
 	r.defaultLoggingPolicy = policy
+	r.mu.Unlock()
 }
 
 func (r *Runner) resolveLoggingPolicy(task models.Task) resolvedLoggingPolicy {
@@ -125,17 +208,20 @@ func (r *Runner) resolveLoggingPolicy(task models.Task) resolvedLoggingPolicy {
 		captureScreenshots: true,
 		maxExecutionLogs:   1000,
 	}
-	if r.defaultLoggingPolicy.CaptureStepLogs != nil {
-		resolved.captureStepLogs = *r.defaultLoggingPolicy.CaptureStepLogs
+	r.mu.Lock()
+	defaultPolicy := r.defaultLoggingPolicy
+	r.mu.Unlock()
+	if defaultPolicy.CaptureStepLogs != nil {
+		resolved.captureStepLogs = *defaultPolicy.CaptureStepLogs
 	}
-	if r.defaultLoggingPolicy.CaptureNetworkLogs != nil {
-		resolved.captureNetworkLogs = *r.defaultLoggingPolicy.CaptureNetworkLogs
+	if defaultPolicy.CaptureNetworkLogs != nil {
+		resolved.captureNetworkLogs = *defaultPolicy.CaptureNetworkLogs
 	}
-	if r.defaultLoggingPolicy.CaptureScreenshots != nil {
-		resolved.captureScreenshots = *r.defaultLoggingPolicy.CaptureScreenshots
+	if defaultPolicy.CaptureScreenshots != nil {
+		resolved.captureScreenshots = *defaultPolicy.CaptureScreenshots
 	}
-	if r.defaultLoggingPolicy.MaxExecutionLogs > 0 {
-		resolved.maxExecutionLogs = r.defaultLoggingPolicy.MaxExecutionLogs
+	if defaultPolicy.MaxExecutionLogs > 0 {
+		resolved.maxExecutionLogs = defaultPolicy.MaxExecutionLogs
 	}
 	if task.LoggingPolicy != nil {
 		if task.LoggingPolicy.CaptureStepLogs != nil {
@@ -168,18 +254,29 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (*models.TaskRes
 	var browserCancel context.CancelFunc
 	var poolRelease func()
 
+	r.mu.Lock()
+	basePool := r.pool
+	localProxyManager := r.localProxyManager
+	r.mu.Unlock()
+
 	effectiveProxy := task.Proxy
-	if r.localProxyManager != nil && task.Proxy.Server != "" {
-		if localProxy, err := r.localProxyManager.Endpoint(task.Proxy); err == nil {
+	if localProxyManager != nil && task.Proxy.Server != "" {
+		if localProxy, err := localProxyManager.Endpoint(task.Proxy); err == nil {
 			effectiveProxy = localProxy
 		} else {
 			r.addLog(result, "warn", fmt.Sprintf("local proxy endpoint unavailable, using upstream proxy directly: %v", err))
 		}
 	}
 
-	if r.pool != nil && effectiveProxy.Server == "" {
-		var err error
-		browserCtx, poolRelease, err = r.pool.Acquire(ctx)
+	pool, err := r.getPoolForProxy(ctx, effectiveProxy)
+	if err != nil {
+		result.Duration = time.Since(start)
+		result.Error = fmt.Sprintf("resolve browser pool: %v", err)
+		r.addLog(result, "error", result.Error)
+		return result, err
+	}
+	if pool != nil {
+		browserCtx, poolRelease, err = pool.Acquire(ctx)
 		if err != nil {
 			result.Duration = time.Since(start)
 			result.Error = fmt.Sprintf("acquire browser from pool: %v", err)
@@ -188,6 +285,11 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (*models.TaskRes
 		}
 		defer poolRelease()
 		browserCancel = func() {} // no-op; poolRelease handles cleanup
+		if effectiveProxy.Server != "" {
+			r.addLog(result, "info", fmt.Sprintf("using proxy browser pool for %s", effectiveProxy.Server))
+		} else if basePool != nil {
+			r.addLog(result, "info", "using shared browser pool")
+		}
 	} else {
 		allocCtx, allocCancel := r.createAllocator(ctx, effectiveProxy, task.Headless)
 		defer allocCancel()
@@ -296,6 +398,11 @@ func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, r
 		defer func() { result.StepLogs = stepLogger.Logs() }()
 	}
 
+	logs.Logger.Debug("running steps",
+		"task_id", result.TaskID,
+		"step_count", len(steps),
+	)
+
 	labelIndex := buildLabelIndex(steps)
 
 	type loopFrame struct {
@@ -304,6 +411,14 @@ func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, r
 		currentIter int
 	}
 	var loopStack []loopFrame
+
+	type whileFrame struct {
+		startPC   int
+		maxIter   int
+		itersDone int
+		condition string
+	}
+	var whileStack []whileFrame
 
 	vars := result.ExtractedData
 
@@ -336,6 +451,53 @@ func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, r
 				continue
 			}
 			loopStack = loopStack[:len(loopStack)-1]
+			pc++
+			continue
+
+		case models.ActionWhile:
+			maxIter := step.MaxLoops
+			if maxIter <= 0 {
+				maxIter = 1000
+			}
+			condMet, err := r.evaluateCondition(browserCtx, step, vars)
+			if err != nil {
+				r.addLog(result, "warn", fmt.Sprintf("step %d while condition error: %v", pc+1, err))
+				condMet = false
+			}
+			if condMet {
+				whileStack = append(whileStack, whileFrame{startPC: pc, maxIter: maxIter, itersDone: 0, condition: step.Condition})
+				pc++
+				continue
+			}
+			endPC := findEndWhile(steps, pc)
+			if endPC < 0 {
+				return fmt.Errorf("step %d: no matching end_while found", pc+1)
+			}
+			pc = endPC + 1
+			continue
+
+		case models.ActionEndWhile:
+			if len(whileStack) == 0 {
+				return fmt.Errorf("step %d: end_while without matching while_condition", pc+1)
+			}
+			top := &whileStack[len(whileStack)-1]
+			top.itersDone++
+			if top.itersDone >= top.maxIter {
+				whileStack = whileStack[:len(whileStack)-1]
+				pc++
+				continue
+			}
+			condStep := steps[top.startPC]
+			condMet, err := r.evaluateCondition(browserCtx, condStep, vars)
+			if err != nil {
+				r.addLog(result, "warn", fmt.Sprintf("step %d end_while condition error: %v", pc+1, err))
+				condMet = false
+			}
+			if condMet {
+				pc = top.startPC + 1
+				continue
+			}
+			whileStack = whileStack[:len(whileStack)-1]
 			pc++
 			continue
 
@@ -406,7 +568,19 @@ func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, r
 		if err != nil {
 			r.addLog(result, "error", fmt.Sprintf("step %d failed: %v", pc+1, err))
 			result.Error = fmt.Sprintf("step %d (%s) failed: %v", pc+1, step.Action, err)
+			logs.Logger.Error("step failed",
+				"task_id", result.TaskID,
+				"step_index", pc,
+				"action", string(step.Action),
+				"error", err.Error(),
+			)
 			return err
+		}
+
+		if r.debugCtrl != nil {
+			if err := r.debugCtrl.waitIfPaused(browserCtx); err != nil {
+				return err
+			}
 		}
 
 		if step.Action == models.ActionExtract && step.VarName != "" {
@@ -462,13 +636,25 @@ func (r *Runner) setupProxyAuth(ctx context.Context, proxyConfig models.ProxyCon
 }
 
 func (r *Runner) addLog(result *models.TaskResult, level, message string) {
+	timestamp := time.Now()
 	result.Logs = append(result.Logs, models.LogEntry{
-		Timestamp: time.Now(),
+		Timestamp: timestamp,
 		Level:     level,
 		Message:   message,
 	})
 	if result.LogLimit > 0 && len(result.Logs) > result.LogLimit {
 		result.Logs = append([]models.LogEntry(nil), result.Logs[len(result.Logs)-result.LogLimit:]...)
+	}
+	attrs := []any{"task_id", result.TaskID, "level", level, "message", message}
+	switch level {
+	case "error":
+		logs.Logger.Error("task log", attrs...)
+	case "warn":
+		logs.Logger.Warn("task log", attrs...)
+	case "debug":
+		logs.Logger.Debug("task log", attrs...)
+	default:
+		logs.Logger.Info("task log", attrs...)
 	}
 }
 

@@ -4,13 +4,15 @@ import "time"
 
 // RecordedFlow represents a reusable automation flow captured from a live session.
 type RecordedFlow struct {
-	ID          string         `json:"id"`
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	Steps       []RecordedStep `json:"steps"`
-	OriginURL   string         `json:"originUrl"`
-	CreatedAt   time.Time      `json:"createdAt"`
-	UpdatedAt   time.Time      `json:"updatedAt"`
+	ID            string             `json:"id"`
+	Name          string             `json:"name"`
+	Description   string             `json:"description,omitempty"`
+	Steps         []RecordedStep     `json:"steps"`
+	OriginURL     string             `json:"originUrl"`
+	Timeout       int                `json:"timeout,omitempty"`
+	LoggingPolicy *TaskLoggingPolicy `json:"loggingPolicy,omitempty"`
+	CreatedAt     time.Time          `json:"createdAt"`
+	UpdatedAt     time.Time          `json:"updatedAt"`
 }
 
 // RecordedStep is a single captured action from a live recording session,

@@ -77,7 +77,7 @@ func TestBrowserPoolStatsEmpty(t *testing.T) {
 	p := NewBrowserPool(PoolConfig{Size: 3}, opts)
 	defer p.Stop()
 
-	stats := p.Stats()
+	stats := p.stats()
 	if stats.TotalBrowsers != 0 {
 		t.Errorf("total browsers: got %d, want 0", stats.TotalBrowsers)
 	}

@@ -2,6 +2,8 @@
   import { selectedTask, replaceTaskInStore } from '../lib/store';
   import { UpdateTask, GetTask, ListTaskEvents, ListProxyRoutingPresets } from '../../wailsjs/go/main/App';
   import type { Task, TaskStep, ProxyConfig, TaskLifecycleEvent, TaskLoggingPolicy, ProxyRoutingFallback, ProxyRoutingPreset } from '../lib/types';
+  import { ensureStepActionStateLoaded, getStepActionOptions, stepActionState } from '../lib/step-actions';
+  import { onMount } from 'svelte';
 
   let editing = false;
   let editName = '';
@@ -31,7 +33,9 @@
   let auditRequestSeq = 0;
   let lastAuditTaskId: string | null = null;
 
-  const actions = ['navigate', 'click', 'type', 'wait', 'screenshot', 'extract', 'scroll', 'select', 'click_ad'];
+  onMount(() => {
+    ensureStepActionStateLoaded().catch(() => {});
+  });
 
   ListProxyRoutingPresets().then((list) => {
     routingPresets = (list || []) as ProxyRoutingPreset[];
@@ -56,7 +60,7 @@
     editProxyUsername = $selectedTask.proxy?.username || '';
     editProxyPassword = $selectedTask.proxy?.password || '';
     editProxyGeo = $selectedTask.proxy?.geo || '';
-    editUseRandomCountryProxy = !($selectedTask.proxy?.server);
+    editUseRandomCountryProxy = !($selectedTask.proxy?.server) && !!(($selectedTask.proxy?.geo || '').trim() || ($selectedTask.proxy?.fallback || '').trim());
     editProxyFallback = ($selectedTask.proxy?.fallback as ProxyRoutingFallback) || 'strict';
     editTags = ($selectedTask.tags ?? []).join(', ');
     editTimeout = $selectedTask.timeout ?? 0;
@@ -89,23 +93,32 @@
       saving = false;
       return;
     }
+    const trimmedProxyServer = editProxyServer.trim();
+    const normalizedProxyGeo = editProxyGeo.trim().toUpperCase();
     const proxyConfig: ProxyConfig = editUseRandomCountryProxy
       ? {
           server: '',
           protocol: '',
           username: '',
           password: '',
-          geo: editProxyGeo.trim().toUpperCase(),
+          geo: normalizedProxyGeo,
           fallback: editProxyFallback,
         }
-      : {
-          server: editProxyServer,
-          protocol: editProxyProtocol,
-          username: editProxyUsername,
-          password: editProxyPassword,
-          geo: editProxyGeo.trim().toUpperCase(),
-          fallback: editProxyFallback,
-        };
+      : trimmedProxyServer
+        ? {
+            server: trimmedProxyServer,
+            protocol: editProxyProtocol,
+            username: editProxyUsername,
+            password: editProxyPassword,
+            geo: normalizedProxyGeo,
+            fallback: editProxyFallback,
+          }
+        : {
+            server: '',
+            protocol: '',
+            username: '',
+            password: '',
+          };
     try {
       editError = '';
       const tags = editTags.split(',').map(t => t.trim()).filter(t => t.length > 0);
@@ -270,13 +283,16 @@
         </div>
         <div class="form-group">
           <label for="edit-max-logs">Max execution logs</label>
-          <input id="edit-max-logs" type="number" bind:value={editMaxExecutionLogs} min="1" max="5000" />
+          <input id="edit-max-logs" type="number" bind:value={editMaxExecutionLogs} min="0" max="5000" placeholder="0 = default" />
         </div>
         <h4>Steps</h4>
+        {#if $stepActionState.warning}
+          <div class="action-warning">{$stepActionState.warning}</div>
+        {/if}
         {#each editSteps as step, i}
           <div class="step-row-edit">
             <select bind:value={step.action}>
-              {#each actions as a}<option value={a}>{a}</option>{/each}
+              {#each getStepActionOptions(step.action, $stepActionState.actions) as action}<option value={action}>{action}</option>{/each}
             </select>
             {#if step.action !== 'navigate' && step.action !== 'screenshot'}
               <input bind:value={step.selector} placeholder="Selector" class="flex-1" />
@@ -505,6 +521,15 @@
     justify-content: flex-end;
     gap: 6px;
     margin-top: 12px;
+  }
+  .action-warning {
+    padding: 10px 12px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+    background: rgba(245, 158, 11, 0.12);
+    color: #fde68a;
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    font-size: 12px;
   }
   .error-text {
     color: var(--danger, #ef4444);

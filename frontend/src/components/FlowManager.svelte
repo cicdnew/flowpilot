@@ -1,13 +1,15 @@
 <script lang="ts">
   import { ListRecordedFlows, DeleteRecordedFlow, PlayRecordedFlow, UpdateRecordedFlow } from '../../wailsjs/go/main/App';
-  import { recordedFlows } from '../lib/store';
-  import type { RecordedFlow } from '../lib/types';
+  import { recordedFlows, tasks } from '../lib/store';
+  import type { RecordedFlow, Task } from '../lib/types';
   import { createEventDispatcher, onMount } from 'svelte';
 
   const dispatch = createEventDispatcher();
 
   let loading = false;
   let errorMessage = '';
+  let importWarning = '';
+  let importInput: HTMLInputElement | null = null;
   let playingFlowId = '';
   let headless = false;
   let editingFlowId = '';
@@ -80,6 +82,41 @@
     }
   }
 
+  function openImportDialog() {
+    importInput?.click();
+  }
+
+  async function importFlow(event: Event) {
+    const file = (event.currentTarget as HTMLInputElement).files?.[0] as (File & { path?: string }) | undefined;
+    const path = file?.path;
+    if (!path) return;
+    errorMessage = '';
+    importWarning = '';
+    try {
+      const app = (window as Window & { go?: { main?: { App?: { ImportFlowWithWarnings?: (path: string) => Promise<{ tasks?: Task[]; warnings?: string[] }> } } } }).go?.main?.App;
+      let imported: Task[] = [];
+      let warnings: string[] = [];
+      if (app?.ImportFlowWithWarnings) {
+        const result = await app.ImportFlowWithWarnings(path);
+        imported = (result?.tasks as Task[] | undefined) || [];
+        warnings = result?.warnings || [];
+      }
+      if (imported.length === 0) {
+        imported = await (await import('../../wailsjs/go/main/App')).ImportFlow(path) as unknown as Task[];
+      }
+      tasks.update((list) => [...imported, ...list]);
+      if (warnings.length > 0) {
+        importWarning = warnings.join(' · ');
+      }
+    } catch (err: any) {
+      errorMessage = err?.message || String(err);
+    } finally {
+      if (importInput) {
+        importInput.value = '';
+      }
+    }
+  }
+
   onMount(() => {
     refresh();
   });
@@ -89,16 +126,21 @@
   <div class="panel-header">
     <h2>Recorded Flows</h2>
     <div class="header-controls">
+      <input bind:this={importInput} type="file" accept=".json" style="display: none" on:change={importFlow} />
       <label class="checkbox">
         <input type="checkbox" bind:checked={headless} />
         Headless
       </label>
+      <button class="btn-secondary btn-sm" on:click={openImportDialog}>Import</button>
       <button class="btn-secondary btn-sm" on:click={refresh} disabled={loading}>Refresh</button>
     </div>
   </div>
 
   {#if errorMessage}
     <div class="error-banner">{errorMessage}</div>
+  {/if}
+  {#if importWarning}
+    <div class="warning-banner">{importWarning}</div>
   {/if}
 
   <div class="panel-body">
@@ -170,6 +212,15 @@
     align-items: center;
     padding: 8px 0;
     border-bottom: 1px solid var(--border);
+  }
+  .warning-banner {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(245, 158, 11, 0.12);
+    color: #fde68a;
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    font-size: 12px;
   }
   .muted {
     color: var(--text-muted);

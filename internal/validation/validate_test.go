@@ -600,6 +600,39 @@ func TestValidateTaskStepsMultipleErrors(t *testing.T) {
 	}
 }
 
+func TestValidateTaskStepsUnknownActionMessage(t *testing.T) {
+	steps := []models.TaskStep{
+		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionClick, Selector: "#btn"},
+		{Action: "xyzzy"},
+	}
+	err := ValidateTaskSteps(steps, false)
+	if err == nil {
+		t.Fatal("expected error for unknown action")
+	}
+	want := "step 3: unknown action xyzzy"
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q should contain %q", err.Error(), want)
+	}
+	if !errors.Is(err, ErrInvalidStepAction) {
+		t.Errorf("expected ErrInvalidStepAction in chain, got: %v", err)
+	}
+}
+
+func TestValidateTaskStepsUnknownActionFirstStep(t *testing.T) {
+	steps := []models.TaskStep{
+		{Action: "bad_action"},
+	}
+	err := ValidateTaskSteps(steps, false)
+	if err == nil {
+		t.Fatal("expected error for unknown action")
+	}
+	want := "step 1: unknown action bad_action"
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q should contain %q", err.Error(), want)
+	}
+}
+
 func TestValidateTaskStepsSelectMissingSelector(t *testing.T) {
 	steps := []models.TaskStep{
 		{Action: models.ActionSelect, Value: "option1", Selector: ""},
@@ -712,6 +745,62 @@ func TestValidateTimeout(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			err := ValidateTimeout(tc.timeout)
+			if tc.wantErr == nil && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+				t.Errorf("got error %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateTaskLoggingPolicy(t *testing.T) {
+	tests := []struct {
+		name    string
+		policy  *models.TaskLoggingPolicy
+		wantErr error
+	}{
+		{"nil policy", nil, nil},
+		{"default via zero", &models.TaskLoggingPolicy{MaxExecutionLogs: 0}, nil},
+		{"valid custom", &models.TaskLoggingPolicy{MaxExecutionLogs: 250}, nil},
+		{"valid max", &models.TaskLoggingPolicy{MaxExecutionLogs: 5000}, nil},
+		{"negative", &models.TaskLoggingPolicy{MaxExecutionLogs: -1}, ErrInvalidMaxExecLogs},
+		{"too large", &models.TaskLoggingPolicy{MaxExecutionLogs: 5001}, ErrInvalidMaxExecLogs},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateTaskLoggingPolicy(tc.policy)
+			if tc.wantErr == nil && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+				t.Errorf("got error %v, want %v", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateProxyConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     models.ProxyConfig
+		wantErr error
+	}{
+		{"empty direct", models.ProxyConfig{}, nil},
+		{"explicit proxy", models.ProxyConfig{Server: "proxy.example.com:8080", Protocol: models.ProxyHTTP}, nil},
+		{"auto proxy by geo", models.ProxyConfig{Geo: "US", Fallback: models.ProxyFallbackStrict}, nil},
+		{"fallback only", models.ProxyConfig{Fallback: models.ProxyFallbackDirect}, nil},
+		{"protocol without server", models.ProxyConfig{Protocol: models.ProxyHTTP}, ErrEmptyServer},
+		{"username without server", models.ProxyConfig{Username: "user"}, ErrEmptyServer},
+		{"invalid server", models.ProxyConfig{Server: "bad-server", Protocol: models.ProxyHTTP}, ErrInvalidServer},
+		{"invalid fallback", models.ProxyConfig{Fallback: models.ProxyRoutingFallback("bogus")}, ErrInvalidProxyFallback},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateProxyConfig(tc.cfg)
 			if tc.wantErr == nil && err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}

@@ -410,12 +410,12 @@ func TestSanitizeFilename(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := sanitizeFilename(tc.input)
+			result := SanitizeFilename(tc.input)
 			if strings.Contains(result, "/") || strings.Contains(result, "\\") || strings.Contains(result, "..") {
-				t.Errorf("sanitizeFilename(%q) = %q, still contains path components", tc.input, result)
+				t.Errorf("SanitizeFilename(%q) = %q, still contains path components", tc.input, result)
 			}
 			if result == "" {
-				t.Errorf("sanitizeFilename(%q) returned empty string", tc.input)
+				t.Errorf("SanitizeFilename(%q) returned empty string", tc.input)
 			}
 		})
 	}
@@ -429,7 +429,7 @@ func TestExecScreenshotPathTraversal(t *testing.T) {
 		ExtractedData: make(map[string]string),
 	}
 
-	filename := sanitizeFilename(result.TaskID)
+	filename := SanitizeFilename(result.TaskID)
 	fullPath := filepath.Join(dir, filename+"_test.png")
 
 	if !strings.HasPrefix(fullPath, filepath.Clean(dir)+string(os.PathSeparator)) {
@@ -516,6 +516,9 @@ func TestValidateEvalScript(t *testing.T) {
 		{"blocked __filename", "console.log(__filename)", true, "blocked pattern"},
 		{"case insensitive require", "REQUIRE('fs')", true, "blocked pattern"},
 		{"case insensitive process", "Process.Exit(0)", true, "blocked pattern"},
+		{"five functions allowed", "function a(){}function b(){}function c(){}function d(){}function e(){}", false, ""},
+		{"six functions rejected", "function a(){}function b(){}function c(){}function d(){}function e(){}function f(){}", true, "too many nested function"},
+		{"exactly six rejected", strings.Repeat("function(){} ", 6), true, "too many nested function"},
 	}
 
 	for _, tc := range tests {

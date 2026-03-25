@@ -648,6 +648,23 @@ func TestAppCreateBatchRejectsOnInvalid(t *testing.T) {
 	}
 }
 
+func TestAppCreateBatchRejectsInvalidProxyConfig(t *testing.T) {
+	app := setupTestApp(t)
+
+	inputs := []models.BatchTaskInput{
+		{Name: "Good", URL: "https://a.com", Steps: validSteps(), Priority: 5},
+		{Name: "Bad Proxy", URL: "https://b.com", Steps: validSteps(), Priority: 5, Proxy: models.ProxyConfig{Protocol: models.ProxyHTTP}},
+	}
+
+	_, err := app.CreateBatch(inputs, false)
+	if err == nil {
+		t.Fatal("expected error for invalid proxy config in batch")
+	}
+	if !strings.Contains(err.Error(), "proxy") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestAppUpdateTaskValidation(t *testing.T) {
 	app := setupTestApp(t)
 
@@ -659,6 +676,64 @@ func TestAppUpdateTaskValidation(t *testing.T) {
 	err = app.UpdateTask(task.ID, "", "https://example.com", validSteps(), models.ProxyConfig{}, 5, nil, 0, nil)
 	if err == nil {
 		t.Fatal("expected validation error for empty name")
+	}
+}
+
+func TestAppCreateTaskRejectsInvalidLoggingPolicy(t *testing.T) {
+	app := setupTestApp(t)
+
+	_, err := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, &models.TaskLoggingPolicy{MaxExecutionLogs: 5001})
+	if err == nil {
+		t.Fatal("expected error for invalid logging policy, got nil")
+	}
+	if !strings.Contains(err.Error(), "maxExecutionLogs") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAppUpdateTaskRejectsInvalidLoggingPolicy(t *testing.T) {
+	app := setupTestApp(t)
+
+	task, err := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	err = app.UpdateTask(task.ID, "Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, nil, 0, &models.TaskLoggingPolicy{MaxExecutionLogs: -1})
+	if err == nil {
+		t.Fatal("expected error for invalid logging policy")
+	}
+	if !strings.Contains(err.Error(), "maxExecutionLogs") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAppCreateTaskRejectsInvalidProxyConfig(t *testing.T) {
+	app := setupTestApp(t)
+
+	_, err := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{Protocol: models.ProxyHTTP}, 5, false, nil, 0, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid proxy config")
+	}
+	if !strings.Contains(err.Error(), "proxy") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAppUpdateTaskRejectsInvalidProxyConfig(t *testing.T) {
+	app := setupTestApp(t)
+
+	task, err := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+
+	err = app.UpdateTask(task.ID, "Task", "https://example.com", validSteps(), models.ProxyConfig{Fallback: models.ProxyRoutingFallback("bogus")}, 5, nil, 0, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid proxy config")
+	}
+	if !strings.Contains(err.Error(), "proxy") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -831,6 +906,35 @@ func TestMaskCredential(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("maskCredential(%q): got %q, want %q", tc.input, got, tc.want)
 		}
+	}
+}
+
+func TestAppCreateScheduleRejectsInvalidProxyConfig(t *testing.T) {
+	app := setupTestApp(t)
+
+	_, err := app.CreateSchedule("Sched", "0 * * * *", "flow-1", "https://example.com", models.ProxyConfig{Protocol: models.ProxyHTTP}, 5, false, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid schedule proxy config")
+	}
+	if !strings.Contains(err.Error(), "proxy") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAppUpdateScheduleRejectsInvalidProxyConfig(t *testing.T) {
+	app := setupTestApp(t)
+
+	sched, err := app.CreateSchedule("Sched", "0 * * * *", "flow-1", "https://example.com", models.ProxyConfig{}, 5, false, nil)
+	if err != nil {
+		t.Fatalf("CreateSchedule: %v", err)
+	}
+
+	err = app.UpdateSchedule(sched.ID, "Sched", "0 * * * *", "flow-1", "https://example.com", models.ProxyConfig{Fallback: models.ProxyRoutingFallback("bogus")}, 5, false, nil, true)
+	if err == nil {
+		t.Fatal("expected error for invalid schedule proxy config")
+	}
+	if !strings.Contains(err.Error(), "proxy") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

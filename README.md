@@ -49,8 +49,31 @@ FlowPilot
 ### Tech Stack
 - **Backend:** Go 1.24, Wails v2 (Go <-> JS bridge)
 - **Frontend:** Svelte + TypeScript + Vite
-- **Database:** SQLite (embedded)
+- **Database:** SQLite (local embedded) or **Turso** (distributed, via `libsql` driver)
 - **Browser:** chromedp (Chrome DevTools Protocol)
+
+### Database Options
+
+FlowPilot supports two database backends, selected via environment variables:
+
+| Mode | Config | Description |
+|---|---|---|
+| **Local SQLite** _(default)_ | `DATABASE_PATH=/path/to/tasks.db` | Embedded SQLite file, WAL mode |
+| **Turso (remote)** | `DATABASE_URL=libsql://...` + `TURSO_AUTH_TOKEN=...` | Distributed Turso cloud database |
+| **Turso + replica** | All three vars set | Turso cloud + offline-capable local replica |
+
+```bash
+# Local SQLite (default — no env vars needed)
+wails dev
+
+# Turso remote
+DATABASE_URL=libsql://mydb.turso.io TURSO_AUTH_TOKEN=<token> wails dev
+
+# Turso with embedded local replica (recommended for desktop)
+DATABASE_URL=libsql://mydb.turso.io TURSO_AUTH_TOKEN=<token> DATABASE_PATH=./replica.db wails dev
+```
+
+See [Turso Integration Guide](docs/turso-integration.md) for full details.
 
 ## Documentation
 

@@ -39,3 +39,13 @@ func safeWailsLog(ctx context.Context, logFn func()) {
 	}()
 	logFn()
 }
+
+func safeWailsEmit(ctx context.Context, eventName string, data ...any) {
+	if ctx == nil {
+		return
+	}
+	defer func() {
+		_ = recover()
+	}()
+	wailsRuntime.EventsEmit(ctx, eventName, data...)
+}

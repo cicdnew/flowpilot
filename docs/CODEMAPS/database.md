@@ -1,15 +1,41 @@
 # FlowPilot — Database Codemap
 
-> **Freshness:** 2026-03-24  
+> **Freshness:** 2026-03-30  
 > **Cross-refs:** [INDEX.md](INDEX.md) | [backend.md](backend.md) | [workers.md](workers.md)
 
 ## Overview
 
-FlowPilot uses **SQLite** (via `mattn/go-sqlite3`) in WAL mode for all persistence. The `internal/database` package contains:
-- `sqlite.go` — connection management, schema creation, migrations
+FlowPilot uses **SQLite / Turso** (via `tursodatabase/libsql-go`) for all persistence. The same driver supports both a local embedded file and a remote [Turso](https://turso.tech) distributed database. The `internal/database` package contains:
+- `config.go` — `DatabaseConfig`, `DatabaseType`, and `DetectType()` URL classifier
+- `sqlite.go` — connection management, schema creation, migrations, Turso/local branching
 - `db_*.go` files — one DAO file per domain
 
 The `internal/models` package defines all shared data structs (no ORM; raw `database/sql`).
+
+---
+
+## Configuration (`config.go`)
+
+```go
+// DatabaseType selects the backend driver.
+type DatabaseType int
+const (
+    DatabaseSQLite DatabaseType = iota  // local file or :memory:
+    DatabaseTurso                       // libsql:// remote URL
+)
+
+// DatabaseConfig is the single config value passed to NewWithConfig.
+type DatabaseConfig struct {
+    URL       string  // local file path OR libsql:// URL
+    AuthToken string  // Turso auth token (optional)
+    LocalPath string  // local replica path for embedded replica mode (optional)
+}
+
+// DetectType inspects the DSN prefix to pick the driver.
+func DetectType(dsn string) DatabaseType
+```
+
+`DetectType` returns `DatabaseTurso` when the URL starts with `libsql://`; otherwise `DatabaseSQLite`.
 
 ---
 
@@ -17,20 +43,34 @@ The `internal/models` package defines all shared data structs (no ORM; raw `data
 
 ```go
 type DB struct {
-    sql *sql.DB
-    path string
+    conn     *sql.DB  // writer
+    readConn *sql.DB  // reader (== conn for Turso)
 }
 
-func Open(path string) (*DB, error)
-  ├── sql.Open("sqlite3", path+"?_journal_mode=WAL&_foreign_keys=on")
-  ├── db.SetMaxOpenConns(1)     // SQLite is single-writer
-  └── migrate(db)               // idempotent schema setup
+// Backward-compatible: opens a local SQLite file.
+func New(dbPath string) (*DB, error)
+
+// Config-based: supports local SQLite and Turso.
+func NewWithConfig(config DatabaseConfig) (*DB, error)
 ```
 
-### Pragmas Set at Open
-- `journal_mode=WAL` — concurrent reads + one writer
-- `foreign_keys=on` — enforces FK constraints
-- `busy_timeout=5000` — 5s wait on write lock
+### Local SQLite path
+- Single shared pool (max 1 open) for both reads and writes via `libsql` driver
+- Using two separate `*sql.DB` handles on the same file causes `database is locked`; a shared pool avoids this
+- PRAGMAs applied: `synchronous=NORMAL`, `cache_size=-64000`, `mmap_size=268435456`, `temp_store=MEMORY`
+
+### Turso / remote path
+- Single shared `*sql.DB` for reads and writes (remote is stateless)
+- Auth token appended as `?authToken=` query parameter
+- PRAGMAs **not applied** (unsupported over remote connection)
+- Embedded replica mode: `libsql.NewEmbeddedReplicaConnector(localPath, remoteURL)` — offline-capable local SQLite that syncs periodically to Turso
+
+### Environment variables
+| Variable | Default | Description |
+|---|---|---|
+| `DATABASE_URL` | _(none)_ | `libsql://` URL — activates Turso mode |
+| `TURSO_AUTH_TOKEN` | _(none)_ | Auth token passed to Turso |
+| `DATABASE_PATH` | `<dataDir>/tasks.db` | Local file; doubles as embedded replica path when `DATABASE_URL` is set |
 
 ---
 
@@ -261,6 +301,8 @@ CREATE TABLE visual_diffs (
 
 ## Migrations (`sqlite.go` → `migrate()`)
 
+> Schema statements are executed one-by-one (not as a single multi-statement batch) for compatibility with the libsql remote driver.
+
 The `migrate()` function runs once at startup, using `CREATE TABLE IF NOT EXISTS` and `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` patterns. It is idempotent — safe to run on existing databases.
 
 Migration strategy: additive only (no destructive changes). Version is not tracked explicitly; the `IF NOT EXISTS` guards ensure safety.
@@ -454,6 +496,7 @@ func ClassifyError(err error) ErrorCode {
 
 ## See Also
 
+- [turso-integration.md](../turso-integration.md) — Full Turso setup, env vars, and deployment guide
 - [backend.md](backend.md) — App methods that call these DAOs
 - [integrations.md](integrations.md) — credential encryption via crypto package
 - [workers.md](workers.md) — queue reads/writes task status

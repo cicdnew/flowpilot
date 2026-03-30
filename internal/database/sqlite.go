@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
+	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
+	libsql "github.com/tursodatabase/libsql-go"
 )
 
 // DB wraps the SQLite connections.
@@ -17,46 +19,135 @@ type DB struct {
 // Reader returns the read-only connection for concurrent queries.
 func (db *DB) Reader() *sql.DB { return db.readConn }
 
-// New creates a new database connection and initializes the schema.
+// New creates a new SQLite database connection and initializes the schema.
 func New(dbPath string) (*DB, error) {
-	dsn := dbPath + "?_journal_mode=WAL&_busy_timeout=30000&_txlock=immediate"
-	conn, err := sql.Open("sqlite3", dsn)
+	return NewWithConfig(DatabaseConfig{URL: dbPath})
+}
+
+// NewWithConfig creates a database connection from the provided config.
+func NewWithConfig(config DatabaseConfig) (*DB, error) {
+	if strings.TrimSpace(config.URL) == "" {
+		return nil, fmt.Errorf("open database: empty database URL")
+	}
+	if DetectType(config.URL) == DatabaseTurso {
+		return newTursoDB(config)
+	}
+	return newSQLiteDB(config.URL)
+}
+
+func newSQLiteDB(dbPath string) (*DB, error) {
+	dsn := sqliteLocalDSN(dbPath)
+	conn, err := sql.Open("libsql", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	conn.SetMaxOpenConns(1) // SQLite single-writer
+	// Use a single pool for both reads and writes. libsql's local driver
+	// serialises writes internally; a shared pool avoids "database is locked"
+	// errors that occur when two separate *sql.DB handles contend on the file.
+	conn.SetMaxOpenConns(1)
 	conn.SetMaxIdleConns(1)
 
-	readConn, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_busy_timeout=5000&mode=ro")
-	if err != nil {
-		conn.Close()
-		return nil, fmt.Errorf("open read database: %w", err)
-	}
-	readConn.SetMaxOpenConns(4)
-	readConn.SetMaxIdleConns(4)
-
-	db := &DB{conn: conn, readConn: readConn}
-
-	// Performance PRAGMAs (apply to both connections)
-	for _, c := range []*sql.DB{conn, readConn} {
-		c.Exec("PRAGMA synchronous=NORMAL")
-		c.Exec("PRAGMA cache_size=-64000")
-		c.Exec("PRAGMA mmap_size=268435456")
-		c.Exec("PRAGMA temp_store=MEMORY")
-	}
-
+	db := &DB{conn: conn, readConn: conn}
+	applySQLitePragmas(conn)
 	if err := db.migrate(); err != nil {
-		conn.Close()
-		readConn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
-
 	return db, nil
+}
+
+func sqliteLocalDSN(dbPath string) string {
+	trimmed := strings.TrimSpace(dbPath)
+	if trimmed == "" || trimmed == ":memory:" || strings.HasPrefix(trimmed, "file:") {
+		return trimmed
+	}
+	if strings.Contains(trimmed, "://") {
+		return trimmed
+	}
+	return "file:" + trimmed
+}
+
+func newTursoDB(config DatabaseConfig) (*DB, error) {
+	var (
+		conn *sql.DB
+		err  error
+	)
+
+	if strings.TrimSpace(config.LocalPath) != "" {
+		opts := make([]libsql.Option, 0, 1)
+		if strings.TrimSpace(config.AuthToken) != "" {
+			opts = append(opts, libsql.WithAuthToken(config.AuthToken))
+		}
+		connector, err := libsql.NewEmbeddedReplicaConnector(config.LocalPath, config.URL, opts...)
+		if err != nil {
+			return nil, fmt.Errorf("open turso embedded replica: %w", err)
+		}
+		conn = sql.OpenDB(connector)
+	} else {
+		dsn := config.URL
+		if strings.TrimSpace(config.AuthToken) != "" {
+			dsn = appendQueryParam(dsn, "authToken", config.AuthToken)
+		}
+		conn, err = sql.Open("libsql", dsn)
+		if err != nil {
+			return nil, fmt.Errorf("open turso database: %w", err)
+		}
+	}
+
+	conn.SetMaxOpenConns(4)
+	conn.SetMaxIdleConns(4)
+	db := &DB{conn: conn, readConn: conn}
+	if err := db.migrate(); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("run migrations: %w", err)
+	}
+	return db, nil
+}
+
+func applySQLitePragmas(conns ...*sql.DB) {
+	for _, c := range conns {
+		if c == nil {
+			continue
+		}
+		_, _ = c.Exec("PRAGMA synchronous=NORMAL")
+		_, _ = c.Exec("PRAGMA cache_size=-64000")
+		_, _ = c.Exec("PRAGMA mmap_size=268435456")
+		_, _ = c.Exec("PRAGMA temp_store=MEMORY")
+	}
+}
+
+func appendQueryParam(raw, key, value string) string {
+	if strings.TrimSpace(raw) == "" {
+		return raw
+	}
+	if strings.HasPrefix(raw, "file:") || strings.Contains(raw, "://") {
+		parsed, err := url.Parse(raw)
+		if err == nil {
+			query := parsed.Query()
+			query.Set(key, value)
+			parsed.RawQuery = query.Encode()
+			return parsed.String()
+		}
+	}
+	sep := "?"
+	if strings.Contains(raw, "?") {
+		sep = "&"
+	}
+	return raw + sep + url.QueryEscape(key) + "=" + url.QueryEscape(value)
 }
 
 // Close closes both database connections.
 func (db *DB) Close() error {
+	if db == nil {
+		return nil
+	}
+	if db.readConn == nil || db.readConn == db.conn {
+		if db.conn == nil {
+			return nil
+		}
+		return db.conn.Close()
+	}
 	readErr := db.readConn.Close()
 	writeErr := db.conn.Close()
 	if writeErr != nil {
@@ -285,9 +376,14 @@ func (db *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
 	CREATE INDEX IF NOT EXISTS idx_step_logs_task_step ON step_logs(task_id, step_index);
 	`
-	_, err := db.conn.Exec(schema)
-	if err != nil {
-		return fmt.Errorf("exec schema: %w", err)
+	for _, stmt := range strings.Split(schema, ";") {
+		stmt = strings.TrimSpace(stmt)
+		if stmt == "" {
+			continue
+		}
+		if _, err := db.conn.Exec(stmt); err != nil {
+			return fmt.Errorf("exec schema statement: %w", err)
+		}
 	}
 	return db.applyNamedMigrations(context.Background())
 }

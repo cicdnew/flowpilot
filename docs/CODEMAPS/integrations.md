@@ -1,4 +1,43 @@
-# FlowPilot - Integrations Codemap
+# FlowPilot — Integrations Codemap
+
+> **Freshness:** 2026-03-30
+
+## 0. TURSO / LIBSQL DATABASE (`internal/database/`)
+
+### Files
+- **config.go** — `DatabaseType`, `DatabaseConfig`, `DetectType(dsn)`
+- **sqlite.go** — `New()` / `NewWithConfig()` constructors with local + Turso branching
+
+### Key Types & Functions
+
+- `DatabaseType` — `DatabaseSQLite` (0) or `DatabaseTurso` (1)
+- `DatabaseConfig` — `URL`, `AuthToken`, `LocalPath`
+- `DetectType(dsn string) DatabaseType` — returns `DatabaseTurso` when DSN starts with `libsql://`
+- `New(dbPath string) (*DB, error)` — backward-compatible local-file constructor
+- `NewWithConfig(config DatabaseConfig) (*DB, error)` — unified constructor; dispatches to `newSQLiteDB` or `newTursoDB`
+- `newSQLiteDB(dbPath string)` — opens via `libsql` driver with `file:` DSN; applies WAL PRAGMAs; separate read pool
+- `newTursoDB(config)` — opens remote Turso connection or embedded replica; skips PRAGMAs; shares one pool for reads/writes
+
+### Dependencies
+- `github.com/tursodatabase/libsql-go` (aliased as `github.com/tursodatabase/go-libsql` via `replace` in go.mod)
+
+### Environment Variables
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | No | Set to `libsql://` to enable Turso mode |
+| `TURSO_AUTH_TOKEN` | No | Bearer token for Turso auth |
+| `DATABASE_PATH` | No | Local file path; used as embedded replica path when `DATABASE_URL` is set |
+
+### How It Connects
+- `app.go` startup reads env vars and calls `database.NewWithConfig(config)` before wiring any other service
+- All DAOs (`db_*.go`) receive the single `*DB` instance; they call `db.conn` (write) or `db.Reader()` (read)
+- Both modes share the same schema, migrations, and DAO layer — no branching elsewhere in the codebase
+
+### See Also
+- [database.md](database.md) — full schema and DAO reference
+- [docs/turso-integration.md](../turso-integration.md) — deployment & ops guide
+
+---
 
 ## 1. CAPTCHA (`internal/captcha/`)
 

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -172,8 +173,15 @@ func (a *App) startup(ctx context.Context) {
 		return
 	}
 
-	dbPath := filepath.Join(a.dataDir, "tasks.db")
-	db, err := database.New(dbPath)
+	dbConfig := database.DatabaseConfig{URL: filepath.Join(a.dataDir, "tasks.db")}
+	if databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL")); databaseURL != "" {
+		dbConfig.URL = databaseURL
+		dbConfig.AuthToken = strings.TrimSpace(os.Getenv("TURSO_AUTH_TOKEN"))
+		dbConfig.LocalPath = strings.TrimSpace(os.Getenv("DATABASE_PATH"))
+	} else if databasePath := strings.TrimSpace(os.Getenv("DATABASE_PATH")); databasePath != "" {
+		dbConfig.URL = databasePath
+	}
+	db, err := database.NewWithConfig(dbConfig)
 	if err != nil {
 		a.initErr = fmt.Errorf("init database: %w", err)
 		logErrorf(ctx, "startup failed: %v", a.initErr)

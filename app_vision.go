@@ -5,6 +5,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,6 +13,63 @@ import (
 	"flowpilot/internal/models"
 	"flowpilot/internal/vision"
 )
+
+func pathWithinBase(basePath, targetPath string) bool {
+	rel, err := filepath.Rel(basePath, targetPath)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
+}
+
+func resolveExistingPathWithinBase(baseDir, targetPath string) (string, error) {
+	baseAbs, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve base dir: %w", err)
+	}
+	baseResolved, err := filepath.EvalSymlinks(baseAbs)
+	if err != nil {
+		return "", fmt.Errorf("eval base dir symlinks: %w", err)
+	}
+	targetAbs, err := filepath.Abs(targetPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve target path: %w", err)
+	}
+	targetResolved, err := filepath.EvalSymlinks(targetAbs)
+	if err != nil {
+		return "", fmt.Errorf("eval target path symlinks: %w", err)
+	}
+	if !pathWithinBase(baseResolved, targetResolved) {
+		return "", fmt.Errorf("path must be within application data directory")
+	}
+	return targetResolved, nil
+}
+
+func resolveNewPathWithinBase(baseDir, targetPath string) (string, error) {
+	baseAbs, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve base dir: %w", err)
+	}
+	baseResolved, err := filepath.EvalSymlinks(baseAbs)
+	if err != nil {
+		return "", fmt.Errorf("eval base dir symlinks: %w", err)
+	}
+	targetAbs, err := filepath.Abs(targetPath)
+	if err != nil {
+		return "", fmt.Errorf("resolve target path: %w", err)
+	}
+	parentResolved, err := filepath.EvalSymlinks(filepath.Dir(targetAbs))
+	if err != nil {
+		return "", fmt.Errorf("eval target parent symlinks: %w", err)
+	}
+	if !pathWithinBase(baseResolved, parentResolved) {
+		return "", fmt.Errorf("path must be within application data directory")
+	}
+	if !pathWithinBase(parentResolved, targetAbs) {
+		return "", fmt.Errorf("path escapes permitted directory")
+	}
+	return targetAbs, nil
+}
 
 func (a *App) CreateVisualBaseline(name, taskID, screenshotPath string) (*models.VisualBaseline, error) {
 	if err := a.ready(); err != nil {
@@ -24,7 +82,11 @@ func (a *App) CreateVisualBaseline(name, taskID, screenshotPath string) (*models
 		return nil, fmt.Errorf("create visual baseline: screenshotPath is required")
 	}
 
-	f, err := os.Open(screenshotPath)
+	resolvedPath, err := resolveExistingPathWithinBase(a.dataDir, screenshotPath)
+	if err != nil {
+		return nil, fmt.Errorf("create visual baseline: %w", err)
+	}
+	f, err := os.Open(resolvedPath)
 	if err != nil {
 		return nil, fmt.Errorf("create visual baseline: open screenshot: %w", err)
 	}
@@ -51,7 +113,7 @@ func (a *App) CreateVisualBaseline(name, taskID, screenshotPath string) (*models
 		Name:           name,
 		TaskID:         taskID,
 		URL:            url,
-		ScreenshotPath: screenshotPath,
+		ScreenshotPath: resolvedPath,
 		Width:          width,
 		Height:         height,
 		CreatedAt:      time.Now(),
@@ -97,6 +159,11 @@ func (a *App) CompareVisual(req models.DiffRequest) (*models.VisualDiff, error) 
 		return nil, fmt.Errorf("compare visual: %w", err)
 	}
 
+	baselinePath, err := resolveExistingPathWithinBase(a.dataDir, baseline.ScreenshotPath)
+	if err != nil {
+		return nil, fmt.Errorf("compare visual: invalid baseline path: %w", err)
+	}
+
 	task, err := a.db.GetTask(a.ctx, req.TaskID)
 	if err != nil {
 		return nil, fmt.Errorf("compare visual: get task: %w", err)
@@ -106,7 +173,10 @@ func (a *App) CompareVisual(req models.DiffRequest) (*models.VisualDiff, error) 
 		return nil, fmt.Errorf("compare visual: task %s has no screenshots", req.TaskID)
 	}
 
-	screenshotPath := task.Result.Screenshots[0]
+	screenshotPath, err := resolveExistingPathWithinBase(a.dataDir, task.Result.Screenshots[0])
+	if err != nil {
+		return nil, fmt.Errorf("compare visual: invalid screenshot path: %w", err)
+	}
 
 	diffsDir := filepath.Join(a.dataDir, "diffs")
 	if err := os.MkdirAll(diffsDir, 0o700); err != nil {
@@ -114,9 +184,12 @@ func (a *App) CompareVisual(req models.DiffRequest) (*models.VisualDiff, error) 
 	}
 
 	diffID := uuid.New().String()
-	diffOutputPath := filepath.Join(diffsDir, diffID+".png")
+	diffOutputPath, err := resolveNewPathWithinBase(diffsDir, filepath.Join(diffsDir, diffID+".png"))
+	if err != nil {
+		return nil, fmt.Errorf("compare visual: invalid diff output path: %w", err)
+	}
 
-	result, err := vision.Compare(baseline.ScreenshotPath, screenshotPath, diffOutputPath)
+	result, err := vision.Compare(baselinePath, screenshotPath, diffOutputPath)
 	if err != nil {
 		return nil, fmt.Errorf("compare visual: %w", err)
 	}

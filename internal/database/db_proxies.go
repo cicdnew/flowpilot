@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"time"
 
 	"flowpilot/internal/crypto"
@@ -26,10 +27,18 @@ func (db *DB) scanProxyRow(rows *sql.Rows) (*models.Proxy, error) {
 		p.LastChecked = &lastChecked.Time
 	}
 
-	if decUser, err := crypto.Decrypt(p.Username); err == nil {
+	if p.Username != "" {
+		decUser, err := crypto.Decrypt(p.Username)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt proxy username for %s: %w", p.ID, err)
+		}
 		p.Username = decUser
 	}
-	if decPass, err := crypto.Decrypt(p.Password); err == nil {
+	if p.Password != "" {
+		decPass, err := crypto.Decrypt(p.Password)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt proxy password for %s: %w", p.ID, err)
+		}
 		p.Password = decPass
 	}
 
@@ -78,6 +87,31 @@ func (db *DB) ListProxies(ctx context.Context) ([]models.Proxy, error) {
 		return nil, fmt.Errorf("iterate proxies: %w", err)
 	}
 	return proxies, nil
+}
+
+func (db *DB) ListProxiesBestEffort(ctx context.Context) ([]models.Proxy, int, error) {
+	rows, err := db.readConn.QueryContext(ctx, `SELECT id, server, protocol, username, password, geo, status, latency, success_rate, total_used, max_requests_per_minute, last_checked, created_at
+		FROM proxies ORDER BY success_rate DESC, latency ASC`)
+	if err != nil {
+		return nil, 0, fmt.Errorf("query proxies: %w", err)
+	}
+	defer rows.Close()
+
+	var proxies []models.Proxy
+	skipped := 0
+	for rows.Next() {
+		p, err := db.scanProxyRow(rows)
+		if err != nil {
+			skipped++
+			log.Printf("skip invalid proxy row: %v", err)
+			continue
+		}
+		proxies = append(proxies, *p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, skipped, fmt.Errorf("iterate proxies: %w", err)
+	}
+	return proxies, skipped, nil
 }
 
 func (db *DB) ListHealthyProxies(ctx context.Context) ([]models.Proxy, error) {

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"flowpilot/internal/crypto"
@@ -44,10 +45,18 @@ func (db *DB) scanSchedule(row scanner) (*models.Schedule, error) {
 		}
 	}
 
-	if decUser, err := crypto.Decrypt(s.ProxyConfig.Username); err == nil {
+	if s.ProxyConfig.Username != "" {
+		decUser, err := crypto.Decrypt(s.ProxyConfig.Username)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt schedule proxy username for %s: %w", s.ID, err)
+		}
 		s.ProxyConfig.Username = decUser
 	}
-	if decPass, err := crypto.Decrypt(s.ProxyConfig.Password); err == nil {
+	if s.ProxyConfig.Password != "" {
+		decPass, err := crypto.Decrypt(s.ProxyConfig.Password)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt schedule proxy password for %s: %w", s.ID, err)
+		}
 		s.ProxyConfig.Password = decPass
 	}
 
@@ -200,7 +209,8 @@ func (db *DB) ListDueSchedules(ctx context.Context, now time.Time) ([]models.Sch
 	for rows.Next() {
 		s, err := db.scanSchedule(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan due schedule row: %w", err)
+			log.Printf("skip invalid due schedule row: %v", err)
+			continue
 		}
 		schedules = append(schedules, *s)
 	}

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"flowpilot/internal/crypto"
 	"flowpilot/internal/models"
 )
@@ -79,10 +81,18 @@ func (db *DB) scanTask(row scanner) (*models.Task, error) {
 		}
 	}
 
-	if decUser, err := crypto.Decrypt(t.Proxy.Username); err == nil {
+	if t.Proxy.Username != "" {
+		decUser, err := crypto.Decrypt(t.Proxy.Username)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt proxy username for task %s: %w", t.ID, err)
+		}
 		t.Proxy.Username = decUser
 	}
-	if decPass, err := crypto.Decrypt(t.Proxy.Password); err == nil {
+	if t.Proxy.Password != "" {
+		decPass, err := crypto.Decrypt(t.Proxy.Password)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt proxy password for task %s: %w", t.ID, err)
+		}
 		t.Proxy.Password = decPass
 	}
 
@@ -289,22 +299,27 @@ func (db *DB) ListTasksByStatus(ctx context.Context, status models.TaskStatus) (
 }
 
 func (db *DB) UpdateTaskStatus(ctx context.Context, id string, status models.TaskStatus, errMsg string) error {
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin update task status tx: %w", err)
+	}
+	defer tx.Rollback()
+
 	var fromStatus models.TaskStatus
 	var batchID string
-	if err := db.conn.QueryRowContext(ctx, `SELECT status, batch_id FROM tasks WHERE id = ?`, id).Scan(&fromStatus, &batchID); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT status, batch_id FROM tasks WHERE id = ?`, id).Scan(&fromStatus, &batchID); err != nil {
 		return fmt.Errorf("task %s not found", id)
 	}
 
 	now := time.Now()
 	var res sql.Result
-	var err error
 	switch status {
 	case models.TaskStatusRunning:
-		res, err = db.conn.ExecContext(ctx, `UPDATE tasks SET status = ?, started_at = ? WHERE id = ?`, status, now, id)
+		res, err = tx.ExecContext(ctx, `UPDATE tasks SET status = ?, started_at = ? WHERE id = ?`, status, now, id)
 	case models.TaskStatusCompleted, models.TaskStatusFailed:
-		res, err = db.conn.ExecContext(ctx, `UPDATE tasks SET status = ?, error = ?, completed_at = ? WHERE id = ?`, status, errMsg, now, id)
+		res, err = tx.ExecContext(ctx, `UPDATE tasks SET status = ?, error = ?, completed_at = ? WHERE id = ?`, status, errMsg, now, id)
 	default:
-		res, err = db.conn.ExecContext(ctx, `UPDATE tasks SET status = ?, error = ? WHERE id = ?`, status, errMsg, id)
+		res, err = tx.ExecContext(ctx, `UPDATE tasks SET status = ?, error = ? WHERE id = ?`, status, errMsg, id)
 	}
 	if err != nil {
 		return fmt.Errorf("update task %s status to %s: %w", id, status, err)
@@ -318,7 +333,7 @@ func (db *DB) UpdateTaskStatus(ctx context.Context, id string, status models.Tas
 	}
 
 	event := models.TaskLifecycleEvent{
-		ID:        fmt.Sprintf("evt_%d", time.Now().UnixNano()),
+		ID:        "evt_" + uuid.New().String(),
 		TaskID:    id,
 		BatchID:   batchID,
 		FromState: fromStatus,
@@ -326,10 +341,13 @@ func (db *DB) UpdateTaskStatus(ctx context.Context, id string, status models.Tas
 		Error:     errMsg,
 		Timestamp: now,
 	}
-	if insertErr := db.InsertTaskEvent(ctx, event); insertErr != nil {
-		return fmt.Errorf("insert task event for %s: %w", id, insertErr)
+	if err := insertTaskEventTx(ctx, tx, event); err != nil {
+		return fmt.Errorf("insert task event for %s: %w", id, err)
 	}
 
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit update task status: %w", err)
+	}
 	return nil
 }
 
@@ -493,9 +511,8 @@ func (db *DB) ListTasksPaginated(ctx context.Context, page, pageSize int, status
 		args = append(args, status)
 	}
 	if tag != "" {
-		escapedTag := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(tag)
-		where += " AND tags LIKE ? ESCAPE '\\'"
-		args = append(args, "%\""+escapedTag+"\"%")
+		where += " AND EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?)"
+		args = append(args, tag)
 	}
 
 	var total int
@@ -600,13 +617,48 @@ func (db *DB) BatchApplyTaskStateChanges(ctx context.Context, changes []TaskStat
 	}
 	defer retryStmt.Close()
 
+	// Prefetch current status and batch_id for all tasks in one query to eliminate N+1.
+	taskIDs := make([]string, len(changes))
+	for i, c := range changes {
+		taskIDs[i] = c.TaskID
+	}
+	placeholders := make([]string, len(taskIDs))
+	fetchArgs := make([]any, len(taskIDs))
+	for i, id := range taskIDs {
+		placeholders[i] = "?"
+		fetchArgs[i] = id
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT id, status, batch_id FROM tasks WHERE id IN (`+strings.Join(placeholders, ",")+`)`, fetchArgs...)
+	if err != nil {
+		return fmt.Errorf("prefetch task states: %w", err)
+	}
+	type taskState struct {
+		status  models.TaskStatus
+		batchID string
+	}
+	stateMap := make(map[string]taskState, len(changes))
+	for rows.Next() {
+		var tid string
+		var ts taskState
+		if err := rows.Scan(&tid, &ts.status, &ts.batchID); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan task state: %w", err)
+		}
+		stateMap[tid] = ts
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate task states: %w", err)
+	}
+
 	events := make([]models.TaskLifecycleEvent, 0, len(changes))
 	for _, change := range changes {
-		var fromStatus models.TaskStatus
-		var batchID string
-		if err := tx.QueryRowContext(ctx, `SELECT status, batch_id FROM tasks WHERE id = ?`, change.TaskID).Scan(&fromStatus, &batchID); err != nil {
+		state, ok := stateMap[change.TaskID]
+		if !ok {
 			return fmt.Errorf("task %s not found", change.TaskID)
 		}
+		fromStatus := state.status
+		batchID := state.batchID
 
 		if (fromStatus == models.TaskStatusCancelled || fromStatus == models.TaskStatusCompleted || fromStatus == models.TaskStatusFailed) &&
 			change.Status != models.TaskStatusCancelled && change.Status != models.TaskStatusCompleted && change.Status != models.TaskStatusFailed {
@@ -637,7 +689,7 @@ func (db *DB) BatchApplyTaskStateChanges(ctx context.Context, changes []TaskStat
 		}
 
 		events = append(events, models.TaskLifecycleEvent{
-			ID:        fmt.Sprintf("evt_%d", time.Now().UnixNano()),
+			ID:        "evt_" + uuid.New().String(),
 			TaskID:    change.TaskID,
 			BatchID:   batchID,
 			FromState: fromStatus,

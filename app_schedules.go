@@ -201,7 +201,7 @@ func (a *App) SubmitScheduledTask(ctx context.Context, sched models.Schedule) er
 		Proxy:      sched.ProxyConfig,
 		Priority:   sched.Priority,
 		Status:     models.TaskStatusPending,
-		MaxRetries: 3,
+		MaxRetries: models.DefaultMaxRetries,
 		Tags:       sched.Tags,
 		FlowID:     sched.FlowID,
 		Headless:   sched.Headless,

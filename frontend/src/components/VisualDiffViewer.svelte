@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { visualBaselines } from '../lib/store';
   import type { VisualDiff, Task } from '../lib/types';
-  import { ListVisualBaselines, CreateVisualBaseline, CompareVisual, ListVisualDiffs, DeleteVisualBaseline, ListTasks } from '../../wailsjs/go/main/App';
+  import { ListVisualBaselines, CreateVisualBaseline, CompareVisual, ListVisualDiffs, DeleteVisualBaseline, ListTasksPaginated } from '../../wailsjs/go/main/App';
 
   let errorMessage = '';
   let baselineName = '';
@@ -39,9 +39,22 @@
 
   async function loadCompletedTasks() {
     try {
-      const all = await ListTasks();
-      completedTasks = ((all || []) as Task[]).filter(t => t.status === 'completed');
-    } catch (_) {}
+      const pageSize = 100;
+      let page = 1;
+      const tasks: Task[] = [];
+      while (true) {
+        const response = await ListTasksPaginated(page, pageSize, 'completed', '');
+        const batch = (response?.tasks || []) as Task[];
+        tasks.push(...batch);
+        if (!response || page >= (response.totalPages || 0)) {
+          break;
+        }
+        page += 1;
+      }
+      completedTasks = tasks;
+    } catch (_) {
+      completedTasks = [];
+    }
   }
 
   async function createBaseline() {

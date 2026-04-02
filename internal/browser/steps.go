@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -222,7 +223,7 @@ func (r *Runner) execScreenshot(ctx context.Context, result *models.TaskResult) 
 	if !strings.HasPrefix(path, filepath.Clean(r.screenshotDir)+string(os.PathSeparator)) {
 		return fmt.Errorf("screenshot path escapes screenshot directory")
 	}
-	if err := os.WriteFile(path, buf, 0o644); err != nil {
+	if err := os.WriteFile(path, buf, 0o600); err != nil {
 		return fmt.Errorf("save screenshot: %w", err)
 	}
 	result.Screenshots = append(result.Screenshots, path)
@@ -240,6 +241,45 @@ func SanitizeFilename(name string) string {
 		return r
 	}, name)
 	return filepath.Base(safe)
+}
+
+func pathWithinBase(basePath, targetPath string) bool {
+	rel, err := filepath.Rel(basePath, targetPath)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
+}
+
+func resolveExistingDirWithinBase(baseDir, requestedDir string) (string, string, error) {
+	baseAbs, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve base dir: %w", err)
+	}
+	baseResolved, err := filepath.EvalSymlinks(baseAbs)
+	if err != nil {
+		return "", "", fmt.Errorf("eval base dir symlinks: %w", err)
+	}
+
+	requestedAbs, err := filepath.Abs(requestedDir)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve requested dir: %w", err)
+	}
+	info, err := os.Stat(requestedAbs)
+	if err != nil {
+		return "", "", fmt.Errorf("stat requested dir: %w", err)
+	}
+	if !info.IsDir() {
+		return "", "", fmt.Errorf("requested path %q is not a directory", requestedDir)
+	}
+	requestedResolved, err := filepath.EvalSymlinks(requestedAbs)
+	if err != nil {
+		return "", "", fmt.Errorf("eval requested dir symlinks: %w", err)
+	}
+	if !pathWithinBase(baseResolved, requestedResolved) {
+		return "", "", fmt.Errorf("requested dir %q escapes permitted directory", requestedDir)
+	}
+	return baseResolved, requestedResolved, nil
 }
 
 func (r *Runner) execExtract(ctx context.Context, step models.TaskStep, result *models.TaskResult) error {
@@ -262,11 +302,13 @@ func (r *Runner) execExtract(ctx context.Context, step models.TaskStep, result *
 }
 
 func (r *Runner) execScroll(ctx context.Context, step models.TaskStep) error {
-	if _, err := strconv.Atoi(step.Value); err != nil {
+	scrollY, err := strconv.Atoi(step.Value)
+	if err != nil {
 		return fmt.Errorf("invalid scroll value %q: must be an integer", step.Value)
 	}
+	var result interface{}
 	return r.exec.Run(ctx,
-		chromedp.Evaluate(`window.scrollBy(0, `+step.Value+`)`, nil),
+		chromedp.Evaluate(fmt.Sprintf(`window.scrollBy(0, %d)`, scrollY), &result),
 	)
 }
 
@@ -380,9 +422,10 @@ func (r *Runner) execFileUpload(ctx context.Context, step models.TaskStep) error
 	if err := requireValue("file_upload", step.Value); err != nil {
 		return err
 	}
+	uploadPath := filepath.Clean(step.Value)
 	return r.exec.Run(ctx,
 		chromedp.WaitVisible(step.Selector, chromedp.ByQuery),
-		chromedp.SetUploadFiles(step.Selector, []string{step.Value}, chromedp.ByQuery),
+		chromedp.SetUploadFiles(step.Selector, []string{uploadPath}, chromedp.ByQuery),
 	)
 }
 
@@ -581,7 +624,7 @@ func (r *Runner) captureAdScreenshot(ctx context.Context, result *models.TaskRes
 	if !strings.HasPrefix(path, filepath.Clean(r.screenshotDir)+string(os.PathSeparator)) {
 		return "", fmt.Errorf("ad screenshot path escapes screenshot directory")
 	}
-	if err := os.WriteFile(path, buf, 0o644); err != nil {
+	if err := os.WriteFile(path, buf, 0o600); err != nil {
 		return "", fmt.Errorf("save ad screenshot (%s): %w", label, err)
 	}
 	result.Screenshots = append(result.Screenshots, path)
@@ -1115,6 +1158,10 @@ func (r *Runner) execDownload(ctx context.Context, step models.TaskStep, result 
 	if downloadPath == "" {
 		downloadPath = r.screenshotDir
 	}
+	_, resolvedDownloadDir, err := resolveExistingDirWithinBase(r.screenshotDir, downloadPath)
+	if err != nil {
+		return fmt.Errorf("download: %w", err)
+	}
 	getURLJS := fmt.Sprintf(`(function() {
 		var link = document.querySelector(%q);
 		if (!link || !link.href) return "";
@@ -1148,15 +1195,23 @@ func (r *Runner) execDownload(ctx context.Context, step models.TaskStep, result 
 	if idx := strings.Index(filename, "?"); idx >= 0 {
 		filename = filename[:idx]
 	}
-	if filename == "" || filename == "." {
+	filename = SanitizeFilename(filename)
+	if filename == "" {
 		filename = "download"
 	}
-	destPath := filepath.Join(downloadPath, filename)
-	if err := os.WriteFile(destPath, data, 0o600); err != nil {
+	destPath := filepath.Join(resolvedDownloadDir, filename)
+	destAbs, err := filepath.Abs(destPath)
+	if err != nil {
+		return fmt.Errorf("download: resolve destination: %w", err)
+	}
+	if !pathWithinBase(resolvedDownloadDir, destAbs) {
+		return fmt.Errorf("download: final destination escapes permitted directory")
+	}
+	if err := os.WriteFile(destAbs, data, 0o600); err != nil {
 		return fmt.Errorf("download: write file: %w", err)
 	}
 	result.ExtractedData["_download_url"] = fileURL
-	result.ExtractedData["_download_path"] = destPath
+	result.ExtractedData["_download_path"] = destAbs
 	return nil
 }
 
@@ -1375,9 +1430,15 @@ func (r *Runner) execLoadSession(ctx context.Context, step models.TaskStep, resu
 		return fmt.Errorf("load_session: no session data found for key %s", sessionKey)
 	}
 
-	// Restore cookies, localStorage, and sessionStorage from stored session data
-	restoreJS := fmt.Sprintf(`(function() {
-		var data = JSON.parse(%q);
+	encodedSession, err := json.Marshal(sessionData)
+	if err != nil {
+		return fmt.Errorf("load_session: marshal session data: %w", err)
+	}
+
+	// Restore cookies, localStorage, and sessionStorage from stored session data.
+	// Use json.Marshal to safely encode the session data as a JS string literal,
+	// preventing injection from malicious page-controlled session values.
+	restoreJS := `(function(data) {
 		// Restore cookies
 		if (data.cookies) {
 			var pairs = data.cookies.split('; ');
@@ -1402,7 +1463,7 @@ func (r *Runner) execLoadSession(ctx context.Context, step models.TaskStep, resu
 			} catch(e) {}
 		}
 		return true;
-	})()`, sessionData)
+	})(` + string(encodedSession) + `)`
 	var success bool
 	if err := r.exec.Run(ctx, chromedp.Evaluate(restoreJS, &success)); err != nil {
 		return fmt.Errorf("load_session: restore session: %w", err)

@@ -40,6 +40,7 @@ func (a *App) GetPrometheusMetrics() string {
 	appendMetric("Total healthy proxies.", "gauge", "flowpilot_proxies_healthy", proxyMetrics.Healthy)
 	appendMetric("Total unhealthy proxies.", "gauge", "flowpilot_proxies_unhealthy", proxyMetrics.Unhealthy)
 	appendMetric("Total proxies with unknown health status.", "gauge", "flowpilot_proxies_unknown", proxyMetrics.Unknown)
+	appendMetric("Number of proxy rows skipped or scrape failures while collecting metrics.", "gauge", "flowpilot_proxies_scrape_errors", proxyMetrics.ScrapeErrors)
 	appendMetric("Shared browser pool browser count.", "gauge", "flowpilot_browser_pool_browsers", sharedPoolMetrics.TotalBrowsers)
 	appendMetric("Shared browser pool browser capacity.", "gauge", "flowpilot_browser_pool_capacity", sharedPoolMetrics.MaxBrowsers)
 	appendMetric("Shared browser pool active tab count.", "gauge", "flowpilot_browser_pool_active_tabs", sharedPoolMetrics.ActiveTabs)
@@ -53,10 +54,11 @@ func (a *App) GetPrometheusMetrics() string {
 }
 
 type proxyMetrics struct {
-	Total     int
-	Healthy   int
-	Unhealthy int
-	Unknown   int
+	Total        int
+	Healthy      int
+	Unhealthy    int
+	Unknown      int
+	ScrapeErrors int
 }
 
 func (a *App) getProxyMetrics() proxyMetrics {
@@ -67,11 +69,11 @@ func (a *App) getProxyMetrics() proxyMetrics {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	proxies, err := a.db.ListProxies(ctx)
+	proxies, skipped, err := a.db.ListProxiesBestEffort(ctx)
 	if err != nil {
-		return proxyMetrics{}
+		return proxyMetrics{ScrapeErrors: skipped + 1}
 	}
-	metrics := proxyMetrics{Total: len(proxies)}
+	metrics := proxyMetrics{Total: len(proxies), ScrapeErrors: skipped}
 	for _, proxy := range proxies {
 		switch proxy.Status {
 		case models.ProxyStatusHealthy:

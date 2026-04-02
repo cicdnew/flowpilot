@@ -1,6 +1,9 @@
 package models
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // MaxBatchSize is the maximum number of URLs allowed in a single batch.
 const MaxBatchSize = 10000
@@ -33,12 +36,12 @@ func (i AdvancedBatchInput) BatchHeadless() bool {
 
 // BatchGroup tracks a group of tasks created together from one batch operation.
 type BatchGroup struct {
-	ID        string   `json:"id"`
-	FlowID    string   `json:"flowId"`
-	TaskIDs   []string `json:"taskIds"`
-	Total     int      `json:"total"`
-	Name      string   `json:"name"`
-	CreatedAt string   `json:"createdAt"`
+	ID        string    `json:"id"`
+	FlowID    string    `json:"flowId"`
+	TaskIDs   []string  `json:"taskIds"`
+	Total     int       `json:"total"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // BatchProgress reports aggregate execution status for a batch group.

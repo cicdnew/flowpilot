@@ -80,9 +80,11 @@ func (db *DB) ListCaptchaConfigs(ctx context.Context) ([]models.CaptchaConfig, e
 		}
 		c.Enabled = enabled != 0
 
-		if decKey, err := crypto.Decrypt(c.APIKey); err == nil {
-			c.APIKey = decKey
+		decKey, err := crypto.Decrypt(c.APIKey)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt captcha api key for %s: %w", c.ID, err)
 		}
+		c.APIKey = decKey
 		configs = append(configs, c)
 	}
 	if err := rows.Err(); err != nil {
@@ -143,8 +145,10 @@ func (db *DB) scanCaptchaRow(row *sql.Row) (*models.CaptchaConfig, error) {
 	}
 	c.Enabled = enabled != 0
 
-	if decKey, err := crypto.Decrypt(c.APIKey); err == nil {
-		c.APIKey = decKey
+	decKey, err := crypto.Decrypt(c.APIKey)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt captcha api key for %s: %w", c.ID, err)
 	}
+	c.APIKey = decKey
 	return &c, nil
 }

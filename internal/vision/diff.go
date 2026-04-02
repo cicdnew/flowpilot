@@ -101,7 +101,7 @@ func loadPNG(path string) (image.Image, error) {
 }
 
 func savePNG(path string, img image.Image) error {
-	f, err := os.Create(path)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
 	}

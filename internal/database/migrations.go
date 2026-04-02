@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 type migration struct {
@@ -133,7 +134,7 @@ func (db *DB) recordMigration(ctx context.Context, name string) error {
 }
 
 func (db *DB) columnExists(ctx context.Context, table, column string) (bool, error) {
-	rows, err := db.conn.QueryContext(ctx, fmt.Sprintf(`PRAGMA table_info(%s)`, table))
+	rows, err := db.conn.QueryContext(ctx, fmt.Sprintf(`PRAGMA table_info("%s")`, strings.ReplaceAll(table, `"`, `""`)))
 	if err != nil {
 		return false, fmt.Errorf("query table info for %s: %w", table, err)
 	}

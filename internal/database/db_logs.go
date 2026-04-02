@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"flowpilot/internal/models"
 )
 
@@ -133,7 +135,7 @@ func (db *DB) FinalizeTaskSuccess(ctx context.Context, taskID string, result mod
 	}
 
 	event := models.TaskLifecycleEvent{
-		ID:        fmt.Sprintf("evt_%d", time.Now().UnixNano()),
+		ID:        "evt_" + uuid.New().String(),
 		TaskID:    taskID,
 		BatchID:   batchID,
 		FromState: fromStatus,
@@ -184,7 +186,7 @@ func (db *DB) FinalizeTaskFailure(ctx context.Context, taskID string, errMsg str
 	}
 
 	event := models.TaskLifecycleEvent{
-		ID:        fmt.Sprintf("evt_%d", time.Now().UnixNano()),
+		ID:        "evt_" + uuid.New().String(),
 		TaskID:    taskID,
 		BatchID:   batchID,
 		FromState: fromStatus,
@@ -311,17 +313,17 @@ func (db *DB) InsertWebSocketLogs(ctx context.Context, flowID string, logs []mod
 	if err != nil {
 		return fmt.Errorf("begin websocket logs tx: %w", err)
 	}
+	defer tx.Rollback()
+
 	stmt, err := tx.PrepareContext(ctx, `INSERT INTO websocket_logs (flow_id, step_index, request_id, url, event_type, direction, opcode, payload_size, payload_snippet, close_code, close_reason, error_message, timestamp)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
-		_ = tx.Rollback()
 		return fmt.Errorf("prepare websocket log insert: %w", err)
 	}
 	defer stmt.Close()
 
 	for _, log := range logs {
 		if _, err := stmt.ExecContext(ctx, flowID, log.StepIndex, log.RequestID, log.URL, log.EventType, log.Direction, log.Opcode, log.PayloadSize, log.PayloadSnippet, log.CloseCode, log.CloseReason, log.ErrorMessage, log.Timestamp); err != nil {
-			_ = tx.Rollback()
 			return fmt.Errorf("insert websocket log: %w", err)
 		}
 	}
@@ -365,7 +367,8 @@ func (db *DB) ListAuditTrail(ctx context.Context, taskID string, limit int) ([]m
 	}
 	query += ` ORDER BY timestamp DESC`
 	if limit > 0 {
-		query += fmt.Sprintf(` LIMIT %d`, limit)
+		query += ` LIMIT ?`
+		args = append(args, limit)
 	}
 
 	rows, err := db.readConn.QueryContext(ctx, query, args...)

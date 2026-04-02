@@ -181,12 +181,16 @@ func SupportedStepActions() []StepAction {
 	return actions
 }
 
-func IsKnownAction(action StepAction) bool {
-	knownActions := make(map[StepAction]bool)
+var knownActionsMap = func() map[StepAction]bool {
+	m := make(map[StepAction]bool, len(SupportedStepActions()))
 	for _, a := range SupportedStepActions() {
-		knownActions[a] = true
+		m[a] = true
 	}
-	return knownActions[action]
+	return m
+}()
+
+func IsKnownAction(action StepAction) bool {
+	return knownActionsMap[action]
 }
 
 // TaskStep represents a single browser action within a task.
@@ -305,12 +309,6 @@ type BatchTaskInput struct {
 	Headless      bool               `json:"headless"`
 }
 
-// BatchConfig is used to create multiple tasks at once.
-type BatchConfig struct {
-	Tasks       []Task `json:"tasks"`
-	Concurrency int    `json:"concurrency"` // max concurrent, default 100
-}
-
 // PaginatedTasks holds a page of tasks with metadata.
 type PaginatedTasks struct {
 	Tasks      []Task `json:"tasks"`
@@ -318,16 +316,6 @@ type PaginatedTasks struct {
 	Page       int    `json:"page"`
 	PageSize   int    `json:"pageSize"`
 	TotalPages int    `json:"totalPages"`
-}
-
-type ScheduledTask struct {
-	ID         string    `json:"id"`
-	TaskID     string    `json:"taskId"`
-	CronExpr   string    `json:"cronExpr,omitempty"`
-	IntervalMs int64     `json:"intervalMs,omitempty"`
-	Enabled    bool      `json:"enabled"`
-	NextRun    time.Time `json:"nextRun,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
 }
 
 type TaskExport struct {

@@ -7,6 +7,7 @@
 
   let exporting = false;
   let toolbarError = '';
+  let exportSuccess = '';
 
   async function startAll() {
     try {
@@ -21,10 +22,12 @@
     exporting = true;
     try {
       toolbarError = '';
+      exportSuccess = '';
       const path = await ExportResultsJSON();
-      alert(`Exported to: ${path}`);
-    } catch (err: any) {
-      toolbarError = `Export failed: ${err?.message || err}`;
+      exportSuccess = `Exported to: ${path}`;
+      setTimeout(() => { exportSuccess = ''; }, 4000);
+    } catch (err: unknown) {
+      toolbarError = `Export failed: ${err instanceof Error ? err.message : String(err)}`;
     } finally {
       exporting = false;
     }
@@ -34,10 +37,12 @@
     exporting = true;
     try {
       toolbarError = '';
+      exportSuccess = '';
       const path = await ExportResultsCSV();
-      alert(`Exported to: ${path}`);
-    } catch (err: any) {
-      toolbarError = `Export failed: ${err?.message || err}`;
+      exportSuccess = `Exported to: ${path}`;
+      setTimeout(() => { exportSuccess = ''; }, 4000);
+    } catch (err: unknown) {
+      toolbarError = `Export failed: ${err instanceof Error ? err.message : String(err)}`;
     } finally {
       exporting = false;
     }
@@ -46,6 +51,9 @@
 
 {#if toolbarError}
   <div class="toolbar-error" role="alert">{toolbarError}</div>
+{/if}
+{#if exportSuccess}
+  <div class="toolbar-success" role="status">{exportSuccess}</div>
 {/if}
 
 <section class="toolbar-shell">
@@ -185,6 +193,16 @@
     border: 1px solid rgba(239, 68, 68, 0.28);
     background: rgba(127, 29, 29, 0.34);
     color: #fca5a5;
+    font-size: 12px;
+  }
+
+  .toolbar-success {
+    margin-top: 16px;
+    padding: 10px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(34, 197, 94, 0.28);
+    background: rgba(20, 83, 45, 0.34);
+    color: #86efac;
     font-size: 12px;
   }
 

@@ -783,7 +783,11 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task, countsAgainst
 	}
 
 	if retry.shouldRetry {
-		go q.scheduleRetry(retry)
+		q.workerWg.Add(1)
+		go func() {
+			defer q.workerWg.Done()
+			q.scheduleRetry(retry)
+		}()
 	}
 }
 
@@ -808,16 +812,18 @@ func (q *Queue) TaskMetrics() models.TaskMetrics {
 func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execErr error, result *models.TaskResult) retryInfo {
 	if task.RetryCount < task.MaxRetries {
 		if result != nil {
+			dbCtx, cancel := q.dbWriteContext(parentCtx)
 			if len(result.StepLogs) > 0 {
-				if slErr := q.db.InsertStepLogs(parentCtx, task.ID, result.StepLogs); slErr != nil {
-					q.emitEvent(task.ID, task.Status, fmt.Sprintf("persist step logs: %v", slErr))
+				if err := q.db.InsertStepLogs(dbCtx, task.ID, result.StepLogs); err != nil {
+					q.emitEvent(task.ID, models.TaskStatusRetrying, fmt.Sprintf("persist retry step logs: %v", err))
 				}
 			}
 			if len(result.NetworkLogs) > 0 {
-				if nlErr := q.db.InsertNetworkLogs(parentCtx, task.ID, result.NetworkLogs); nlErr != nil {
-					q.emitEvent(task.ID, task.Status, fmt.Sprintf("persist network logs: %v", nlErr))
+				if err := q.db.InsertNetworkLogs(dbCtx, task.ID, result.NetworkLogs); err != nil {
+					q.emitEvent(task.ID, models.TaskStatusRetrying, fmt.Sprintf("persist retry network logs: %v", err))
 				}
 			}
+			cancel()
 		}
 		if err := q.enqueueTaskStateChange(database.TaskStateChange{TaskID: task.ID, Status: models.TaskStatusRetrying, Error: execErr.Error(), IncrementRetry: true}); err != nil {
 			q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("increment retry: %v", err))
@@ -891,7 +897,7 @@ func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execE
 				extractedDataKeys = append(extractedDataKeys, k)
 			}
 		}
-		go fireWebhook(task.WebhookURL, task.ID, models.TaskStatusFailed, duration, execErr.Error(), extractedDataKeys)
+		q.dispatchWebhook(task.WebhookURL, task.ID, models.TaskStatusFailed, duration, execErr.Error(), extractedDataKeys)
 	}
 	return retryInfo{}
 }
@@ -921,7 +927,7 @@ func (q *Queue) handleSuccess(execCtx context.Context, task models.Task, result 
 		for k := range result.ExtractedData {
 			extractedDataKeys = append(extractedDataKeys, k)
 		}
-		go fireWebhook(task.WebhookURL, task.ID, models.TaskStatusCompleted, result.Duration, "", extractedDataKeys)
+		q.dispatchWebhook(task.WebhookURL, task.ID, models.TaskStatusCompleted, result.Duration, "", extractedDataKeys)
 	}
 }
 
@@ -991,7 +997,24 @@ type webhookPayload struct {
 	ExtractedDataKeys []string `json:"extractedDataKeys,omitempty"`
 }
 
-func fireWebhook(url, taskID string, status models.TaskStatus, duration time.Duration, errMsg string, extractedDataKeys []string) {
+func (q *Queue) dispatchWebhook(url, taskID string, status models.TaskStatus, duration time.Duration, errMsg string, extractedDataKeys []string) {
+	q.workerWg.Add(1)
+	go func() {
+		defer q.workerWg.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		go func() {
+			select {
+			case <-q.stopCh:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+		fireWebhook(ctx, url, taskID, status, duration, errMsg, extractedDataKeys)
+	}()
+}
+
+func fireWebhook(ctx context.Context, url, taskID string, status models.TaskStatus, duration time.Duration, errMsg string, extractedDataKeys []string) {
 	payload := webhookPayload{
 		TaskID:            taskID,
 		Status:            string(status),
@@ -1004,13 +1027,19 @@ func fireWebhook(url, taskID string, status models.TaskStatus, duration time.Dur
 		log.Printf("webhook marshal error for task %s: %v", taskID, err)
 		return
 	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		log.Printf("webhook request creation error for task %s: %v", taskID, err)
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(url, "application/json", bytes.NewReader(body))
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("webhook POST error for task %s: %v", taskID, err)
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		log.Printf("webhook non-2xx response for task %s: %d", taskID, resp.StatusCode)
 	}

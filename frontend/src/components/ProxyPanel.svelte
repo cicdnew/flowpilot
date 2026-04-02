@@ -139,31 +139,31 @@
     {/if}
   </div>
 
-  {#if routingPresets.length || true}
-    <div class="country-summary">
-      <div class="country-summary-header">Routing Presets</div>
-      <div class="form-row">
-        <input bind:value={presetName} placeholder="Preset name" />
-        <input bind:value={presetCountry} placeholder="Country" style="max-width:90px" />
-      </div>
-      <div class="form-row mt-2">
-        <select bind:value={presetFallback}>
-          <option value="strict">Strict country only</option>
-          <option value="any_healthy">Fallback to any healthy proxy</option>
-          <option value="direct">Fallback to direct connection</option>
-        </select>
-        <label class="checkbox"><input type="checkbox" bind:checked={presetRandomByCountry} /> Random by country</label>
-        <button class="btn-primary btn-sm" on:click={savePreset} disabled={!presetName.trim()}>Save Preset</button>
-      </div>
-      {#if routingPresets.length}
-        <div class="country-summary-grid" style="margin-top:8px">
-          {#each routingPresets as preset}
-            <div class="country-chip">{preset.name} · {preset.country || 'ANY'} · {preset.fallback || 'strict'} <button class="btn-danger btn-sm" on:click={() => removePreset(preset.id)}>x</button></div>
-          {/each}
-        </div>
-      {/if}
+  <div class="country-summary">
+    <div class="country-summary-header">Routing Presets</div>
+    <div class="form-row">
+      <input bind:value={presetName} placeholder="Preset name" />
+      <input bind:value={presetCountry} placeholder="Country" style="max-width:90px" />
     </div>
-  {/if}
+    <div class="form-row mt-2">
+      <select bind:value={presetFallback}>
+        <option value="strict">Strict country only</option>
+        <option value="any_healthy">Fallback to any healthy proxy</option>
+        <option value="direct">Fallback to direct connection</option>
+      </select>
+      <label class="checkbox"><input type="checkbox" bind:checked={presetRandomByCountry} /> Random by country</label>
+      <button class="btn-primary btn-sm" on:click={savePreset} disabled={!presetName.trim()}>Save Preset</button>
+    </div>
+    {#if routingPresets.length}
+      <div class="country-summary-grid" style="margin-top:8px">
+        {#each routingPresets as preset}
+          <div class="country-chip">{preset.name} · {preset.country || 'ANY'} · {preset.fallback || 'strict'} <button class="btn-danger btn-sm" on:click={() => removePreset(preset.id)}>x</button></div>
+        {/each}
+      </div>
+    {:else}
+      <div class="summary-hint">No routing presets yet. Create one to reuse proxy routing rules.</div>
+    {/if}
+  </div>
 
   {#if countryStats.length}
     <div class="country-summary">

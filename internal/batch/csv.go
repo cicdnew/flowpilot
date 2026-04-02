@@ -3,6 +3,7 @@ package batch
 import (
 	"bufio"
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -31,7 +32,7 @@ func ParseCSVURLs(reader io.Reader) ([]string, error) {
 	urls := []string{}
 	for {
 		record, err := csvReader.Read()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {

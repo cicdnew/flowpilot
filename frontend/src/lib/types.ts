@@ -9,6 +9,17 @@ export interface TaskStep {
   label?: string;
   jumpTo?: string;
   varName?: string;
+  operator?: string;
+  maxLoops?: number;
+  target?: string;
+  source?: string;
+  keys?: string;
+  duration?: number;
+  domain?: string;
+  name?: string;
+  path?: string;
+  data?: string;
+  strategy?: string;
 }
 
 export interface SelectorCandidate {
@@ -43,8 +54,15 @@ export interface BatchGroup {
   flowId: string;
   name: string;
   total: number;
-  taskIds?: string[];
   createdAt: string;
+}
+
+export interface PaginatedTasks {
+  tasks: Task[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 export interface BatchProgress {
@@ -104,9 +122,9 @@ export interface TaskResult {
 }
 
 export interface TaskLoggingPolicy {
-  captureStepLogs?: boolean;
-  captureNetworkLogs?: boolean;
-  captureScreenshots?: boolean;
+  captureStepLogs?: boolean | null;
+  captureNetworkLogs?: boolean | null;
+  captureScreenshots?: boolean | null;
   maxExecutionLogs?: number;
 }
 

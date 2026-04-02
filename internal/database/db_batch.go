@@ -36,8 +36,12 @@ func (db *DB) ListBatchGroups(ctx context.Context) ([]models.BatchGroup, error) 
 	var groups []models.BatchGroup
 	for rows.Next() {
 		var g models.BatchGroup
-		if err := rows.Scan(&g.ID, &g.FlowID, &g.Name, &g.Total, &g.CreatedAt); err != nil {
+		var createdAt sql.NullTime
+		if err := rows.Scan(&g.ID, &g.FlowID, &g.Name, &g.Total, &createdAt); err != nil {
 			return nil, fmt.Errorf("scan batch group: %w", err)
+		}
+		if createdAt.Valid {
+			g.CreatedAt = createdAt.Time
 		}
 		groups = append(groups, g)
 	}

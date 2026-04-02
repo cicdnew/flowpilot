@@ -318,7 +318,7 @@ func TestBatchGroupTx(t *testing.T) {
 		FlowID:    "flow-1",
 		Name:      "TX Batch Group",
 		Total:     2,
-		CreatedAt: time.Now().Truncate(time.Second).Format(time.RFC3339),
+		CreatedAt: time.Now().Truncate(time.Second),
 	}
 	if err := db.CreateBatchGroupTx(ctx, tx, group); err != nil {
 		tx.Rollback()

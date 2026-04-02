@@ -19,6 +19,9 @@ type DB struct {
 // Reader returns the read-only connection for concurrent queries.
 func (db *DB) Reader() *sql.DB { return db.readConn }
 
+// Conn returns the write connection. Used in tests to insert raw rows.
+func (db *DB) Conn() *sql.DB { return db.conn }
+
 // New creates a new SQLite database connection and initializes the schema.
 func New(dbPath string) (*DB, error) {
 	return NewWithConfig(DatabaseConfig{URL: dbPath})
@@ -110,6 +113,8 @@ func applySQLitePragmas(conns ...*sql.DB) {
 		if c == nil {
 			continue
 		}
+		_, _ = c.Exec("PRAGMA busy_timeout=5000")
+		_, _ = c.Exec("PRAGMA journal_mode=WAL")
 		_, _ = c.Exec("PRAGMA synchronous=NORMAL")
 		_, _ = c.Exec("PRAGMA cache_size=-64000")
 		_, _ = c.Exec("PRAGMA mmap_size=268435456")
@@ -172,7 +177,7 @@ func (db *DB) migrate() error {
 		proxy_geo TEXT DEFAULT '',
 		proxy_protocol TEXT DEFAULT '',
 		priority INTEGER DEFAULT 5,
-		status TEXT DEFAULT 'pending',
+		status TEXT DEFAULT 'pending' CHECK(status IN ('pending','queued','running','retrying','completed','failed','cancelled')),
 		retry_count INTEGER DEFAULT 0,
 		max_retries INTEGER DEFAULT 3,
 		timeout_seconds INTEGER DEFAULT 0,
@@ -278,7 +283,7 @@ func (db *DB) migrate() error {
 		username TEXT DEFAULT '',
 		password TEXT DEFAULT '',
 		geo TEXT DEFAULT '',
-		status TEXT DEFAULT 'unknown',
+		status TEXT DEFAULT 'unknown' CHECK(status IN ('unknown','healthy','unhealthy')),
 		latency INTEGER DEFAULT 0,
 		success_rate REAL DEFAULT 0.0,
 		total_used INTEGER DEFAULT 0,
@@ -375,6 +380,8 @@ func (db *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_network_logs_task_step ON network_logs(task_id, step_index);
 	CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
 	CREATE INDEX IF NOT EXISTS idx_step_logs_task_step ON step_logs(task_id, step_index);
+	CREATE INDEX IF NOT EXISTS idx_flows_updated ON recorded_flows(updated_at DESC);
+	CREATE INDEX IF NOT EXISTS idx_tasks_completed_status ON tasks(completed_at, status);
 	`
 	for _, stmt := range strings.Split(schema, ";") {
 		stmt = strings.TrimSpace(stmt)

@@ -11,3 +11,4 @@ func defaultNameTemplate() string {
 func validateTemplate(template string) bool {
 	return models.ValidateBatchTemplate(template)
 }
+

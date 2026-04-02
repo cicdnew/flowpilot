@@ -202,6 +202,8 @@ func (r *Recorder) handleBindingCall(payload string) {
 }
 
 func (r *Recorder) Stop() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.browserCtx != nil {
 		gracefulCtx, gracefulCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_ = chromedp.Cancel(gracefulCtx)

@@ -148,7 +148,7 @@ func (m *Manager) SelectProxy(geo string) (*models.Proxy, error) {
 }
 
 func (m *Manager) SelectProxyWithFallback(geo string, fallback models.ProxyRoutingFallback) (*models.Proxy, bool, bool, error) {
-	proxies, err := m.db.ListHealthyProxies(context.Background())
+	proxies, err := m.db.ListHealthyProxies(context.Background()) // TODO: pass caller context once signature supports it
 	if err != nil {
 		return nil, false, false, fmt.Errorf("list healthy proxies: %w", err)
 	}
@@ -242,7 +242,7 @@ func (m *Manager) HasAvailableProxy(geo string, fallback models.ProxyRoutingFall
 }
 
 func (m *Manager) availableProxies(geo string, fallback models.ProxyRoutingFallback) ([]models.Proxy, bool, bool, error) {
-	proxies, err := m.db.ListHealthyProxies(context.Background())
+	proxies, err := m.db.ListHealthyProxies(context.Background()) // TODO: pass caller context once signature supports it
 	if err != nil {
 		return nil, false, false, fmt.Errorf("list healthy proxies: %w", err)
 	}
@@ -500,6 +500,9 @@ func (m *Manager) checkAll(ctx context.Context) {
 }
 
 func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
+	if proxy.Protocol == "" {
+		proxy.Protocol = "http"
+	}
 	proxyURL, err := url.Parse(fmt.Sprintf("%s://%s", proxy.Protocol, proxy.Server))
 	if err != nil {
 		dbCtx, cancel := m.dbWriteContext(ctx)

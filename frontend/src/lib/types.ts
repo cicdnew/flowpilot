@@ -227,10 +227,10 @@ export interface TaskEvent {
 export interface TaskLifecycleEvent {
   id: string;
   taskId: string;
-  batchId: string;
+  batchId?: string;
   fromState: string;
   toState: string;
-  error: string;
+  error?: string;
   timestamp: string;
 }
 

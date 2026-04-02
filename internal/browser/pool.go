@@ -212,11 +212,13 @@ func (p *BrowserPool) newTabContext(b *pooledBrowser, allocCtx context.Context) 
 func (p *BrowserPool) createBrowser(ctx context.Context) (*pooledBrowser, error) {
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, p.opts...)
 
-	browserCtx, _ := chromedp.NewContext(allocCtx)
+	browserCtx, cancel := chromedp.NewContext(allocCtx)
 	if err := chromedp.Run(browserCtx); err != nil {
+		cancel()
 		allocCancel()
 		return nil, fmt.Errorf("warm up pooled browser: %w", err)
 	}
+	_ = cancel
 
 	return &pooledBrowser{
 		allocCtx:    allocCtx,

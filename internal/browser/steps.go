@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -1235,7 +1236,7 @@ func (r *Runner) execSelectRandom(ctx context.Context, step models.TaskStep, res
 	if len(options) == 0 {
 		return fmt.Errorf("select_random: no options found")
 	}
-	randomIndex := time.Now().UnixNano() % int64(len(options))
+	randomIndex := rand.Intn(len(options))
 	selectedValue := options[randomIndex]["value"]
 	if err := r.exec.Run(ctx,
 		chromedp.WaitVisible(step.Selector, chromedp.ByQuery),
@@ -1244,7 +1245,7 @@ func (r *Runner) execSelectRandom(ctx context.Context, step models.TaskStep, res
 		return fmt.Errorf("select_random: select option: %w", err)
 	}
 	result.ExtractedData["_select_random_value"] = selectedValue
-	result.ExtractedData["_select_random_index"] = strconv.FormatInt(randomIndex, 10)
+	result.ExtractedData["_select_random_index"] = strconv.Itoa(randomIndex)
 	return nil
 }
 

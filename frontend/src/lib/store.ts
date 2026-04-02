@@ -69,7 +69,7 @@ export function updateTaskInStore(event: TaskEvent) {
     }
 
     const current = list[index];
-    const nextError = event.error || current.error;
+    const nextError = event.error ?? current.error;
     if (current.status === event.status && current.error === nextError) {
       return list;
     }

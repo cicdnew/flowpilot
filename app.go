@@ -354,6 +354,18 @@ func (a *App) checkAndReloadConfig(ctx context.Context) {
 	a.configMu.Lock()
 	a.configModTime = info.ModTime()
 	old := a.config
+	if newCfg.ProxyConcurrency != 0 {
+		a.config.ProxyConcurrency = newCfg.ProxyConcurrency
+	}
+	if newCfg.HealthCheckInterval != 0 {
+		a.config.HealthCheckInterval = newCfg.HealthCheckInterval
+	}
+	if newCfg.HealthCheckURL != "" {
+		a.config.HealthCheckURL = newCfg.HealthCheckURL
+	}
+	if newCfg.MetricsAddr != "" {
+		a.config.MetricsAddr = normalizeMetricsAddr(newCfg.MetricsAddr)
+	}
 	a.configMu.Unlock()
 
 	if newCfg.QueueConcurrency != 0 && newCfg.QueueConcurrency != old.QueueConcurrency {
@@ -385,21 +397,6 @@ func (a *App) checkAndReloadConfig(ctx context.Context) {
 			logInfof(ctx, "config hot-reload: HealthCheck updated (interval=%ds, url=%s)", interval, url)
 		}
 	}
-
-	a.configMu.Lock()
-	if newCfg.ProxyConcurrency != 0 {
-		a.config.ProxyConcurrency = newCfg.ProxyConcurrency
-	}
-	if newCfg.HealthCheckInterval != 0 {
-		a.config.HealthCheckInterval = newCfg.HealthCheckInterval
-	}
-	if newCfg.HealthCheckURL != "" {
-		a.config.HealthCheckURL = newCfg.HealthCheckURL
-	}
-	if newCfg.MetricsAddr != "" {
-		a.config.MetricsAddr = normalizeMetricsAddr(newCfg.MetricsAddr)
-	}
-	a.configMu.Unlock()
 }
 
 func (a *App) cleanup() {

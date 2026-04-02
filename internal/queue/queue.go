@@ -28,6 +28,8 @@ type EventCallback func(event models.TaskEvent)
 // ErrQueueFull is returned when the pending queue has reached its maximum size.
 var ErrQueueFull = errors.New("queue is full: too many pending tasks")
 
+var webhookClient = &http.Client{Timeout: 10 * time.Second}
+
 // ErrBatchPaused is returned when attempting to submit to a paused batch.
 var ErrBatchPaused = errors.New("batch is paused")
 
@@ -1033,8 +1035,7 @@ func fireWebhook(ctx context.Context, url, taskID string, status models.TaskStat
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := webhookClient.Do(req)
 	if err != nil {
 		log.Printf("webhook POST error for task %s: %v", taskID, err)
 		return

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -26,7 +28,10 @@ func (a *App) SaveCaptchaConfig(provider, apiKey string) (*models.CaptchaConfig,
 		return nil, fmt.Errorf("save captcha config: unsupported provider %q", provider)
 	}
 
-	existing, _ := a.db.GetActiveCaptchaConfig(a.ctx)
+	existing, err := a.db.GetActiveCaptchaConfig(a.ctx)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("save captcha config: %w", err)
+	}
 	if existing != nil {
 		existing.Provider = p
 		existing.APIKey = apiKey

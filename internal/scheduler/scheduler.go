@@ -29,6 +29,7 @@ type Scheduler struct {
 	interval  time.Duration
 	stopCh    chan struct{}
 	mu        sync.Mutex
+	wg        sync.WaitGroup
 	running   bool
 	logf      func(format string, args ...any)
 }
@@ -60,7 +61,11 @@ func (s *Scheduler) Start(ctx context.Context) {
 	s.mu.Unlock()
 
 	s.Recover(ctx)
-	go s.loop(ctx)
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.loop(ctx)
+	}()
 }
 
 // Recover queries all enabled schedules and immediately submits any whose
@@ -100,7 +105,7 @@ func (s *Scheduler) Recover(ctx context.Context) {
 	}
 
 	if recovered > 0 {
-		s.logError("scheduler: recovered %d missed schedule(s)", recovered)
+		s.logf("scheduler: recovered %d missed schedule(s)", recovered)
 	}
 }
 
@@ -113,6 +118,7 @@ func (s *Scheduler) Stop() {
 	s.running = false
 	close(s.stopCh)
 	s.mu.Unlock()
+	s.wg.Wait() // wait for loop goroutine to finish its current tick
 }
 
 func (s *Scheduler) loop(ctx context.Context) {
@@ -300,17 +306,17 @@ func rangeSlice(low, high int) []int {
 
 func dedupSort(vals []int, min, max int) []int {
 	seen := make([]bool, max-min+1)
-	var result []int
+	count := 0
 	for _, v := range vals {
 		idx := v - min
 		if idx >= 0 && idx < len(seen) && !seen[idx] {
 			seen[idx] = true
-			result = append(result, v)
+			count++
 		}
 	}
-	sorted := make([]int, 0, len(result))
-	for i := range seen {
-		if seen[i] {
+	sorted := make([]int, 0, count)
+	for i, ok := range seen {
+		if ok {
 			sorted = append(sorted, i+min)
 		}
 	}
@@ -320,7 +326,8 @@ func dedupSort(vals []int, min, max int) []int {
 func (cs *CronSchedule) Next(from time.Time) time.Time {
 	t := from.Truncate(time.Minute).Add(time.Minute)
 
-	for i := 0; i < 525960; i++ {
+	const maxSearchMinutes = 365 * 24 * 60 // search up to one year of minutes
+	for i := 0; i < maxSearchMinutes; i++ {
 		if contains(cs.months, int(t.Month())) &&
 			contains(cs.daysOfMonth, t.Day()) &&
 			contains(cs.daysOfWeek, int(t.Weekday())) &&

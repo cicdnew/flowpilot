@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"flowpilot/internal/browser"
@@ -24,6 +25,7 @@ type Agent struct {
 	proxyManager *proxy.Manager
 	dataDir      string
 	pollInterval time.Duration
+	mu           sync.Mutex
 	cancel       context.CancelFunc
 }
 
@@ -124,7 +126,10 @@ func New(cfg Config) (*Agent, error) {
 }
 
 func (a *Agent) Run(ctx context.Context) error {
-	ctx, a.cancel = context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ctx)
+	a.mu.Lock()
+	a.cancel = cancel
+	a.mu.Unlock()
 
 	go a.proxyManager.StartHealthChecks(ctx)
 
@@ -141,7 +146,6 @@ func (a *Agent) Run(ctx context.Context) error {
 			a.processPending(ctx)
 		case <-ctx.Done():
 			log.Println("[agent] shutting down...")
-			a.Stop()
 			return ctx.Err()
 		}
 	}
@@ -161,8 +165,11 @@ func (a *Agent) processPending(ctx context.Context) {
 }
 
 func (a *Agent) Stop() {
-	if a.cancel != nil {
-		a.cancel()
+	a.mu.Lock()
+	cancel := a.cancel
+	a.mu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 	if a.queue != nil {
 		a.queue.Stop()

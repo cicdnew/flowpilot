@@ -108,7 +108,7 @@ func handleCommand(ctx context.Context, c *copilot.CopilotFlow, cmd string) erro
 	case "/help":
 		fmt.Println("Available commands:")
 		fmt.Println("  /connect <provider> <api-key> [base-url] [model]")
-		fmt.Println("  /models [provider] - List available models")
+		fmt.Println("  /models - List available models from provider")
 		fmt.Println("  /set-model <model-id> - Switch to different model")
 		fmt.Println("  /status  - Show current connection status")
 		fmt.Println("  /exit    - Exit the copilot")
@@ -141,27 +141,25 @@ func handleCommand(ctx context.Context, c *copilot.CopilotFlow, cmd string) erro
 		return nil
 
 	case "/models":
-		providerFilter := ""
-		if len(parts) > 1 {
-			providerFilter = parts[1]
+		if !c.IsConnected() {
+			return fmt.Errorf("not connected to any provider")
 		}
 
-		var models []copilot.Model
-		if providerFilter != "" {
-			models = copilot.GetModelsForProvider(providerFilter)
-		} else {
-			models = copilot.ModelCatalog
+		fmt.Println("Fetching available models...")
+		models, err := c.ListModels(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to fetch models: %w", err)
 		}
 
 		if len(models) == 0 {
-			fmt.Println("No models found")
+			fmt.Println("No models available")
 			return nil
 		}
 
-		fmt.Printf("\n%-40s %-15s %s\n", "MODEL ID", "PROVIDER", "DESCRIPTION")
+		fmt.Printf("\n%-60s %s\n", "MODEL ID", "CONTEXT WINDOW")
 		fmt.Println(strings.Repeat("-", 100))
 		for _, m := range models {
-			fmt.Printf("%-40s %-15s %s\n", m.ID, m.Provider, m.Description)
+			fmt.Printf("%-60s %dK\n", m.ID, m.MaxContext/1000)
 		}
 		fmt.Println()
 		return nil

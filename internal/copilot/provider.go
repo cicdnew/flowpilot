@@ -50,10 +50,6 @@ func NewOpenAICompatibleProvider(provider string, apiKey string, baseURL string,
 		}
 	}
 
-	if modelName == "" {
-		modelName = GetRecommendedModel(provider, "general")
-	}
-
 	return &OpenAICompatibleProvider{
 		provider: provider,
 		apiKey:   apiKey,
@@ -136,9 +132,51 @@ func (p *OpenAICompatibleProvider) ChatCompletion(ctx context.Context, messages 
 	}, nil
 }
 
+// ListModels dynamically fetches available models from the provider API.
+func (p *OpenAICompatibleProvider) ListModels(ctx context.Context) ([]Model, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", p.baseURL+"/models", nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API error %d", resp.StatusCode)
+	}
+
+	var result ModelListResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
+
+	var models []Model
+	for _, m := range result.Data {
+		models = append(models, Model{
+			ID:           m.ID,
+			Name:         m.ID,
+			Provider:     p.provider,
+			Capabilities: 0,
+			MaxContext:   detectMaxContext(m.ID),
+			Description:  fmt.Sprintf("Model from %s API", p.provider),
+		})
+	}
+
+	return models, nil
+}
+
 // SupportsFunctionCalling returns true if the provider supports function calling.
 func (p *OpenAICompatibleProvider) SupportsFunctionCalling() bool {
-	return SupportsToolCalling(p.model)
+	modelLower := strings.ToLower(p.model)
+	return !strings.Contains(modelLower, "llama") && 
+	       !strings.Contains(modelLower, "mistral") &&
+	       !strings.Contains(modelLower, "nemotron")
 }
 
 // Model returns the current model name.
@@ -149,4 +187,27 @@ func (p *OpenAICompatibleProvider) Model() string {
 // Provider returns the provider name.
 func (p *OpenAICompatibleProvider) Provider() string {
 	return p.provider
+}
+
+// detectMaxContext guesses context window based on model name patterns.
+func detectMaxContext(modelID string) int {
+	modelLower := strings.ToLower(modelID)
+	switch {
+	case strings.Contains(modelLower, "gpt-4o"):
+		return 128000
+	case strings.Contains(modelLower, "claude-3-5-sonnet"):
+		return 200000
+	case strings.Contains(modelLower, "claude-3-opus"):
+		return 200000
+	case strings.Contains(modelLower, "gemini-1.5-pro"):
+		return 1000000
+	case strings.Contains(modelLower, "gemini-1.5-flash"):
+		return 1000000
+	case strings.Contains(modelLower, "llama-3.1"):
+		return 131072
+	case strings.Contains(modelLower, "nemotron"):
+		return 131072
+	default:
+		return 128000
+	}
 }

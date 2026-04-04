@@ -52,6 +52,7 @@ type Tool struct {
 // LLMProvider defines the interface for all model providers.
 type LLMProvider interface {
 	ChatCompletion(ctx context.Context, messages []Message, tools []ToolDefinition) (ChatResponse, error)
+	ListModels(ctx context.Context) ([]Model, error)
 	SupportsFunctionCalling() bool
 	Model() string
 	Provider() string
@@ -178,6 +179,14 @@ func (c *CopilotFlow) SetModel(modelID string) error {
 
 	// Reconnect with new model
 	return c.Connect(c.CurrentProvider(), c.config.APIKey, c.config.BaseURL, modelID)
+}
+
+// ListModels returns available models from the connected provider.
+func (c *CopilotFlow) ListModels(ctx context.Context) ([]Model, error) {
+	if c.provider == nil {
+		return nil, fmt.Errorf("not connected to any provider")
+	}
+	return c.provider.ListModels(ctx)
 }
 
 // IsConnected returns true if the copilot is connected to an LLM provider.

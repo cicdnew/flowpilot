@@ -1,38 +1,54 @@
 /**
  * ECC Custom Tool: Git Summary
  *
- * Provides a comprehensive git status including branch info, status,
- * recent log, and diff against base branch.
+ * Returns branch/status/log/diff details for the active repository.
  */
 
 import { tool } from "@opencode-ai/plugin/tool"
+import { execSync } from "child_process"
 
 export default tool({
-  description: "Get comprehensive git summary: branch, status, recent log, and diff against base branch.",
+  description:
+    "Generate git summary with branch, status, recent commits, and optional diff stats.",
   args: {
-    depth: tool.schema.number().optional().describe("Number of recent commits to show (default: 5)"),
-    includeDiff: tool.schema.boolean().optional().describe("Include diff against base branch (default: true)"),
-    baseBranch: tool.schema.string().optional().describe("Base branch for comparison (default: main)"),
+    depth: tool.schema
+      .number()
+      .optional()
+      .describe("Number of recent commits to include (default: 5)"),
+    includeDiff: tool.schema
+      .boolean()
+      .optional()
+      .describe("Include diff stats against base branch (default: true)"),
+    baseBranch: tool.schema
+      .string()
+      .optional()
+      .describe("Base branch for diff comparison (default: main)"),
   },
   async execute(args, context) {
+    const cwd = context.worktree || context.directory
     const depth = args.depth ?? 5
     const includeDiff = args.includeDiff ?? true
     const baseBranch = args.baseBranch ?? "main"
 
-    const commands: string[] = [
-      `git branch --show-current`,
-      `git status --short`,
-      `git log --oneline -${depth}`,
-    ]
-
-    if (includeDiff) {
-      commands.push(`git diff --cached --stat`)
-      commands.push(`git diff ${baseBranch}...HEAD --stat`)
+    const result: Record<string, string> = {
+      branch: run("git branch --show-current", cwd) || "unknown",
+      status: run("git status --short", cwd) || "clean",
+      log: run(`git log --oneline -${depth}`, cwd) || "no commits found",
     }
 
-    return JSON.stringify({
-      commands,
-      instructions: `Run these git commands to get a comprehensive summary:\n\n${commands.join("\n")}`,
-    })
+    if (includeDiff) {
+      result.stagedDiff = run("git diff --cached --stat", cwd) || ""
+      result.branchDiff = run(`git diff ${baseBranch}...HEAD --stat`, cwd) || `unable to diff against ${baseBranch}`
+    }
+
+    return JSON.stringify(result)
   },
 })
+
+function run(command: string, cwd: string): string {
+  try {
+    return execSync(command, { cwd, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }).trim()
+  } catch {
+    return ""
+  }
+}

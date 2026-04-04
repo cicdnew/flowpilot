@@ -1,44 +1,85 @@
 /**
  * ECC Custom Tool: Lint Check
  *
- * Multi-language linter that auto-detects the project's linting tool.
- * Supports: ESLint/Biome (JS/TS), Pylint/Ruff (Python), golangci-lint (Go)
+ * Detects the appropriate linter and returns a runnable lint command.
  */
 
 import { tool } from "@opencode-ai/plugin/tool"
+import * as path from "path"
+import * as fs from "fs"
+
+type Linter = "biome" | "eslint" | "ruff" | "pylint" | "golangci-lint"
 
 export default tool({
-  description: "Run linter on files or directories. Auto-detects ESLint, Biome, Ruff, Pylint, or golangci-lint.",
+  description:
+    "Detect linter for a target path and return command for check/fix runs.",
   args: {
-    target: tool.schema.string().optional().describe("File or directory to lint (default: current directory)"),
-    fix: tool.schema.boolean().optional().describe("Auto-fix issues if supported (default: false)"),
-    linter: tool.schema.string().optional().describe("Override linter: eslint, biome, ruff, pylint, golangci-lint (default: auto-detect)"),
+    target: tool.schema
+      .string()
+      .optional()
+      .describe("File or directory to lint (default: current directory)"),
+    fix: tool.schema
+      .boolean()
+      .optional()
+      .describe("Enable auto-fix mode"),
+    linter: tool.schema
+      .enum(["biome", "eslint", "ruff", "pylint", "golangci-lint"])
+      .optional()
+      .describe("Optional linter override"),
   },
   async execute(args, context) {
-    const target = args.target ?? "."
+    const cwd = context.worktree || context.directory
+    const target = args.target || "."
     const fix = args.fix ?? false
-    const linter = args.linter ?? "eslint"
+    const detected = args.linter || detectLinter(cwd)
 
-    const fixFlag = fix ? " --fix" : ""
-    const commands: Record<string, string> = {
-      biome: `npx @biomejs/biome lint${fix ? " --write" : ""} ${target}`,
-      eslint: `npx eslint${fixFlag} ${target}`,
-      ruff: `ruff check${fixFlag} ${target}`,
-      pylint: `pylint ${target}`,
-      "golangci-lint": `golangci-lint run${fixFlag} ${target}`,
-    }
-
-    const cmd = commands[linter]
-    if (!cmd) {
-      return JSON.stringify({ success: false, message: `Unknown linter: ${linter}` })
-    }
-
+    const command = buildLintCommand(detected, target, fix)
     return JSON.stringify({
-      command: cmd,
-      linter,
-      target,
-      fix,
-      instructions: `Run this command to lint:\n\n${cmd}`,
+      success: true,
+      linter: detected,
+      command,
+      instructions: `Run this command:\n\n${command}`,
     })
   },
 })
+
+function detectLinter(cwd: string): Linter {
+  if (fs.existsSync(path.join(cwd, "biome.json")) || fs.existsSync(path.join(cwd, "biome.jsonc"))) {
+    return "biome"
+  }
+
+  const eslintConfigs = [
+    ".eslintrc.json",
+    ".eslintrc.js",
+    ".eslintrc.cjs",
+    "eslint.config.js",
+    "eslint.config.mjs",
+  ]
+  if (eslintConfigs.some((name) => fs.existsSync(path.join(cwd, name)))) {
+    return "eslint"
+  }
+
+  const pyprojectPath = path.join(cwd, "pyproject.toml")
+  if (fs.existsSync(pyprojectPath)) {
+    try {
+      const content = fs.readFileSync(pyprojectPath, "utf-8")
+      if (content.includes("ruff")) return "ruff"
+    } catch {
+      // ignore read errors and keep fallback logic
+    }
+  }
+
+  if (fs.existsSync(path.join(cwd, ".golangci.yml")) || fs.existsSync(path.join(cwd, ".golangci.yaml"))) {
+    return "golangci-lint"
+  }
+
+  return "eslint"
+}
+
+function buildLintCommand(linter: Linter, target: string, fix: boolean): string {
+  if (linter === "biome") return `npx @biomejs/biome lint${fix ? " --write" : ""} ${target}`
+  if (linter === "eslint") return `npx eslint${fix ? " --fix" : ""} ${target}`
+  if (linter === "ruff") return `ruff check${fix ? " --fix" : ""} ${target}`
+  if (linter === "pylint") return `pylint ${target}`
+  return `golangci-lint run ${target}`
+}

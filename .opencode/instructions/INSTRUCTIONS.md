@@ -206,7 +206,6 @@ When creating PRs:
 | go-reviewer | Go code review | Go projects |
 | go-build-resolver | Go build errors | Go build failures |
 | database-reviewer | Database optimization | SQL, schema design |
-| solution-ranker | Rank solution variants | Multiple approaches, trade-off analysis |
 
 ### Immediate Agent Usage
 
@@ -215,7 +214,6 @@ No user prompt needed:
 2. Code just written/modified - Use **code-reviewer** agent
 3. Bug fix or new feature - Use **tdd-guide** agent
 4. Architectural decision - Use **architect** agent
-5. Multiple possible approaches - Use **solution-ranker** agent
 
 ---
 
@@ -326,7 +324,6 @@ Use these commands in OpenCode:
 - `/e2e` - Generate E2E tests
 - `/refactor-clean` - Remove dead code
 - `/orchestrate` - Multi-agent workflow
-- `/rank-solutions` - Generate, score, and rank solution variants
 
 ---
 

@@ -3,6 +3,7 @@ package recorder
 import (
 	"context"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -205,9 +206,7 @@ func (r *Recorder) Stop() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.browserCtx != nil {
-		_, gracefulCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_ = chromedp.Cancel(r.browserCtx)
-		gracefulCancel()
 	}
 	if r.browserCancel != nil {
 		r.browserCancel()
@@ -274,6 +273,8 @@ func (r *Recorder) RecordStep(action models.StepAction, selector, value string) 
 	if snapshotter != nil && browserCtx != nil {
 		if snap, err := snapshotter.CaptureSnapshot(browserCtx, r.flowID, idx); err == nil {
 			step.SnapshotID = snap.ID
+		} else {
+			log.Printf("recorder: snapshot step %d: %v", idx, err)
 		}
 	}
 	r.handler(step)

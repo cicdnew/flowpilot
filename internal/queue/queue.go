@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"math"
@@ -1040,7 +1041,10 @@ func fireWebhook(ctx context.Context, url, taskID string, status models.TaskStat
 		log.Printf("webhook POST error for task %s: %v", taskID, err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body) // drain so connection can be reused
+		resp.Body.Close()
+	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		log.Printf("webhook non-2xx response for task %s: %d", taskID, resp.StatusCode)
 	}

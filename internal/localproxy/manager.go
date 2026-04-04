@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"net"
 	"strings"
 	"sync"
@@ -118,8 +119,8 @@ func (m *Manager) serve(key string, entry *endpointEntry) {
 			m.mu.Lock()
 			stopping := entry.stopping
 			m.mu.Unlock()
-			if stopping {
-				return
+			if !stopping {
+				log.Printf("localproxy: accept error for %s: %v", entry.upstream.Server, err)
 			}
 			return
 		}

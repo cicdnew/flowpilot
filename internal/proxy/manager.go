@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"math"
 	"math/rand"
@@ -549,7 +550,10 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 		}
 		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body) // drain so connection can be reused
+		resp.Body.Close()
+	}()
 
 	if resp.StatusCode >= 400 {
 		dbCtx, cancel := m.dbWriteContext(ctx)

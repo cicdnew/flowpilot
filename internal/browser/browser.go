@@ -250,13 +250,16 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (*models.TaskRes
 		LogLimit:      policy.maxExecutionLogs,
 	}
 
-	// Recover from chromedp double close panic known upstream bug
+	// Recover from chromedp double close panic known upstream bug.
+	// Re-panics for any other unexpected panic so the caller sees a real failure.
 	defer func() {
 		if p := recover(); p != nil {
 			err, ok := p.(error)
 			if ok && strings.Contains(err.Error(), "close of closed channel") {
 				r.addLog(result, "warn", "chromedp upstream panic recovered: close of closed channel")
+				return
 			}
+			panic(p)
 		}
 	}()
 
@@ -442,8 +445,9 @@ func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, r
 
 		switch step.Action {
 		case models.ActionLoop:
-			maxIter, _ := strconv.Atoi(step.Value)
-			if maxIter <= 0 {
+			maxIter, err := strconv.Atoi(step.Value)
+			if err != nil || maxIter <= 0 {
+				r.addLog(result, "warn", fmt.Sprintf("step %d: invalid loop count %q, defaulting to 100", pc+1, step.Value))
 				maxIter = 100
 			}
 			loopStack = append(loopStack, loopFrame{startPC: pc, maxIter: maxIter, currentIter: 0})
@@ -612,6 +616,11 @@ func (r *Runner) setupProxyAuth(ctx context.Context, proxyConfig models.ProxyCon
 		switch e := ev.(type) {
 		case *fetch.EventAuthRequired:
 			go func() {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 				execCtx := chromedp.FromContext(ctx)
 				if execCtx == nil || execCtx.Target == nil {
 					return
@@ -627,6 +636,11 @@ func (r *Runner) setupProxyAuth(ctx context.Context, proxyConfig models.ProxyCon
 			}()
 		case *fetch.EventRequestPaused:
 			go func() {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 				execCtx := chromedp.FromContext(ctx)
 				if execCtx == nil || execCtx.Target == nil {
 					return

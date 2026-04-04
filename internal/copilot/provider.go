@@ -92,8 +92,8 @@ func (p *OpenAICompatibleProvider) ChatCompletion(ctx context.Context, messages 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return ChatResponse{}, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+		body, _ := io.ReadAll(resp.Body) // best-effort: used only for error message
+		return ChatResponse{}, fmt.Errorf("API error %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var result struct {
@@ -148,7 +148,8 @@ func (p *OpenAICompatibleProvider) ListModels(ctx context.Context) ([]Model, err
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API error %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body) // best-effort: used only for error message
+		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var result ModelListResponse

@@ -55,9 +55,7 @@ func main() {
 	go func() {
 		sig := <-sigCh
 		log.Printf("Received %s, shutting down...", sig)
-		cancel()
-		c.Stop()
-		os.Exit(0)
+		cancel() // unblocks the main scan loop so defers run cleanly
 	}()
 
 	fmt.Println("FlowPilot Copilot", version)
@@ -66,6 +64,14 @@ func main() {
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
+		// Exit cleanly when context is cancelled (signal received).
+		select {
+		case <-ctx.Done():
+			fmt.Println("\nGoodbye!")
+			return
+		default:
+		}
+
 		fmt.Print("> ")
 		if !scanner.Scan() {
 			break
@@ -79,6 +85,9 @@ func main() {
 		// Handle slash commands
 		if strings.HasPrefix(input, "/") {
 			if err := handleCommand(ctx, c, input); err != nil {
+				if err.Error() == "exit" {
+					return
+				}
 				fmt.Printf("Error: %v\n", err)
 			}
 			continue
@@ -191,8 +200,7 @@ func handleCommand(ctx context.Context, c *copilot.CopilotFlow, cmd string) erro
 
 	case "/exit":
 		fmt.Println("Goodbye!")
-		os.Exit(0)
-		return nil
+		return fmt.Errorf("exit") // sentinel; caller's scan loop will break on ctx cancel
 
 	default:
 		return fmt.Errorf("unknown command: %s. Type /help for available commands", parts[0])

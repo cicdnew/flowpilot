@@ -57,20 +57,19 @@ func (c *CopilotFlow) toolListTasks(ctx context.Context, args map[string]any) (a
 	}
 
 	var tasks []models.Task
-	var err error
 
 	if status != "" {
+		var err error
 		tasks, err = c.db.ListTasksByStatus(ctx, models.TaskStatus(status))
+		if err != nil {
+			return nil, fmt.Errorf("list tasks: %w", err)
+		}
 	} else {
 		paginated, err := c.db.ListTasksPaginated(ctx, 1, int(limit), "all", "")
 		if err != nil {
 			return nil, fmt.Errorf("list tasks paginated: %w", err)
 		}
 		tasks = paginated.Tasks
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("list tasks: %w", err)
 	}
 
 	var result []map[string]any

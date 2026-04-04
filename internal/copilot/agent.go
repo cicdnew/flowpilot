@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"flowpilot/internal/batch"
 	"flowpilot/internal/browser"
@@ -26,6 +27,7 @@ type CopilotFlow struct {
 	proxyManager *proxy.Manager
 	batchEngine  *batch.Engine
 	dataDir      string
+	providerMu   sync.RWMutex
 	provider     LLMProvider
 	tools        map[string]Tool
 	config       Config
@@ -71,9 +73,9 @@ type ToolDefinition struct {
 }
 
 type ToolFunction struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	Parameters  map[string]interface{} `json:"parameters"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
 }
 
 // ChatResponse is the response from the LLM provider.
@@ -152,6 +154,7 @@ func New(cfg Config) (*CopilotFlow, error) {
 
 	if cfg.ModelProvider != "" && cfg.APIKey != "" {
 		if err := c.Connect(cfg.ModelProvider, cfg.APIKey, cfg.BaseURL, cfg.ModelName); err != nil {
+			q.Stop()
 			db.Close()
 			return nil, err
 		}
@@ -162,40 +165,47 @@ func New(cfg Config) (*CopilotFlow, error) {
 
 // Connect configures the LLM provider for the copilot.
 func (c *CopilotFlow) Connect(provider string, apiKey string, baseURL string, modelName string) error {
-	var err error
-	c.provider, err = NewProvider(provider, apiKey, baseURL, modelName)
+	p, err := NewProvider(provider, apiKey, baseURL, modelName)
 	if err != nil {
 		return err
 	}
+	c.providerMu.Lock()
+	c.provider = p
+	c.providerMu.Unlock()
 	log.Printf("[copilot] connected to %s provider", provider)
 	return nil
 }
 
 // SetModel switches to a different model.
 func (c *CopilotFlow) SetModel(modelID string) error {
-	if c.provider == nil {
+	if !c.IsConnected() {
 		return fmt.Errorf("not connected to any provider")
 	}
-
-	// Reconnect with new model
 	return c.Connect(c.CurrentProvider(), c.config.APIKey, c.config.BaseURL, modelID)
 }
 
 // ListModels returns available models from the connected provider.
 func (c *CopilotFlow) ListModels(ctx context.Context) ([]Model, error) {
-	if c.provider == nil {
+	c.providerMu.RLock()
+	p := c.provider
+	c.providerMu.RUnlock()
+	if p == nil {
 		return nil, fmt.Errorf("not connected to any provider")
 	}
-	return c.provider.ListModels(ctx)
+	return p.ListModels(ctx)
 }
 
 // IsConnected returns true if the copilot is connected to an LLM provider.
 func (c *CopilotFlow) IsConnected() bool {
+	c.providerMu.RLock()
+	defer c.providerMu.RUnlock()
 	return c.provider != nil
 }
 
 // CurrentModel returns the current model name.
 func (c *CopilotFlow) CurrentModel() string {
+	c.providerMu.RLock()
+	defer c.providerMu.RUnlock()
 	if c.provider == nil {
 		return ""
 	}
@@ -204,6 +214,8 @@ func (c *CopilotFlow) CurrentModel() string {
 
 // CurrentProvider returns the current provider name.
 func (c *CopilotFlow) CurrentProvider() string {
+	c.providerMu.RLock()
+	defer c.providerMu.RUnlock()
 	if c.provider == nil {
 		return ""
 	}
@@ -327,7 +339,10 @@ func (c *CopilotFlow) GetToolDefinitions() []ToolDefinition {
 
 // Process processes a natural language request and returns the response.
 func (c *CopilotFlow) Process(ctx context.Context, input string) (string, error) {
-	if !c.IsConnected() {
+	c.providerMu.RLock()
+	p := c.provider
+	c.providerMu.RUnlock()
+	if p == nil {
 		return "", fmt.Errorf("not connected to any LLM provider. Use /connect command first")
 	}
 
@@ -342,7 +357,7 @@ func (c *CopilotFlow) Process(ctx context.Context, input string) (string, error)
 		},
 	}
 
-	response, err := c.provider.ChatCompletion(ctx, messages, c.GetToolDefinitions())
+	response, err := p.ChatCompletion(ctx, messages, c.GetToolDefinitions())
 	if err != nil {
 		return "", fmt.Errorf("chat completion failed: %w", err)
 	}

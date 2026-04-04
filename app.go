@@ -353,7 +353,7 @@ func (a *App) checkAndReloadConfig(ctx context.Context) {
 
 	a.configMu.Lock()
 	a.configModTime = info.ModTime()
-	old := a.config
+	old := a.config // value copy taken under lock; safe to use after Unlock
 	if newCfg.ProxyConcurrency != 0 {
 		a.config.ProxyConcurrency = newCfg.ProxyConcurrency
 	}

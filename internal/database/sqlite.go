@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"net/url"
 	"strings"
 
@@ -109,16 +110,23 @@ func newTursoDB(config DatabaseConfig) (*DB, error) {
 }
 
 func applySQLitePragmas(conns ...*sql.DB) {
+	pragmas := []string{
+		"PRAGMA busy_timeout=5000",
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA cache_size=-64000",
+		"PRAGMA mmap_size=268435456",
+		"PRAGMA temp_store=MEMORY",
+	}
 	for _, c := range conns {
 		if c == nil {
 			continue
 		}
-		_, _ = c.Exec("PRAGMA busy_timeout=5000")
-		_, _ = c.Exec("PRAGMA journal_mode=WAL")
-		_, _ = c.Exec("PRAGMA synchronous=NORMAL")
-		_, _ = c.Exec("PRAGMA cache_size=-64000")
-		_, _ = c.Exec("PRAGMA mmap_size=268435456")
-		_, _ = c.Exec("PRAGMA temp_store=MEMORY")
+		for _, p := range pragmas {
+			if _, err := c.Exec(p); err != nil {
+				log.Printf("warn: %s: %v", p, err)
+			}
+		}
 	}
 }
 

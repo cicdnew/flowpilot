@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -38,7 +39,7 @@ func (db *DB) GetCaptchaConfig(ctx context.Context, id string) (*models.CaptchaC
 		FROM captcha_config WHERE id = ?`, id)
 
 	c, err := db.scanCaptchaRow(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("captcha config %s not found", id)
 	}
 	if err != nil {
@@ -53,7 +54,7 @@ func (db *DB) GetActiveCaptchaConfig(ctx context.Context) (*models.CaptchaConfig
 		FROM captcha_config WHERE enabled = 1 LIMIT 1`)
 
 	c, err := db.scanCaptchaRow(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

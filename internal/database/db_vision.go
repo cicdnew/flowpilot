@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"flowpilot/internal/models"
@@ -21,7 +22,7 @@ func (db *DB) GetVisualBaseline(ctx context.Context, id string) (*models.VisualB
 	var b models.VisualBaseline
 	err := db.readConn.QueryRowContext(ctx, `SELECT id, name, task_id, url, screenshot_path, width, height, created_at FROM visual_baselines WHERE id = ?`, id).
 		Scan(&b.ID, &b.Name, &b.TaskID, &b.URL, &b.ScreenshotPath, &b.Width, &b.Height, &b.CreatedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("visual baseline %s not found", id)
 	}
 	if err != nil {
@@ -84,7 +85,7 @@ func (db *DB) GetVisualDiff(ctx context.Context, id string) (*models.VisualDiff,
 	var passedInt int
 	err := db.readConn.QueryRowContext(ctx, `SELECT id, baseline_id, task_id, screenshot_path, diff_image_path, diff_percent, pixel_count, threshold, passed, width, height, created_at FROM visual_diffs WHERE id = ?`, id).
 		Scan(&d.ID, &d.BaselineID, &d.TaskID, &d.ScreenshotPath, &d.DiffImagePath, &d.DiffPercent, &d.PixelCount, &d.Threshold, &passedInt, &d.Width, &d.Height, &d.CreatedAt)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("visual diff %s not found", id)
 	}
 	if err != nil {

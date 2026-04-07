@@ -241,25 +241,34 @@ func (r *Runner) resolveLoggingPolicy(task models.Task) resolvedLoggingPolicy {
 }
 
 // RunTask executes a single task with its own browser context and proxy.
-func (r *Runner) RunTask(ctx context.Context, task models.Task) (*models.TaskResult, error) {
+func (r *Runner) RunTask(ctx context.Context, task models.Task) (result *models.TaskResult, err error) {
 	start := time.Now()
 	policy := r.resolveLoggingPolicy(task)
-	result := &models.TaskResult{
+	result = &models.TaskResult{
 		TaskID:        task.ID,
 		ExtractedData: make(map[string]string),
 		LogLimit:      policy.maxExecutionLogs,
 	}
 
-	// Recover from chromedp double close panic known upstream bug.
-	// Re-panics for any other unexpected panic so the caller sees a real failure.
+	// Recover from chromedp double close panic — known upstream bug.
+	// For the "close of closed channel" case we swallow silently.
+	// For all other panics we convert to a deterministic error via named
+	// returns so the queue records a failure instead of leaving the task
+	// permanently stuck in "running" state.
 	defer func() {
 		if p := recover(); p != nil {
-			err, ok := p.(error)
-			if ok && strings.Contains(err.Error(), "close of closed channel") {
+			pErr, ok := p.(error)
+			if ok && strings.Contains(pErr.Error(), "close of closed channel") {
 				r.addLog(result, "warn", "chromedp upstream panic recovered: close of closed channel")
 				return
 			}
-			panic(p)
+			// Unknown panic → fill named return values so the caller always
+			// receives a populated result and a non-nil error.
+			panicMsg := fmt.Sprintf("unexpected browser panic: %v", p)
+			result.Error = panicMsg
+			result.Duration = time.Since(start)
+			r.addLog(result, "error", panicMsg)
+			err = fmt.Errorf("browser panic: %v", p)
 		}
 	}()
 

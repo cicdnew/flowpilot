@@ -636,7 +636,7 @@ func (q *Queue) dequeueRunnableLocked() (*heapItem, bool, bool) {
 			if fallback == "" {
 				fallback = models.ProxyFallbackStrict
 			}
-			available, wait, err := q.proxyManager.HasAvailableProxy(item.task.Proxy.Geo, fallback)
+			available, wait, err := q.proxyManager.HasAvailableProxy(context.Background(), item.task.Proxy.Geo, fallback)
 			if err == nil && !available {
 				deferred = append(deferred, item)
 				q.scheduleProxyWake(wait)
@@ -713,7 +713,7 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task, countsAgainst
 		if fallback == "" {
 			fallback = models.ProxyFallbackStrict
 		}
-		lease, fallbackUsed, direct, err := pm.ReserveProxyWithFallback(task.Proxy.Geo, fallback)
+		lease, fallbackUsed, direct, err := pm.ReserveProxyWithFallback(taskCtx, task.Proxy.Geo, fallback)
 		if err == nil {
 			if lease != nil {
 				reservation = lease

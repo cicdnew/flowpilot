@@ -1485,7 +1485,7 @@ func TestSetDefaultLoggingPolicy(t *testing.T) {
 
 func TestResolveLoggingPolicy(t *testing.T) {
 	r := &Runner{screenshotDir: t.TempDir(), exec: chromeExecutor{}}
-	
+
 	task := models.Task{}
 	policy := r.resolveLoggingPolicy(task)
 	if !policy.captureStepLogs || !policy.captureNetworkLogs || !policy.captureScreenshots {
@@ -1497,7 +1497,7 @@ func TestResolveLoggingPolicy(t *testing.T) {
 
 	falseVal := false
 	task.LoggingPolicy = &models.TaskLoggingPolicy{
-		CaptureStepLogs: &falseVal,
+		CaptureStepLogs:  &falseVal,
 		MaxExecutionLogs: 200,
 	}
 	policy = r.resolveLoggingPolicy(task)
@@ -1512,8 +1512,8 @@ func TestResolveLoggingPolicy(t *testing.T) {
 func TestAddLogWithLimit(t *testing.T) {
 	r := &Runner{screenshotDir: t.TempDir(), exec: chromeExecutor{}}
 	result := &models.TaskResult{
-		TaskID:    "test-limit",
-		LogLimit:  3,
+		TaskID:        "test-limit",
+		LogLimit:      3,
 		ExtractedData: make(map[string]string),
 	}
 
@@ -1789,7 +1789,7 @@ func TestNotificationHub(t *testing.T) {
 		t.Errorf("got %q, want %q", msg, "hello")
 	}
 	hub.Close()
-	hub.Close() // idempotent
+	hub.Close()             // idempotent
 	hub.Send("after close") // no-op, should not panic
 }
 
@@ -2523,5 +2523,64 @@ func TestExecDebugResumeAfterPause(t *testing.T) {
 	step := models.TaskStep{Action: models.ActionDebugResume}
 	if err := runner.execDebugResume(context.Background(), step, result); err != nil {
 		t.Fatalf("execDebugResume: %v", err)
+	}
+}
+
+// panicExecutor is a test-only Executor that panics on every Run call with a
+// non-chromedp error, simulating an unexpected browser crash.  It is used to
+// verify that RunTask converts such panics into a deterministic error return
+// rather than re-panicking and leaving the task stuck in "running" state.
+type panicExecutor struct{}
+
+func (p *panicExecutor) Run(_ context.Context, _ ...chromedp.Action) error {
+	panic(errors.New("simulated unknown browser panic"))
+}
+
+func (p *panicExecutor) RunResponse(_ context.Context, _ ...chromedp.Action) (*network.Response, error) {
+	return nil, nil
+}
+
+func (p *panicExecutor) Targets(_ context.Context) ([]*target.Info, error) {
+	return nil, nil
+}
+
+// TestRunTask_UnknownPanic_ReturnsErrorNotPanic verifies that an unknown panic
+// inside RunTask produces a non-nil error and a populated result.Error instead
+// of re-panicking and leaving the task stuck in "running" state.
+//
+// Strategy: panicExecutor panics on Run.  A proxy with credentials causes
+// RunTask to call r.exec.Run via setupProxyAuth, triggering the panic before
+// any steps are executed.
+func TestRunTask_UnknownPanic_ReturnsErrorNotPanic(t *testing.T) {
+	r := &Runner{
+		screenshotDir: t.TempDir(),
+		exec:          &panicExecutor{},
+	}
+
+	task := models.Task{
+		ID:       "panic-recovery-task",
+		Headless: true,
+		// Credentials trigger setupProxyAuth → r.exec.Run → panic.
+		Proxy: models.ProxyConfig{
+			Server:   "proxy:8080",
+			Username: "user",
+			Password: "pass",
+		},
+		Steps: []models.TaskStep{},
+	}
+
+	// The test itself must NOT panic; the test runner would fail if it did.
+	result, err := r.RunTask(context.Background(), task)
+
+	if err == nil {
+		t.Fatal("expected non-nil error from unknown panic, got nil")
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result (named returns preserve the partially-built result)")
+	}
+	// Named-return fix sets result.Error to "unexpected browser panic: ..." and
+	// returns err = fmt.Errorf("browser panic: %v", p).
+	if !strings.Contains(result.Error, "browser panic") {
+		t.Errorf("result.Error must contain 'browser panic', got: %q", result.Error)
 	}
 }

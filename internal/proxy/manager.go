@@ -140,16 +140,16 @@ func (m *Manager) UpdateHealthCheckConfig(intervalSeconds int, url string) {
 
 // SelectProxy picks a proxy based on the configured rotation strategy.
 // If geo is specified, only proxies in that geo are considered.
-func (m *Manager) SelectProxy(geo string) (*models.Proxy, error) {
-	selected, _, direct, err := m.SelectProxyWithFallback(geo, models.ProxyFallbackStrict)
+func (m *Manager) SelectProxy(ctx context.Context, geo string) (*models.Proxy, error) {
+	selected, _, direct, err := m.SelectProxyWithFallback(ctx, geo, models.ProxyFallbackStrict)
 	if direct || err != nil {
 		return nil, err
 	}
 	return selected, nil
 }
 
-func (m *Manager) SelectProxyWithFallback(geo string, fallback models.ProxyRoutingFallback) (*models.Proxy, bool, bool, error) {
-	proxies, err := m.db.ListHealthyProxies(context.Background()) // TODO: pass caller context once signature supports it
+func (m *Manager) SelectProxyWithFallback(ctx context.Context, geo string, fallback models.ProxyRoutingFallback) (*models.Proxy, bool, bool, error) {
+	proxies, err := m.db.ListHealthyProxies(ctx)
 	if err != nil {
 		return nil, false, false, fmt.Errorf("list healthy proxies: %w", err)
 	}
@@ -201,16 +201,16 @@ func (m *Manager) RecordUsage(proxyID string, success bool) error {
 	return m.db.IncrementProxyUsage(dbCtx, proxyID, success)
 }
 
-func (m *Manager) ReserveProxy(geo string) (*Reservation, error) {
-	lease, _, direct, err := m.ReserveProxyWithFallback(geo, models.ProxyFallbackStrict)
+func (m *Manager) ReserveProxy(ctx context.Context, geo string) (*Reservation, error) {
+	lease, _, direct, err := m.ReserveProxyWithFallback(ctx, geo, models.ProxyFallbackStrict)
 	if direct || err != nil {
 		return nil, err
 	}
 	return lease, nil
 }
 
-func (m *Manager) ReserveProxyWithFallback(geo string, fallback models.ProxyRoutingFallback) (*Reservation, bool, bool, error) {
-	filtered, fallbackUsed, direct, err := m.availableProxies(geo, fallback)
+func (m *Manager) ReserveProxyWithFallback(ctx context.Context, geo string, fallback models.ProxyRoutingFallback) (*Reservation, bool, bool, error) {
+	filtered, fallbackUsed, direct, err := m.availableProxies(ctx, geo, fallback)
 	if err != nil || direct {
 		return nil, fallbackUsed, direct, err
 	}
@@ -227,8 +227,8 @@ func (m *Manager) ReserveProxyWithFallback(geo string, fallback models.ProxyRout
 	return &Reservation{manager: m, proxy: selected}, fallbackUsed, false, nil
 }
 
-func (m *Manager) HasAvailableProxy(geo string, fallback models.ProxyRoutingFallback) (bool, time.Duration, error) {
-	filtered, _, direct, err := m.availableProxies(geo, fallback)
+func (m *Manager) HasAvailableProxy(ctx context.Context, geo string, fallback models.ProxyRoutingFallback) (bool, time.Duration, error) {
+	filtered, _, direct, err := m.availableProxies(ctx, geo, fallback)
 	if direct {
 		return true, 0, nil
 	}
@@ -242,8 +242,8 @@ func (m *Manager) HasAvailableProxy(geo string, fallback models.ProxyRoutingFall
 	return true, 0, nil
 }
 
-func (m *Manager) availableProxies(geo string, fallback models.ProxyRoutingFallback) ([]models.Proxy, bool, bool, error) {
-	proxies, err := m.db.ListHealthyProxies(context.Background()) // TODO: pass caller context once signature supports it
+func (m *Manager) availableProxies(ctx context.Context, geo string, fallback models.ProxyRoutingFallback) ([]models.Proxy, bool, bool, error) {
+	proxies, err := m.db.ListHealthyProxies(ctx)
 	if err != nil {
 		return nil, false, false, fmt.Errorf("list healthy proxies: %w", err)
 	}

@@ -120,7 +120,7 @@ func TestSelectProxyRoundRobin(t *testing.T) {
 	// Round-robin should cycle through proxies
 	seen := make(map[string]int)
 	for i := 0; i < 9; i++ {
-		p, err := m.SelectProxy("")
+		p, err := m.SelectProxy(context.Background(), "")
 		if err != nil {
 			t.Fatalf("SelectProxy %d: %v", i, err)
 		}
@@ -143,7 +143,7 @@ func TestSelectProxyRoundRobinWrapsAround(t *testing.T) {
 
 	// Select more times than there are proxies
 	for i := 0; i < 10; i++ {
-		_, err := m.SelectProxy("")
+		_, err := m.SelectProxy(context.Background(), "")
 		if err != nil {
 			t.Fatalf("SelectProxy %d: %v", i, err)
 		}
@@ -162,7 +162,7 @@ func TestSelectProxyRandom(t *testing.T) {
 	// Run many selections to ensure no panics and reasonable distribution
 	seen := make(map[string]int)
 	for i := 0; i < 100; i++ {
-		p, err := m.SelectProxy("")
+		p, err := m.SelectProxy(context.Background(), "")
 		if err != nil {
 			t.Fatalf("SelectProxy %d: %v", i, err)
 		}
@@ -186,7 +186,7 @@ func TestSelectProxyLeastUsed(t *testing.T) {
 	addHealthyProxy(t, db, "lu-2", "lu2.example.com:8080", "", 100, 2)
 	addHealthyProxy(t, db, "lu-3", "lu3.example.com:8080", "", 100, 5)
 
-	p, err := m.SelectProxy("")
+	p, err := m.SelectProxy(context.Background(), "")
 	if err != nil {
 		t.Fatalf("SelectProxy: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestSelectProxyLowestLatency(t *testing.T) {
 	addHealthyProxy(t, db, "lat-2", "lat2.example.com:8080", "", 50, 0)
 	addHealthyProxy(t, db, "lat-3", "lat3.example.com:8080", "", 150, 0)
 
-	p, err := m.SelectProxy("")
+	p, err := m.SelectProxy(context.Background(), "")
 	if err != nil {
 		t.Fatalf("SelectProxy: %v", err)
 	}
@@ -240,7 +240,7 @@ func TestSelectProxyLowestLatencyIgnoresZero(t *testing.T) {
 		t.Fatalf("UpdateProxyHealth: %v", err)
 	}
 
-	result, err := m.SelectProxy("")
+	result, err := m.SelectProxy(context.Background(), "")
 	if err != nil {
 		t.Fatalf("SelectProxy: %v", err)
 	}
@@ -260,7 +260,7 @@ func TestSelectProxyWithGeoFilter(t *testing.T) {
 	addHealthyProxy(t, db, "geo-uk-1", "uk1.example.com:8080", "UK", 100, 0)
 	addHealthyProxy(t, db, "geo-us-2", "us2.example.com:8080", "US", 100, 0)
 
-	p, err := m.SelectProxy("UK")
+	p, err := m.SelectProxy(context.Background(), "UK")
 	if err != nil {
 		t.Fatalf("SelectProxy(UK): %v", err)
 	}
@@ -281,7 +281,7 @@ func TestSelectProxyWithGeoRandomizesWithinCountryPool(t *testing.T) {
 
 	seen := map[string]int{}
 	for i := 0; i < 100; i++ {
-		p, err := m.SelectProxy("us")
+		p, err := m.SelectProxy(context.Background(), "us")
 		if err != nil {
 			t.Fatalf("SelectProxy(us) %d: %v", i, err)
 		}
@@ -303,7 +303,7 @@ func TestSelectProxyNoMatchingGeo(t *testing.T) {
 
 	addHealthyProxy(t, db, "geo-only-us", "us.example.com:8080", "US", 100, 0)
 
-	_, err := m.SelectProxy("JP")
+	_, err := m.SelectProxy(context.Background(), "JP")
 	if err == nil {
 		t.Fatal("expected error when no proxies match geo filter")
 	}
@@ -324,7 +324,7 @@ func TestSelectProxyNoHealthyProxies(t *testing.T) {
 		t.Fatalf("CreateProxy: %v", err)
 	}
 
-	_, err := m.SelectProxy("")
+	_, err := m.SelectProxy(context.Background(), "")
 	if err == nil {
 		t.Fatal("expected error when no healthy proxies available")
 	}
@@ -333,7 +333,7 @@ func TestSelectProxyNoHealthyProxies(t *testing.T) {
 func TestSelectProxyEmptyPool(t *testing.T) {
 	m, _ := setupTestManager(t, models.RotationRoundRobin)
 
-	_, err := m.SelectProxy("")
+	_, err := m.SelectProxy(context.Background(), "")
 	if err == nil {
 		t.Fatal("expected error for empty proxy pool")
 	}
@@ -357,7 +357,7 @@ func TestSelectProxyDefaultStrategy(t *testing.T) {
 
 	addHealthyProxy(t, db, "def-1", "def.example.com:8080", "", 100, 0)
 
-	p, err := m.SelectProxy("")
+	p, err := m.SelectProxy(context.Background(), "")
 	if err != nil {
 		t.Fatalf("SelectProxy with default strategy: %v", err)
 	}
@@ -386,7 +386,7 @@ func TestReserveProxyTracksAndReleasesReservations(t *testing.T) {
 
 	addHealthyProxy(t, db, "reserve-1", "reserve.example.com:8080", "", 100, 0)
 
-	lease, err := m.ReserveProxy("")
+	lease, err := m.ReserveProxy(context.Background(), "")
 	if err != nil {
 		t.Fatalf("ReserveProxy: %v", err)
 	}
@@ -412,11 +412,11 @@ func TestReserveProxyPrefersLowerReservationPressure(t *testing.T) {
 	addHealthyProxy(t, db, "pressure-1", "p1.example.com:8080", "", 100, 0)
 	addHealthyProxy(t, db, "pressure-2", "p2.example.com:8080", "", 100, 0)
 
-	first, err := m.ReserveProxy("")
+	first, err := m.ReserveProxy(context.Background(), "")
 	if err != nil {
 		t.Fatalf("first ReserveProxy: %v", err)
 	}
-	second, err := m.ReserveProxy("")
+	second, err := m.ReserveProxy(context.Background(), "")
 	if err != nil {
 		t.Fatalf("second ReserveProxy: %v", err)
 	}
@@ -436,7 +436,7 @@ func TestReserveProxyWithGeoRandomizesWithinCountryPool(t *testing.T) {
 
 	seen := map[string]int{}
 	for i := 0; i < 50; i++ {
-		lease, err := m.ReserveProxy("US")
+		lease, err := m.ReserveProxy(context.Background(), "US")
 		if err != nil {
 			t.Fatalf("ReserveProxy(US) %d: %v", i, err)
 		}
@@ -837,7 +837,7 @@ func TestHasAvailableProxyWithAvailableProxy(t *testing.T) {
 	defer db.Close()
 	addHealthyProxy(t, db, "p1", "proxy1:8080", "US", 10, 5)
 
-	ok, wait, err := m.HasAvailableProxy("US", models.ProxyFallbackStrict)
+	ok, wait, err := m.HasAvailableProxy(context.Background(), "US", models.ProxyFallbackStrict)
 	if !ok || wait != 0 || err != nil {
 		t.Fatalf("expected true,0,nil; got %v,%v,%v", ok, wait, err)
 	}
@@ -847,7 +847,7 @@ func TestHasAvailableProxyNoProxies(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationRoundRobin)
 	defer db.Close()
 
-	ok, _, err := m.HasAvailableProxy("US", models.ProxyFallbackStrict)
+	ok, _, err := m.HasAvailableProxy(context.Background(), "US", models.ProxyFallbackStrict)
 	if ok || err == nil {
 		t.Fatalf("expected false,err; got %v,%v", ok, err)
 	}
@@ -857,7 +857,7 @@ func TestHasAvailableProxyWithDirectFallback(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationRoundRobin)
 	defer db.Close()
 
-	ok, wait, err := m.HasAvailableProxy("NONEXISTENT", models.ProxyFallbackDirect)
+	ok, wait, err := m.HasAvailableProxy(context.Background(), "NONEXISTENT", models.ProxyFallbackDirect)
 	if !ok || wait != 0 || err != nil {
 		t.Fatalf("expected true,0,nil for direct fallback; got %v,%v,%v", ok, wait, err)
 	}
@@ -1014,12 +1014,12 @@ func TestHasAvailableProxyRateLimited(t *testing.T) {
 	defer db.Close()
 
 	p := models.Proxy{
-		ID:                    "p1",
-		Server:                "proxy1:8080",
-		Protocol:              "http",
-		Status:                models.ProxyStatusHealthy,
-		Geo:                   "US",
-		MaxRequestsPerMinute:  2,
+		ID:                   "p1",
+		Server:               "proxy1:8080",
+		Protocol:             "http",
+		Status:               models.ProxyStatusHealthy,
+		Geo:                  "US",
+		MaxRequestsPerMinute: 2,
 	}
 	ctx := context.Background()
 	if err := db.CreateProxy(ctx, p); err != nil {
@@ -1035,8 +1035,39 @@ func TestHasAvailableProxyRateLimited(t *testing.T) {
 	m.requestTimes["p1"] = []time.Time{now, now}
 	m.mu.Unlock()
 
-	ok, wait, err := m.HasAvailableProxy("US", models.ProxyFallbackStrict)
+	ok, wait, err := m.HasAvailableProxy(context.Background(), "US", models.ProxyFallbackStrict)
 	if ok || wait == 0 {
 		t.Fatalf("expected rate limited (false, wait>0); got %v,%v,%v", ok, wait, err)
+	}
+}
+
+// TestSelectProxyWithFallback_HonorsContextCancellation verifies that the ctx
+// parameter added to SelectProxyWithFallback (and its internal helpers) is
+// actually forwarded to the database layer.
+//
+// Strategy: pass an already-cancelled context.  The database/sql QueryContext
+// implementation checks ctx.Done() before executing the query, so it should
+// return context.Canceled (or a wrapped variant).  If context propagation is
+// wired up correctly we get an error; if the code still used
+// context.Background() internally the query would succeed and we would get a
+// proxy back instead.
+func TestSelectProxyWithFallback_HonorsContextCancellation(t *testing.T) {
+	m, db := setupTestManager(t, models.RotationRoundRobin)
+	defer db.Close()
+
+	// Add a healthy proxy so that, without cancellation, the call succeeds.
+	addHealthyProxy(t, db, "ctx-cancel-proxy", "proxy.example.com:8080", "US", 100, 0)
+
+	// Pre-cancel the context before passing it in.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, _, _, err := m.SelectProxyWithFallback(ctx, "US", models.ProxyFallbackStrict)
+
+	// The cancelled context must be propagated to the DB call, causing an error.
+	// We accept context.Canceled or any db-level error wrapping it.
+	if err == nil {
+		t.Fatal("expected an error when called with a cancelled context, got nil — " +
+			"context may not be propagated to the DB layer")
 	}
 }

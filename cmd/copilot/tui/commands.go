@@ -6,7 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// CommandActions maps command names to their actions.
+// GetCommandActions returns a map of command names to their handler actions.
 func GetCommandActions() map[string]func(m Model, args []string) (Model, tea.Cmd) {
 	return map[string]func(m Model, args []string) (Model, tea.Cmd){
 		"/connect":       actionConnect,
@@ -162,7 +162,7 @@ func actionRunTask(m Model, args []string) (Model, tea.Cmd) {
 	}
 }
 
-// Request messages for copilot integration
+// ConnectRequestMsg is sent when the user requests a connection to an LLM provider.
 type ConnectRequestMsg struct {
 	Provider string
 	APIKey   string

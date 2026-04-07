@@ -6,7 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// KeyMsg handles keyboard input.
+// Update handles keyboard input and other messages for the TUI model.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
@@ -272,7 +272,7 @@ func (m Model) handleStreamDone() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// Custom messages for streaming
+// StreamChunkMsg carries a single streaming content token from the LLM provider.
 type StreamChunkMsg struct {
 	Content string
 }

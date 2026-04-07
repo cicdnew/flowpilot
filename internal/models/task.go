@@ -216,7 +216,7 @@ type TaskStep struct {
 	Strategy  string     `json:"strategy,omitempty"`
 }
 
-// ProxyConfig holds proxy connection details for a task.
+// ProxyRoutingFallback defines the fallback strategy when no proxies match the requested geo.
 type ProxyRoutingFallback string
 
 const (
@@ -243,28 +243,28 @@ type TaskLoggingPolicy struct {
 
 // Task represents a single automated browser task.
 type Task struct {
-	ID             string             `json:"id"`
-	Name           string             `json:"name"`
-	URL            string             `json:"url"`
-	Steps          []TaskStep         `json:"steps"`
-	Proxy          ProxyConfig        `json:"proxy"`
-	Priority       TaskPriority       `json:"priority"`
-	Status         TaskStatus         `json:"status"`
-	RetryCount     int                `json:"retryCount"`
-	MaxRetries     int                `json:"maxRetries"`
-	Timeout        int                `json:"timeout,omitempty"` // total task timeout in seconds, 0 = default (5 min)
-	Error          string             `json:"error,omitempty"`
-	Result         *TaskResult        `json:"result,omitempty"`
-	CreatedAt      time.Time          `json:"createdAt"`
-	StartedAt      *time.Time         `json:"startedAt,omitempty"`
-	CompletedAt    *time.Time         `json:"completedAt,omitempty"`
-	Tags           []string           `json:"tags,omitempty"`
-	BatchID        string             `json:"batchId,omitempty"`
-	FlowID         string             `json:"flowId,omitempty"`
-	Headless       bool               `json:"headless"`
-	LoggingPolicy  *TaskLoggingPolicy `json:"loggingPolicy,omitempty"`
-	WebhookURL     string             `json:"webhookUrl,omitempty"`
-	WebhookEvents  []string           `json:"webhookEvents,omitempty"`
+	ID            string             `json:"id"`
+	Name          string             `json:"name"`
+	URL           string             `json:"url"`
+	Steps         []TaskStep         `json:"steps"`
+	Proxy         ProxyConfig        `json:"proxy"`
+	Priority      TaskPriority       `json:"priority"`
+	Status        TaskStatus         `json:"status"`
+	RetryCount    int                `json:"retryCount"`
+	MaxRetries    int                `json:"maxRetries"`
+	Timeout       int                `json:"timeout,omitempty"` // total task timeout in seconds, 0 = default (5 min)
+	Error         string             `json:"error,omitempty"`
+	Result        *TaskResult        `json:"result,omitempty"`
+	CreatedAt     time.Time          `json:"createdAt"`
+	StartedAt     *time.Time         `json:"startedAt,omitempty"`
+	CompletedAt   *time.Time         `json:"completedAt,omitempty"`
+	Tags          []string           `json:"tags,omitempty"`
+	BatchID       string             `json:"batchId,omitempty"`
+	FlowID        string             `json:"flowId,omitempty"`
+	Headless      bool               `json:"headless"`
+	LoggingPolicy *TaskLoggingPolicy `json:"loggingPolicy,omitempty"`
+	WebhookURL    string             `json:"webhookUrl,omitempty"`
+	WebhookEvents []string           `json:"webhookEvents,omitempty"`
 }
 
 // TaskResult holds the output of a completed task.

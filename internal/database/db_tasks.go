@@ -584,7 +584,7 @@ func (db *DB) ListStaleTasks(ctx context.Context) ([]models.Task, error) {
 	return tasks, nil
 }
 
-// BatchUpdateTaskStatus updates the status of multiple tasks in a single transaction.
+// BatchApplyTaskStateChanges updates the status of multiple tasks in a single transaction.
 func (db *DB) BatchApplyTaskStateChanges(ctx context.Context, changes []TaskStateChange) error {
 	if len(changes) == 0 {
 		return nil

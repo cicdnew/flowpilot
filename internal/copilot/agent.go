@@ -32,6 +32,7 @@ type CopilotFlow struct {
 	provider     LLMProvider
 	tools        map[string]Tool
 	config       Config
+	history      *ConversationHistory // multi-turn conversation context
 
 	pollInterval  time.Duration
 	pollingCancel context.CancelFunc
@@ -169,6 +170,7 @@ func New(cfg Config) (*CopilotFlow, error) {
 		config:       cfg,
 		tools:        make(map[string]Tool),
 		pollInterval: cfg.PollInterval,
+		history:      &ConversationHistory{},
 	}
 
 	c.registerTools()
@@ -476,6 +478,197 @@ func (c *CopilotFlow) registerTools() {
 		},
 		Handler: c.toolRunTask,
 	}
+
+	// ── v2 tools ────────────────────────────────────────────────────────────
+
+	// Task introspection and management
+	c.tools["get_task"] = Tool{
+		Name:        "get_task",
+		Description: "Retrieve full details for a specific task by its ID",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"task_id": map[string]any{
+					"type":        "string",
+					"description": "The task ID to look up",
+				},
+			},
+			"required": []string{"task_id"},
+		},
+		Handler: c.toolGetTask,
+	}
+
+	c.tools["cancel_task"] = Tool{
+		Name:        "cancel_task",
+		Description: "Cancel a pending, queued, or running task by ID",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"task_id": map[string]any{
+					"type":        "string",
+					"description": "ID of the task to cancel",
+				},
+			},
+			"required": []string{"task_id"},
+		},
+		Handler: c.toolCancelTask,
+	}
+
+	c.tools["retry_task"] = Tool{
+		Name:        "retry_task",
+		Description: "Retry a failed or cancelled task by resetting its status and re-queuing it",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"task_id": map[string]any{
+					"type":        "string",
+					"description": "ID of the task to retry",
+				},
+			},
+			"required": []string{"task_id"},
+		},
+		Handler: c.toolRetryTask,
+	}
+
+	// Batch management
+	c.tools["get_batch_progress"] = Tool{
+		Name:        "get_batch_progress",
+		Description: "Get aggregate progress statistics (pending/running/completed/failed) for a batch",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"batch_id": map[string]any{
+					"type":        "string",
+					"description": "The batch ID to inspect",
+				},
+			},
+			"required": []string{"batch_id"},
+		},
+		Handler: c.toolGetBatchProgress,
+	}
+
+	c.tools["cancel_batch"] = Tool{
+		Name:        "cancel_batch",
+		Description: "Cancel all pending, queued, and running tasks that belong to a batch",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"batch_id": map[string]any{
+					"type":        "string",
+					"description": "ID of the batch to cancel",
+				},
+			},
+			"required": []string{"batch_id"},
+		},
+		Handler: c.toolCancelBatch,
+	}
+
+	// Step-level logging
+	c.tools["get_task_logs"] = Tool{
+		Name:        "get_task_logs",
+		Description: "Retrieve step execution logs for a task",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"task_id": map[string]any{
+					"type":        "string",
+					"description": "ID of the task whose logs to retrieve",
+				},
+				"limit": map[string]any{
+					"type":        "integer",
+					"description": "Maximum number of log entries to return (default 50)",
+					"default":     50,
+				},
+			},
+			"required": []string{"task_id"},
+		},
+		Handler: c.toolGetTaskLogs,
+	}
+
+	// Proxy management
+	c.tools["add_proxy"] = Tool{
+		Name:        "add_proxy",
+		Description: "Add a new proxy server to the proxy pool",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"server": map[string]any{
+					"type":        "string",
+					"description": "Proxy address in host:port format",
+				},
+				"protocol": map[string]any{
+					"type":        "string",
+					"description": "Proxy protocol: http, https, or socks5",
+					"enum":        []string{"http", "https", "socks5"},
+				},
+				"username": map[string]any{
+					"type":        "string",
+					"description": "Optional proxy username for authentication",
+				},
+				"password": map[string]any{
+					"type":        "string",
+					"description": "Optional proxy password for authentication",
+				},
+				"geo": map[string]any{
+					"type":        "string",
+					"description": "Optional ISO country code for geo-targeting (e.g. US, GB)",
+				},
+			},
+			"required": []string{"server"},
+		},
+		Handler: c.toolAddProxy,
+	}
+
+	c.tools["delete_proxy"] = Tool{
+		Name:        "delete_proxy",
+		Description: "Remove a proxy server from the pool by its ID",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"proxy_id": map[string]any{
+					"type":        "string",
+					"description": "ID of the proxy to delete",
+				},
+			},
+			"required": []string{"proxy_id"},
+		},
+		Handler: c.toolDeleteProxy,
+	}
+
+	// Schedule management
+	c.tools["list_schedules"] = Tool{
+		Name:        "list_schedules",
+		Description: "List all configured recurring task schedules",
+		Schema: map[string]any{
+			"type":       "object",
+			"properties": map[string]any{},
+		},
+		Handler: c.toolListSchedules,
+	}
+
+	c.tools["create_schedule"] = Tool{
+		Name:        "create_schedule",
+		Description: "Create a new recurring schedule that runs a recorded flow on a cron expression",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"flow_id": map[string]any{
+					"type":        "string",
+					"description": "ID of the recorded flow to run on schedule",
+				},
+				"name": map[string]any{
+					"type":        "string",
+					"description": "Human-readable name for this schedule",
+				},
+				"cron": map[string]any{
+					"type":        "string",
+					"description": "Cron expression (e.g. '0 * * * *' for hourly, '0 9 * * 1-5' for weekday mornings)",
+				},
+			},
+			"required": []string{"flow_id", "name", "cron"},
+		},
+		Handler: c.toolCreateSchedule,
+	}
 }
 
 // GetToolDefinitions returns the tool definitions for function calling.
@@ -495,6 +688,7 @@ func (c *CopilotFlow) GetToolDefinitions() []ToolDefinition {
 }
 
 // Process processes a natural language request and returns the response.
+// Prior conversation turns are prepended automatically for multi-turn context.
 func (c *CopilotFlow) Process(ctx context.Context, input string) (string, error) {
 	c.providerMu.RLock()
 	p := c.provider
@@ -503,20 +697,28 @@ func (c *CopilotFlow) Process(ctx context.Context, input string) (string, error)
 		return "", fmt.Errorf("not connected to any LLM provider. Use /connect command first")
 	}
 
-	messages := []Message{
-		{
-			Role:    "system",
-			Content: systemPrompt,
-		},
-		{
-			Role:    "user",
-			Content: input,
-		},
+	// Trim and include prior conversation turns for multi-turn context.
+	if c.history != nil {
+		c.history.Trim(20)
 	}
+	prior := make([]Message, 0)
+	if c.history != nil {
+		prior = c.history.Messages()
+	}
+	messages := make([]Message, 0, len(prior)+2)
+	messages = append(messages, Message{Role: "system", Content: systemPrompt})
+	messages = append(messages, prior...)
+	messages = append(messages, Message{Role: "user", Content: input})
 
 	response, err := p.ChatCompletion(ctx, messages, c.GetToolDefinitions())
 	if err != nil {
 		return "", fmt.Errorf("chat completion failed: %w", err)
+	}
+
+	// Persist this turn so the next call has full context.
+	if c.history != nil {
+		c.history.Append("user", input)
+		c.history.Append("assistant", response.Content)
 	}
 
 	if len(response.ToolCalls) > 0 {
@@ -548,6 +750,7 @@ func (c *CopilotFlow) Process(ctx context.Context, input string) (string, error)
 
 // ProcessStream processes a natural language request with streaming response.
 // Calls onToken for each content chunk received. Returns error if stream fails.
+// Prior conversation turns are prepended automatically for multi-turn context.
 func (c *CopilotFlow) ProcessStream(ctx context.Context, input string, onToken func(string)) error {
 	c.providerMu.RLock()
 	p := c.provider
@@ -557,10 +760,18 @@ func (c *CopilotFlow) ProcessStream(ctx context.Context, input string, onToken f
 		return fmt.Errorf("not connected to any LLM provider. Use /connect command first")
 	}
 
-	messages := []Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: input},
+	// Trim and include prior conversation turns for multi-turn context.
+	if c.history != nil {
+		c.history.Trim(20)
 	}
+	prior := make([]Message, 0)
+	if c.history != nil {
+		prior = c.history.Messages()
+	}
+	messages := make([]Message, 0, len(prior)+2)
+	messages = append(messages, Message{Role: "system", Content: systemPrompt})
+	messages = append(messages, prior...)
+	messages = append(messages, Message{Role: "user", Content: input})
 
 	stream := p.StreamChatCompletion(ctx, messages, c.GetToolDefinitions())
 
@@ -586,7 +797,7 @@ func (c *CopilotFlow) ProcessStream(ctx context.Context, input string, onToken f
 		}
 	}
 
-	// Execute tool call if accumulated
+	// Execute tool call if accumulated.
 	if toolCallAccum != nil {
 		tool, ok := c.tools[toolCallAccum.Name]
 		if !ok {
@@ -600,10 +811,25 @@ func (c *CopilotFlow) ProcessStream(ctx context.Context, input string, onToken f
 			return nil
 		}
 
-		onToken(fmt.Sprintf("\n[%s result: %v]", toolCallAccum.Name, result))
+		resultStr := fmt.Sprintf("\n[%s result: %v]", toolCallAccum.Name, result)
+		onToken(resultStr)
+		fullContent.WriteString(resultStr)
+	}
+
+	// Persist this turn to conversation history for subsequent calls.
+	if c.history != nil {
+		c.history.Append("user", input)
+		c.history.Append("assistant", fullContent.String())
 	}
 
 	return nil
+}
+
+// ClearHistory resets the conversation history, starting a fresh context window.
+func (c *CopilotFlow) ClearHistory() {
+	if c.history != nil {
+		c.history.Clear()
+	}
 }
 
 // systemPrompt is the system prompt for the copilot.

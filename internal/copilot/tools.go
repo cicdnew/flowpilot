@@ -8,6 +8,320 @@ import (
 	"flowpilot/internal/models"
 )
 
+// ── v2 tool handlers ───────────────────────────────────────────────────────
+
+// toolGetTask retrieves full details for a single task by ID.
+// Returns: {id, name, status, url, error, duration_ms, steps_count}
+func (c *CopilotFlow) toolGetTask(ctx context.Context, args map[string]any) (any, error) {
+	taskID, ok := args["task_id"].(string)
+	if !ok || taskID == "" {
+		return nil, fmt.Errorf("task_id must be a non-empty string")
+	}
+
+	task, err := c.db.GetTask(ctx, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("get task: %w", err)
+	}
+
+	var durationMs int64
+	if task.StartedAt != nil && task.CompletedAt != nil {
+		durationMs = task.CompletedAt.Sub(*task.StartedAt).Milliseconds()
+	}
+
+	return map[string]any{
+		"id":          task.ID,
+		"name":        task.Name,
+		"status":      string(task.Status),
+		"url":         task.URL,
+		"error":       task.Error,
+		"duration_ms": durationMs,
+		"steps_count": len(task.Steps),
+	}, nil
+}
+
+// toolCancelTask cancels a pending, queued, or running task.
+// Delegates to queue.Cancel which handles both in-flight cancellation and DB update.
+// Returns: {task_id, message}
+func (c *CopilotFlow) toolCancelTask(ctx context.Context, args map[string]any) (any, error) {
+	taskID, ok := args["task_id"].(string)
+	if !ok || taskID == "" {
+		return nil, fmt.Errorf("task_id must be a non-empty string")
+	}
+
+	if err := c.queue.Cancel(taskID); err != nil {
+		return nil, fmt.Errorf("cancel task %s: %w", taskID, err)
+	}
+
+	return map[string]any{
+		"task_id": taskID,
+		"message": "task cancelled successfully",
+	}, nil
+}
+
+// toolRetryTask resets a failed or cancelled task back to pending and re-queues it.
+// Returns: {task_id, status}
+func (c *CopilotFlow) toolRetryTask(ctx context.Context, args map[string]any) (any, error) {
+	taskID, ok := args["task_id"].(string)
+	if !ok || taskID == "" {
+		return nil, fmt.Errorf("task_id must be a non-empty string")
+	}
+
+	// Verify the task exists before attempting any mutation.
+	if _, err := c.db.GetTask(ctx, taskID); err != nil {
+		return nil, fmt.Errorf("get task: %w", err)
+	}
+
+	// Reset retry counter so the full retry budget is available again.
+	if err := c.db.ResetRetryCount(ctx, taskID); err != nil {
+		return nil, fmt.Errorf("reset retry count: %w", err)
+	}
+
+	// Transition status back to pending so the scheduler accepts it.
+	if err := c.db.UpdateTaskStatus(ctx, taskID, models.TaskStatusPending, ""); err != nil {
+		return nil, fmt.Errorf("reset task status to pending: %w", err)
+	}
+
+	// Fetch the refreshed task and re-submit it to the work queue.
+	task, err := c.db.GetTask(ctx, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("get updated task: %w", err)
+	}
+
+	if err := c.queue.Submit(ctx, *task); err != nil {
+		return nil, fmt.Errorf("submit task to queue: %w", err)
+	}
+
+	return map[string]any{
+		"task_id": taskID,
+		"status":  string(models.TaskStatusPending),
+	}, nil
+}
+
+// toolGetBatchProgress returns aggregate status counters for all tasks in a batch.
+// Returns: {batch_id, total, pending, running, completed, failed}
+func (c *CopilotFlow) toolGetBatchProgress(ctx context.Context, args map[string]any) (any, error) {
+	batchID, ok := args["batch_id"].(string)
+	if !ok || batchID == "" {
+		return nil, fmt.Errorf("batch_id must be a non-empty string")
+	}
+
+	progress, err := c.db.GetBatchProgress(ctx, batchID)
+	if err != nil {
+		return nil, fmt.Errorf("get batch progress: %w", err)
+	}
+
+	return map[string]any{
+		"batch_id":  progress.BatchID,
+		"total":     progress.Total,
+		"pending":   progress.Pending,
+		"running":   progress.Running,
+		"completed": progress.Completed,
+		"failed":    progress.Failed,
+	}, nil
+}
+
+// toolCancelBatch cancels all pending, queued, and running tasks that belong to
+// the given batch. Already-completed or already-failed tasks are left untouched.
+// Returns: {batch_id, cancelled_count}
+func (c *CopilotFlow) toolCancelBatch(ctx context.Context, args map[string]any) (any, error) {
+	batchID, ok := args["batch_id"].(string)
+	if !ok || batchID == "" {
+		return nil, fmt.Errorf("batch_id must be a non-empty string")
+	}
+
+	tasks, err := c.db.ListTasksByBatch(ctx, batchID)
+	if err != nil {
+		return nil, fmt.Errorf("list batch tasks: %w", err)
+	}
+
+	cancelled := 0
+	for _, task := range tasks {
+		switch task.Status {
+		case models.TaskStatusPending, models.TaskStatusQueued, models.TaskStatusRunning:
+			if err := c.queue.Cancel(task.ID); err != nil {
+				// Log the individual failure but continue cancelling remaining tasks.
+				continue
+			}
+			cancelled++
+		}
+	}
+
+	return map[string]any{
+		"batch_id":        batchID,
+		"cancelled_count": cancelled,
+	}, nil
+}
+
+// toolGetTaskLogs fetches step-level execution logs for a task.
+// An optional limit caps the number of returned entries (default 50).
+// Returns: [{step, action, status, message, duration_ms}]
+func (c *CopilotFlow) toolGetTaskLogs(ctx context.Context, args map[string]any) (any, error) {
+	taskID, ok := args["task_id"].(string)
+	if !ok || taskID == "" {
+		return nil, fmt.Errorf("task_id must be a non-empty string")
+	}
+
+	limit := 50
+	if raw, ok := args["limit"].(float64); ok && raw > 0 {
+		limit = int(raw)
+	}
+
+	logs, err := c.db.ListStepLogs(ctx, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("list step logs: %w", err)
+	}
+
+	// Apply limit — keep the first `limit` entries (chronological order from DB).
+	if len(logs) > limit {
+		logs = logs[:limit]
+	}
+
+	result := make([]map[string]any, 0, len(logs))
+	for _, l := range logs {
+		// Derive a human-readable status: "ok" when no error code is set.
+		status := "ok"
+		if l.ErrorCode != "" {
+			status = l.ErrorCode
+		}
+
+		result = append(result, map[string]any{
+			"step":        l.StepIndex,
+			"action":      string(l.Action),
+			"status":      status,
+			"message":     l.ErrorMsg,
+			"duration_ms": l.DurationMs,
+		})
+	}
+	return result, nil
+}
+
+// toolAddProxy adds a new proxy server to the proxy pool.
+// Returns: {proxy_id, server}
+func (c *CopilotFlow) toolAddProxy(ctx context.Context, args map[string]any) (any, error) {
+	server, ok := args["server"].(string)
+	if !ok || server == "" {
+		return nil, fmt.Errorf("server must be a non-empty string (host:port)")
+	}
+
+	protocol, _ := args["protocol"].(string)
+	if protocol == "" {
+		protocol = "http"
+	}
+	username, _ := args["username"].(string)
+	password, _ := args["password"].(string)
+	geo, _ := args["geo"].(string)
+
+	proxyID := fmt.Sprintf("proxy-%d", time.Now().UnixNano())
+
+	proxy := models.Proxy{
+		ID:        proxyID,
+		Server:    server,
+		Protocol:  models.ProxyProtocol(protocol),
+		Username:  username,
+		Password:  password,
+		Geo:       geo,
+		Status:    models.ProxyStatusUnknown,
+		CreatedAt: time.Now(),
+	}
+
+	if err := c.db.CreateProxy(ctx, proxy); err != nil {
+		return nil, fmt.Errorf("create proxy: %w", err)
+	}
+
+	return map[string]any{
+		"proxy_id": proxyID,
+		"server":   server,
+	}, nil
+}
+
+// toolDeleteProxy removes a proxy from the pool by its ID.
+// Returns: {proxy_id, message}
+func (c *CopilotFlow) toolDeleteProxy(ctx context.Context, args map[string]any) (any, error) {
+	proxyID, ok := args["proxy_id"].(string)
+	if !ok || proxyID == "" {
+		return nil, fmt.Errorf("proxy_id must be a non-empty string")
+	}
+
+	if err := c.db.DeleteProxy(ctx, proxyID); err != nil {
+		return nil, fmt.Errorf("delete proxy %s: %w", proxyID, err)
+	}
+
+	return map[string]any{
+		"proxy_id": proxyID,
+		"message":  "proxy deleted successfully",
+	}, nil
+}
+
+// toolListSchedules returns all configured recurring task schedules.
+// Returns: [{id, name, flow_id, cron, enabled, next_run}]
+func (c *CopilotFlow) toolListSchedules(ctx context.Context, args map[string]any) (any, error) {
+	schedules, err := c.db.ListSchedules(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list schedules: %w", err)
+	}
+
+	result := make([]map[string]any, 0, len(schedules))
+	for _, s := range schedules {
+		entry := map[string]any{
+			"id":      s.ID,
+			"name":    s.Name,
+			"flow_id": s.FlowID,
+			"cron":    s.CronExpr,
+			"enabled": s.Enabled,
+		}
+		// next_run is nil until the scheduler computes the first run time.
+		if s.NextRunAt != nil {
+			entry["next_run"] = s.NextRunAt.Format(time.RFC3339)
+		} else {
+			entry["next_run"] = nil
+		}
+		result = append(result, entry)
+	}
+	return result, nil
+}
+
+// toolCreateSchedule creates a new recurring schedule that runs a recorded flow
+// on the provided cron expression.
+// Returns: {schedule_id, name, cron}
+func (c *CopilotFlow) toolCreateSchedule(ctx context.Context, args map[string]any) (any, error) {
+	flowID, ok := args["flow_id"].(string)
+	if !ok || flowID == "" {
+		return nil, fmt.Errorf("flow_id must be a non-empty string")
+	}
+	name, ok := args["name"].(string)
+	if !ok || name == "" {
+		return nil, fmt.Errorf("name must be a non-empty string")
+	}
+	cronExpr, ok := args["cron"].(string)
+	if !ok || cronExpr == "" {
+		return nil, fmt.Errorf("cron must be a non-empty string")
+	}
+
+	scheduleID := fmt.Sprintf("sched-%d", time.Now().UnixNano())
+	now := time.Now()
+
+	schedule := models.Schedule{
+		ID:        scheduleID,
+		Name:      name,
+		CronExpr:  cronExpr,
+		FlowID:    flowID,
+		Enabled:   true,
+		Priority:  models.PriorityNormal,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	if err := c.db.CreateSchedule(ctx, schedule); err != nil {
+		return nil, fmt.Errorf("create schedule: %w", err)
+	}
+
+	return map[string]any{
+		"schedule_id": scheduleID,
+		"name":        name,
+		"cron":        cronExpr,
+	}, nil
+}
+
 // toolCreateBatch implements the create_batch tool.
 func (c *CopilotFlow) toolCreateBatch(ctx context.Context, args map[string]any) (any, error) {
 	flowID, ok := args["flow_id"].(string)

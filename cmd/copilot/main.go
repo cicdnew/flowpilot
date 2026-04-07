@@ -19,9 +19,11 @@ import (
 
 var version = "dev"
 
-// Global copilot instance and root context shared across TUI handlers.
+// Global copilot instance, root context, and TUI program — shared across all
+// message handlers so streaming goroutines can call p.Send() safely.
 var c *copilot.CopilotFlow
 var ctx context.Context
+var p *tea.Program
 
 func main() {
 	dataDir := flag.String("data-dir", "", "data directory (default ~/.flowpilot)")
@@ -94,7 +96,7 @@ func main() {
 	// Wrap in CopilotModel to intercept copilot-specific messages.
 	wrapped := CopilotModel{Model: initialModel}
 
-	p := tea.NewProgram(
+	p = tea.NewProgram(
 		wrapped,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
@@ -169,9 +171,10 @@ func (m CopilotModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Model = m.Model.AddMessage("assistant", "")
 		go func() {
 			err := c.ProcessStream(ctx, msg.Input, func(token string) {
-				// Token streaming — full integration can push via a channel here.
+				p.Send(tui.StreamTokenMsg{Token: token})
 			})
 			if err != nil {
+				p.Send(tui.ErrorMsg{Err: err})
 				log.Printf("[copilot] stream error: %v", err)
 			}
 		}()

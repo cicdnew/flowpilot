@@ -4,9 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"flowpilot/internal/browser"
+	"flowpilot/internal/crypto"
+	"flowpilot/internal/database"
+	"flowpilot/internal/models"
+	"flowpilot/internal/queue"
 )
 
 // ── StreamChunk type tests ─────────────────────────────────────────────────
@@ -658,5 +665,705 @@ func TestProcess_PassesInputAsUserMessage(t *testing.T) {
 	}
 	if last.Content != wantInput {
 		t.Errorf("last message content = %q; want %q", last.Content, wantInput)
+	}
+}
+
+// ── Integration test helpers ───────────────────────────────────────────────
+//
+// These helpers create real SQLite databases in temporary directories so that
+// tool handler implementations can be exercised end-to-end without mocking
+// the database layer.
+
+// newTestFlowWithDB creates a CopilotFlow backed by a real SQLite database in a
+// temporary directory. registerTools() is called so all tool handlers are wired.
+// The DB is closed automatically via t.Cleanup.
+func newTestFlowWithDB(t *testing.T, mock LLMProvider) *CopilotFlow {
+	t.Helper()
+	dir := t.TempDir()
+
+	if err := crypto.InitKey(dir); err != nil {
+		t.Fatalf("newTestFlowWithDB: init crypto: %v", err)
+	}
+
+	db, err := database.New(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("newTestFlowWithDB: open db: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	flow := &CopilotFlow{
+		db:       db,
+		provider: mock,
+		tools:    make(map[string]Tool),
+		history:  &ConversationHistory{},
+	}
+	flow.registerTools()
+	return flow
+}
+
+// newTestFlowWithQueue creates a CopilotFlow with a real DB and a zero-worker
+// queue. Zero workers means submitted tasks are enqueued but never executed,
+// keeping tests deterministic and free of browser-launch side effects.
+func newTestFlowWithQueue(t *testing.T, mock LLMProvider) *CopilotFlow {
+	t.Helper()
+	dir := t.TempDir()
+
+	if err := crypto.InitKey(dir); err != nil {
+		t.Fatalf("newTestFlowWithQueue: init crypto: %v", err)
+	}
+
+	db, err := database.New(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("newTestFlowWithQueue: open db: %v", err)
+	}
+
+	runner, err := browser.NewRunner(filepath.Join(dir, "screenshots"))
+	if err != nil {
+		t.Fatalf("newTestFlowWithQueue: init runner: %v", err)
+	}
+
+	// workerCount=0 ensures no goroutines process tasks — no real browser is launched.
+	q := queue.New(db, runner, 0, func(models.TaskEvent) {})
+
+	t.Cleanup(func() {
+		q.Stop()
+		_ = db.Close()
+	})
+
+	flow := &CopilotFlow{
+		db:       db,
+		queue:    q,
+		provider: mock,
+		tools:    make(map[string]Tool),
+		history:  &ConversationHistory{},
+	}
+	flow.registerTools()
+	return flow
+}
+
+// ── Multi-turn conversation history ───────────────────────────────────────
+
+// TestProcess_ConversationHistory_SecondCallIncludesFirstTurn verifies that
+// the second Process call prepends the first turn (user + assistant messages)
+// in the message slice forwarded to the LLM provider.
+func TestProcess_ConversationHistory_SecondCallIncludesFirstTurn(t *testing.T) {
+	var capturedMessages [][]Message
+
+	mock := &MockLLMProvider{
+		ChatCompletionFunc: func(_ context.Context, messages []Message, _ []ToolDefinition) (ChatResponse, error) {
+			snapshot := make([]Message, len(messages))
+			copy(snapshot, messages)
+			capturedMessages = append(capturedMessages, snapshot)
+			return ChatResponse{Content: "ok"}, nil
+		},
+	}
+	flow := newTestFlow(mock)
+	flow.history = &ConversationHistory{} // ensure fresh
+
+	if _, err := flow.Process(context.Background(), "first question"); err != nil {
+		t.Fatalf("first Process: %v", err)
+	}
+	if _, err := flow.Process(context.Background(), "second question"); err != nil {
+		t.Fatalf("second Process: %v", err)
+	}
+
+	if len(capturedMessages) < 2 {
+		t.Fatalf("expected 2 LLM calls; got %d", len(capturedMessages))
+	}
+
+	secondCall := capturedMessages[1]
+	// Must contain: system + user("first question") + assistant("ok") + user("second question")
+	if len(secondCall) < 4 {
+		t.Errorf("second call has %d messages; want >= 4 (system+prior user+prior assistant+new user)", len(secondCall))
+		return
+	}
+
+	// The last message must be the current user turn.
+	last := secondCall[len(secondCall)-1]
+	if last.Role != "user" || last.Content != "second question" {
+		t.Errorf("last message = {%s %q}; want {user \"second question\"}", last.Role, last.Content)
+	}
+
+	// Prior turns must contain the first user message.
+	foundPriorUser := false
+	for _, msg := range secondCall[1 : len(secondCall)-1] {
+		if msg.Role == "user" && msg.Content == "first question" {
+			foundPriorUser = true
+		}
+	}
+	if !foundPriorUser {
+		t.Error("second LLM call is missing prior user turn (\"first question\")")
+	}
+}
+
+// ── Tool registration count ───────────────────────────────────────────────
+
+// TestGetToolDefinitions_CountIs16 asserts that exactly 16 tools are registered
+// after registerTools(): 6 original + 10 added in v2.
+func TestGetToolDefinitions_CountIs16(t *testing.T) {
+	flow := newTestFlow(&MockLLMProvider{})
+	flow.registerTools()
+
+	defs := flow.GetToolDefinitions()
+	if len(defs) != 16 {
+		var names []string
+		for _, d := range defs {
+			names = append(names, d.Function.Name)
+		}
+		t.Errorf("tool count = %d; want 16 (6 original + 10 new)\nregistered: %v", len(defs), names)
+	}
+}
+
+// ── get_task ──────────────────────────────────────────────────────────────
+
+// TestToolGetTask_ReturnsTaskFields verifies that toolGetTask returns the
+// expected field set populated with the correct values from the database.
+func TestToolGetTask_ReturnsTaskFields(t *testing.T) {
+	flow := newTestFlowWithDB(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	now := time.Now()
+	startedAt := now.Add(time.Second)
+	completedAt := startedAt.Add(2 * time.Second)
+	task := models.Task{
+		ID:          "tgt-1",
+		Name:        "sample task",
+		URL:         "https://example.com",
+		Status:      models.TaskStatusCompleted,
+		Steps:       []models.TaskStep{{Action: models.ActionNavigate}, {Action: models.ActionClick}},
+		CreatedAt:   now,
+		StartedAt:   &startedAt,
+		CompletedAt: &completedAt,
+	}
+	if err := flow.db.CreateTask(ctx, task); err != nil {
+		t.Fatalf("seed task: %v", err)
+	}
+
+	result, err := flow.tools["get_task"].Handler(ctx, map[string]any{"task_id": "tgt-1"})
+	if err != nil {
+		t.Fatalf("toolGetTask: %v", err)
+	}
+
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T; want map[string]any", result)
+	}
+	if m["id"] != "tgt-1" {
+		t.Errorf("id = %v; want %q", m["id"], "tgt-1")
+	}
+	if m["name"] != "sample task" {
+		t.Errorf("name = %v; want %q", m["name"], "sample task")
+	}
+	if m["url"] != "https://example.com" {
+		t.Errorf("url = %v; want %q", m["url"], "https://example.com")
+	}
+	if got, _ := m["steps_count"].(int); got != 2 {
+		t.Errorf("steps_count = %v; want 2", m["steps_count"])
+	}
+	if _, ok := m["duration_ms"]; !ok {
+		t.Error("duration_ms field missing from result")
+	}
+}
+
+// TestToolGetTask_MissingTaskID verifies that an empty/absent task_id returns
+// a descriptive error before any DB call is made.
+func TestToolGetTask_MissingTaskID(t *testing.T) {
+	flow := newTestFlowWithDB(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	_, err := flow.tools["get_task"].Handler(ctx, map[string]any{})
+	if err == nil {
+		t.Fatal("expected error for missing task_id argument")
+	}
+	if !strings.Contains(err.Error(), "task_id") {
+		t.Errorf("error = %q; want message mentioning task_id", err.Error())
+	}
+}
+
+// ── cancel_task ───────────────────────────────────────────────────────────
+
+// TestToolCancelTask_CancelsSuccessfully verifies that toolCancelTask updates
+// the task status to cancelled and returns the expected response fields.
+func TestToolCancelTask_CancelsSuccessfully(t *testing.T) {
+	flow := newTestFlowWithQueue(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	task := models.Task{
+		ID:        "tct-1",
+		Name:      "cancellable task",
+		URL:       "https://example.com",
+		Status:    models.TaskStatusPending,
+		Steps:     []models.TaskStep{{Action: models.ActionNavigate}},
+		CreatedAt: time.Now(),
+	}
+	if err := flow.db.CreateTask(ctx, task); err != nil {
+		t.Fatalf("seed task: %v", err)
+	}
+
+	result, err := flow.tools["cancel_task"].Handler(ctx, map[string]any{"task_id": "tct-1"})
+	if err != nil {
+		t.Fatalf("toolCancelTask: %v", err)
+	}
+
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T; want map[string]any", result)
+	}
+	if m["task_id"] != "tct-1" {
+		t.Errorf("task_id = %v; want %q", m["task_id"], "tct-1")
+	}
+	if _, hasMsg := m["message"]; !hasMsg {
+		t.Error("result missing message field")
+	}
+}
+
+// TestToolCancelTask_MissingTaskID verifies argument validation.
+func TestToolCancelTask_MissingTaskID(t *testing.T) {
+	flow := newTestFlowWithQueue(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	_, err := flow.tools["cancel_task"].Handler(ctx, map[string]any{})
+	if err == nil {
+		t.Fatal("expected error for missing task_id argument")
+	}
+}
+
+// ── retry_task ────────────────────────────────────────────────────────────
+
+// TestToolRetryTask_ResetsPendingStatus verifies that toolRetryTask resets a
+// failed task's status to pending and clears its retry count.
+func TestToolRetryTask_ResetsPendingStatus(t *testing.T) {
+	flow := newTestFlowWithQueue(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	task := models.Task{
+		ID:         "trt-1",
+		Name:       "failed task",
+		URL:        "https://example.com",
+		Status:     models.TaskStatusFailed,
+		Error:      "network error",
+		RetryCount: 2,
+		MaxRetries: 3,
+		Steps:      []models.TaskStep{{Action: models.ActionNavigate}},
+		CreatedAt:  time.Now(),
+	}
+	if err := flow.db.CreateTask(ctx, task); err != nil {
+		t.Fatalf("seed task: %v", err)
+	}
+
+	result, err := flow.tools["retry_task"].Handler(ctx, map[string]any{"task_id": "trt-1"})
+	if err != nil {
+		t.Fatalf("toolRetryTask: %v", err)
+	}
+
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T; want map[string]any", result)
+	}
+	if m["task_id"] != "trt-1" {
+		t.Errorf("task_id = %v; want %q", m["task_id"], "trt-1")
+	}
+	if m["status"] != string(models.TaskStatusPending) {
+		t.Errorf("status = %v; want %q", m["status"], models.TaskStatusPending)
+	}
+
+	// Verify the DB reflects the reset state.
+	updated, err := flow.db.GetTask(ctx, "trt-1")
+	if err != nil {
+		t.Fatalf("get updated task: %v", err)
+	}
+	if updated.Status != models.TaskStatusPending {
+		t.Errorf("DB status = %q; want %q", updated.Status, models.TaskStatusPending)
+	}
+	if updated.RetryCount != 0 {
+		t.Errorf("DB retry_count = %d; want 0", updated.RetryCount)
+	}
+}
+
+// ── get_batch_progress ────────────────────────────────────────────────────
+
+// TestToolGetBatchProgress_CountsByStatus seeds tasks with different statuses
+// into one batch and verifies that the progress counters are correct.
+func TestToolGetBatchProgress_CountsByStatus(t *testing.T) {
+	flow := newTestFlowWithDB(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	batchID := "batch-progress-1"
+	statuses := []models.TaskStatus{
+		models.TaskStatusPending,
+		models.TaskStatusPending,
+		models.TaskStatusCompleted,
+		models.TaskStatusFailed,
+	}
+	for i, s := range statuses {
+		task := models.Task{
+			ID:        fmt.Sprintf("tbp-%d", i),
+			Name:      fmt.Sprintf("batch task %d", i),
+			URL:       "https://example.com",
+			Status:    s,
+			BatchID:   batchID,
+			Steps:     []models.TaskStep{{Action: models.ActionNavigate}},
+			CreatedAt: time.Now(),
+		}
+		if err := flow.db.CreateTask(ctx, task); err != nil {
+			t.Fatalf("seed task %d: %v", i, err)
+		}
+	}
+
+	result, err := flow.tools["get_batch_progress"].Handler(ctx, map[string]any{"batch_id": batchID})
+	if err != nil {
+		t.Fatalf("toolGetBatchProgress: %v", err)
+	}
+
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T; want map[string]any", result)
+	}
+	if m["batch_id"] != batchID {
+		t.Errorf("batch_id = %v; want %q", m["batch_id"], batchID)
+	}
+	if got, _ := m["total"].(int); got != 4 {
+		t.Errorf("total = %v; want 4", m["total"])
+	}
+	if got, _ := m["pending"].(int); got != 2 {
+		t.Errorf("pending = %v; want 2", m["pending"])
+	}
+	if got, _ := m["completed"].(int); got != 1 {
+		t.Errorf("completed = %v; want 1", m["completed"])
+	}
+	if got, _ := m["failed"].(int); got != 1 {
+		t.Errorf("failed = %v; want 1", m["failed"])
+	}
+}
+
+// ── cancel_batch ──────────────────────────────────────────────────────────
+
+// TestToolCancelBatch_CancelsActiveTasks verifies that only pending/queued/running
+// tasks in the batch are cancelled, not already-completed ones.
+func TestToolCancelBatch_CancelsActiveTasks(t *testing.T) {
+	flow := newTestFlowWithQueue(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	batchID := "batch-cancel-1"
+	seeds := []struct {
+		id     string
+		status models.TaskStatus
+	}{
+		{"tcb-1", models.TaskStatusPending},
+		{"tcb-2", models.TaskStatusPending},
+		{"tcb-3", models.TaskStatusCompleted}, // must NOT be cancelled
+	}
+	for _, s := range seeds {
+		task := models.Task{
+			ID:        s.id,
+			Name:      "batch cancel task",
+			URL:       "https://example.com",
+			Status:    s.status,
+			BatchID:   batchID,
+			Steps:     []models.TaskStep{{Action: models.ActionNavigate}},
+			CreatedAt: time.Now(),
+		}
+		if err := flow.db.CreateTask(ctx, task); err != nil {
+			t.Fatalf("seed %s: %v", s.id, err)
+		}
+	}
+
+	result, err := flow.tools["cancel_batch"].Handler(ctx, map[string]any{"batch_id": batchID})
+	if err != nil {
+		t.Fatalf("toolCancelBatch: %v", err)
+	}
+
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T; want map[string]any", result)
+	}
+	if m["batch_id"] != batchID {
+		t.Errorf("batch_id = %v; want %q", m["batch_id"], batchID)
+	}
+	if got, _ := m["cancelled_count"].(int); got != 2 {
+		t.Errorf("cancelled_count = %v; want 2 (only pending tasks)", m["cancelled_count"])
+	}
+}
+
+// ── get_task_logs ─────────────────────────────────────────────────────────
+
+// TestToolGetTaskLogs_ReturnsStepLogs verifies that step logs are returned with
+// the expected field structure.
+func TestToolGetTaskLogs_ReturnsStepLogs(t *testing.T) {
+	flow := newTestFlowWithDB(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	task := models.Task{
+		ID:        "tgl-1",
+		Name:      "log task",
+		URL:       "https://example.com",
+		Status:    models.TaskStatusCompleted,
+		Steps:     []models.TaskStep{{Action: models.ActionNavigate}},
+		CreatedAt: time.Now(),
+	}
+	if err := flow.db.CreateTask(ctx, task); err != nil {
+		t.Fatalf("seed task: %v", err)
+	}
+	if err := flow.db.InsertStepLogs(ctx, "tgl-1", []models.StepLog{
+		{TaskID: "tgl-1", StepIndex: 0, Action: models.ActionNavigate, DurationMs: 100, StartedAt: time.Now()},
+		{TaskID: "tgl-1", StepIndex: 1, Action: models.ActionClick, DurationMs: 50, StartedAt: time.Now()},
+	}); err != nil {
+		t.Fatalf("seed step logs: %v", err)
+	}
+
+	result, err := flow.tools["get_task_logs"].Handler(ctx, map[string]any{"task_id": "tgl-1", "limit": float64(10)})
+	if err != nil {
+		t.Fatalf("toolGetTaskLogs: %v", err)
+	}
+
+	entries, ok := result.([]map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T; want []map[string]any", result)
+	}
+	if len(entries) != 2 {
+		t.Errorf("len(entries) = %d; want 2", len(entries))
+		return
+	}
+	for _, key := range []string{"step", "action", "status", "message", "duration_ms"} {
+		if _, ok := entries[0][key]; !ok {
+			t.Errorf("entry missing field %q", key)
+		}
+	}
+}
+
+// TestToolGetTaskLogs_LimitApplied verifies that the limit argument caps the
+// number of returned log entries.
+func TestToolGetTaskLogs_LimitApplied(t *testing.T) {
+	flow := newTestFlowWithDB(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	task := models.Task{
+		ID:        "tgl-lim-1",
+		Name:      "log limit task",
+		URL:       "https://example.com",
+		Status:    models.TaskStatusCompleted,
+		Steps:     []models.TaskStep{{Action: models.ActionNavigate}},
+		CreatedAt: time.Now(),
+	}
+	if err := flow.db.CreateTask(ctx, task); err != nil {
+		t.Fatalf("seed task: %v", err)
+	}
+	var logSlice []models.StepLog
+	for i := 0; i < 5; i++ {
+		logSlice = append(logSlice, models.StepLog{
+			TaskID: "tgl-lim-1", StepIndex: i, Action: models.ActionNavigate,
+			DurationMs: int64(i * 10), StartedAt: time.Now(),
+		})
+	}
+	if err := flow.db.InsertStepLogs(ctx, "tgl-lim-1", logSlice); err != nil {
+		t.Fatalf("seed step logs: %v", err)
+	}
+
+	result, err := flow.tools["get_task_logs"].Handler(ctx, map[string]any{"task_id": "tgl-lim-1", "limit": float64(2)})
+	if err != nil {
+		t.Fatalf("toolGetTaskLogs with limit: %v", err)
+	}
+
+	entries, ok := result.([]map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T; want []map[string]any", result)
+	}
+	if len(entries) != 2 {
+		t.Errorf("len(entries) = %d; want 2 (limit applied)", len(entries))
+	}
+}
+
+// ── add_proxy ─────────────────────────────────────────────────────────────
+
+// TestToolAddProxy_CreatesProxy verifies that toolAddProxy inserts the proxy
+// into the database and returns proxy_id and server in the response.
+func TestToolAddProxy_CreatesProxy(t *testing.T) {
+	flow := newTestFlowWithDB(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	result, err := flow.tools["add_proxy"].Handler(ctx, map[string]any{
+		"server":   "proxy.example.com:8080",
+		"protocol": "http",
+		"username": "user1",
+		"password": "pass1",
+		"geo":      "US",
+	})
+	if err != nil {
+		t.Fatalf("toolAddProxy: %v", err)
+	}
+
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T; want map[string]any", result)
+	}
+	if m["server"] != "proxy.example.com:8080" {
+		t.Errorf("server = %v; want %q", m["server"], "proxy.example.com:8080")
+	}
+	proxyID, _ := m["proxy_id"].(string)
+	if proxyID == "" {
+		t.Error("proxy_id must be a non-empty string")
+	}
+
+	// Verify the proxy was persisted.
+	proxies, err := flow.db.ListProxies(ctx)
+	if err != nil {
+		t.Fatalf("list proxies: %v", err)
+	}
+	if len(proxies) != 1 {
+		t.Errorf("proxy count = %d; want 1", len(proxies))
+	}
+}
+
+// TestToolAddProxy_MissingServer verifies argument validation.
+func TestToolAddProxy_MissingServer(t *testing.T) {
+	flow := newTestFlowWithDB(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	_, err := flow.tools["add_proxy"].Handler(ctx, map[string]any{})
+	if err == nil {
+		t.Fatal("expected error for missing server argument")
+	}
+}
+
+// ── delete_proxy ──────────────────────────────────────────────────────────
+
+// TestToolDeleteProxy_RemovesProxy creates a proxy via toolAddProxy then
+// deletes it via toolDeleteProxy, verifying the DB is empty afterwards.
+func TestToolDeleteProxy_RemovesProxy(t *testing.T) {
+	flow := newTestFlowWithDB(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	addResult, err := flow.tools["add_proxy"].Handler(ctx, map[string]any{
+		"server":   "todelete.example.com:3128",
+		"protocol": "http",
+	})
+	if err != nil {
+		t.Fatalf("add proxy for delete test: %v", err)
+	}
+	proxyID := addResult.(map[string]any)["proxy_id"].(string)
+
+	result, err := flow.tools["delete_proxy"].Handler(ctx, map[string]any{"proxy_id": proxyID})
+	if err != nil {
+		t.Fatalf("toolDeleteProxy: %v", err)
+	}
+
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T; want map[string]any", result)
+	}
+	if m["proxy_id"] != proxyID {
+		t.Errorf("proxy_id = %v; want %q", m["proxy_id"], proxyID)
+	}
+
+	// Verify the proxy is gone from the database.
+	proxies, err := flow.db.ListProxies(ctx)
+	if err != nil {
+		t.Fatalf("list proxies after delete: %v", err)
+	}
+	if len(proxies) != 0 {
+		t.Errorf("proxy count after delete = %d; want 0", len(proxies))
+	}
+}
+
+// ── list_schedules ────────────────────────────────────────────────────────
+
+// TestToolListSchedules_ReturnsSchedules seeds two schedules and verifies that
+// toolListSchedules returns them with the required fields.
+func TestToolListSchedules_ReturnsSchedules(t *testing.T) {
+	flow := newTestFlowWithDB(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	for i := 0; i < 2; i++ {
+		s := models.Schedule{
+			ID:        fmt.Sprintf("sched-ls-%d", i),
+			Name:      fmt.Sprintf("schedule %d", i),
+			CronExpr:  "0 * * * *",
+			FlowID:    "flow-1",
+			Enabled:   true,
+			Priority:  models.PriorityNormal,
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		}
+		if err := flow.db.CreateSchedule(ctx, s); err != nil {
+			t.Fatalf("seed schedule %d: %v", i, err)
+		}
+	}
+
+	result, err := flow.tools["list_schedules"].Handler(ctx, map[string]any{})
+	if err != nil {
+		t.Fatalf("toolListSchedules: %v", err)
+	}
+
+	entries, ok := result.([]map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T; want []map[string]any", result)
+	}
+	if len(entries) != 2 {
+		t.Errorf("schedule count = %d; want 2", len(entries))
+		return
+	}
+	for i, e := range entries {
+		for _, key := range []string{"id", "name", "flow_id", "cron", "enabled"} {
+			if _, ok := e[key]; !ok {
+				t.Errorf("entry[%d] missing required field %q", i, key)
+			}
+		}
+	}
+}
+
+// ── create_schedule ───────────────────────────────────────────────────────
+
+// TestToolCreateSchedule_CreatesSchedule verifies that toolCreateSchedule
+// persists the schedule and returns the expected response fields.
+func TestToolCreateSchedule_CreatesSchedule(t *testing.T) {
+	flow := newTestFlowWithDB(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	result, err := flow.tools["create_schedule"].Handler(ctx, map[string]any{
+		"flow_id": "flow-cs-1",
+		"name":    "nightly job",
+		"cron":    "0 2 * * *",
+	})
+	if err != nil {
+		t.Fatalf("toolCreateSchedule: %v", err)
+	}
+
+	m, ok := result.(map[string]any)
+	if !ok {
+		t.Fatalf("result type = %T; want map[string]any", result)
+	}
+	scheduleID, _ := m["schedule_id"].(string)
+	if scheduleID == "" {
+		t.Error("schedule_id must be a non-empty string")
+	}
+	if m["name"] != "nightly job" {
+		t.Errorf("name = %v; want %q", m["name"], "nightly job")
+	}
+	if m["cron"] != "0 2 * * *" {
+		t.Errorf("cron = %v; want %q", m["cron"], "0 2 * * *")
+	}
+
+	// Verify the schedule was persisted in the database.
+	schedules, err := flow.db.ListSchedules(ctx)
+	if err != nil {
+		t.Fatalf("list schedules: %v", err)
+	}
+	if len(schedules) != 1 {
+		t.Errorf("schedule count = %d; want 1", len(schedules))
+	}
+}
+
+// TestToolCreateSchedule_MissingFlowID verifies that a missing flow_id
+// produces an error before any database call.
+func TestToolCreateSchedule_MissingFlowID(t *testing.T) {
+	flow := newTestFlowWithDB(t, &MockLLMProvider{})
+	ctx := context.Background()
+
+	_, err := flow.tools["create_schedule"].Handler(ctx, map[string]any{
+		"name": "bad schedule",
+		"cron": "0 * * * *",
+	})
+	if err == nil {
+		t.Fatal("expected error for missing flow_id argument")
 	}
 }

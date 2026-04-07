@@ -175,6 +175,7 @@ func newTestFlow(provider LLMProvider) *CopilotFlow {
 	return &CopilotFlow{
 		provider: provider,
 		tools:    make(map[string]Tool),
+		history:  &ConversationHistory{},
 	}
 }
 

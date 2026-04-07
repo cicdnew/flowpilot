@@ -2,6 +2,8 @@ package tui
 
 import (
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func TestInitialModel(t *testing.T) {
@@ -186,5 +188,199 @@ func TestParseCommand(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// ── StreamTokenMsg ────────────────────────────────────────────────────────
+
+// TestModel_StreamTokenMsg_AppendsToLastAssistantMessage verifies that
+// receiving a StreamTokenMsg appends the token to the last assistant message's
+// content, leaving other messages untouched.
+func TestModel_StreamTokenMsg_AppendsToLastAssistantMessage(t *testing.T) {
+	m := InitialModel()
+	m = m.AddMessage("user", "hello")
+	m = m.AddMessage("assistant", "start")
+
+	tea.NewProgram(m) // compile-time proof that Model satisfies tea.Model
+	// Process the StreamTokenMsg through appendToLastAssistantMessage directly
+	// (Update delegates to it — we test the helper method directly here so the
+	// test does not depend on a running tea.Program loop).
+	m = m.appendToLastAssistantMessage(" world")
+
+	if len(m.messages) != 2 {
+		t.Fatalf("message count = %d; want 2", len(m.messages))
+	}
+	if m.messages[1].Content != "start world" {
+		t.Errorf("assistant content = %q; want %q", m.messages[1].Content, "start world")
+	}
+	// User message must be untouched.
+	if m.messages[0].Content != "hello" {
+		t.Errorf("user content = %q; want %q (must not be modified)", m.messages[0].Content, "hello")
+	}
+}
+
+// TestModel_StreamTokenMsg_MultipleTokens verifies sequential token delivery
+// builds the full response incrementally.
+func TestModel_StreamTokenMsg_MultipleTokens(t *testing.T) {
+	m := InitialModel()
+	m = m.AddMessage("assistant", "")
+
+	tokens := []string{"Hello", ",", " world", "!"}
+	for _, tok := range tokens {
+		m = m.appendToLastAssistantMessage(tok)
+	}
+
+	if got := m.messages[0].Content; got != "Hello, world!" {
+		t.Errorf("assembled content = %q; want %q", got, "Hello, world!")
+	}
+}
+
+// TestModel_StreamTokenMsg_NoAssistantMessage verifies that the helper is a
+// safe no-op when there is no assistant message to append to.
+func TestModel_StreamTokenMsg_NoAssistantMessage(t *testing.T) {
+	m := InitialModel()
+	m = m.AddMessage("user", "hello")
+
+	// Must not panic or modify any message.
+	m = m.appendToLastAssistantMessage("orphaned token")
+
+	if len(m.messages) != 1 {
+		t.Fatalf("message count = %d; want 1 (no new message added)", len(m.messages))
+	}
+	if m.messages[0].Content != "hello" {
+		t.Errorf("user content = %q; want %q (must not be modified)", m.messages[0].Content, "hello")
+	}
+}
+
+// TestModel_StreamTokenMsg_FindsLastAssistant verifies that the helper targets
+// the LAST assistant message, not an earlier one, when multiple assistant
+// messages exist in the history.
+func TestModel_StreamTokenMsg_FindsLastAssistant(t *testing.T) {
+	m := InitialModel()
+	m = m.AddMessage("assistant", "first response")
+	m = m.AddMessage("user", "follow-up")
+	m = m.AddMessage("assistant", "second response")
+
+	m = m.appendToLastAssistantMessage(" — appended")
+
+	if m.messages[0].Content != "first response" {
+		t.Errorf("first assistant content = %q; want unchanged", m.messages[0].Content)
+	}
+	if m.messages[2].Content != "second response — appended" {
+		t.Errorf("last assistant content = %q; want %q", m.messages[2].Content, "second response — appended")
+	}
+}
+
+// ── Cursor movement ───────────────────────────────────────────────────────
+
+// TestModel_CursorLeft_MovesLeft verifies that pressing Left decrements the
+// cursor by one rune position.
+func TestModel_CursorLeft_MovesLeft(t *testing.T) {
+	m := InitialModel()
+	m.input = "hello"
+	m.cursor = 5 // end of string
+
+	newM, _ := m.handleCursorLeft()
+	updated := newM.(Model)
+
+	if updated.cursor != 4 {
+		t.Errorf("cursor = %d; want 4", updated.cursor)
+	}
+}
+
+// TestModel_CursorLeft_ClampsAtZero verifies that the cursor cannot go below 0.
+func TestModel_CursorLeft_ClampsAtZero(t *testing.T) {
+	m := InitialModel()
+	m.input = "hi"
+	m.cursor = 0
+
+	newM, _ := m.handleCursorLeft()
+	updated := newM.(Model)
+
+	if updated.cursor != 0 {
+		t.Errorf("cursor = %d; want 0 (clamped)", updated.cursor)
+	}
+}
+
+// TestModel_CursorRight_MovesRight verifies that pressing Right increments the
+// cursor by one rune position.
+func TestModel_CursorRight_MovesRight(t *testing.T) {
+	m := InitialModel()
+	m.input = "hello"
+	m.cursor = 0
+
+	newM, _ := m.handleCursorRight()
+	updated := newM.(Model)
+
+	if updated.cursor != 1 {
+		t.Errorf("cursor = %d; want 1", updated.cursor)
+	}
+}
+
+// TestModel_CursorRight_ClampsAtEnd verifies that the cursor cannot exceed
+// len(input).
+func TestModel_CursorRight_ClampsAtEnd(t *testing.T) {
+	m := InitialModel()
+	m.input = "hi"
+	m.cursor = 2 // already at end
+
+	newM, _ := m.handleCursorRight()
+	updated := newM.(Model)
+
+	if updated.cursor != 2 {
+		t.Errorf("cursor = %d; want 2 (clamped at end)", updated.cursor)
+	}
+}
+
+// TestModel_CursorRoundTrip verifies that moving left then right returns the
+// cursor to its original position.
+func TestModel_CursorRoundTrip(t *testing.T) {
+	m := InitialModel()
+	m.input = "abcde"
+	m.cursor = 3
+
+	m1, _ := m.handleCursorLeft()
+	m2, _ := m1.(Model).handleCursorRight()
+	final := m2.(Model)
+
+	if final.cursor != 3 {
+		t.Errorf("cursor after left+right = %d; want 3 (original position)", final.cursor)
+	}
+}
+
+// TestModel_HandleRunes_InsertsAtCursor verifies that typed characters are
+// inserted at the current cursor position, not always appended.
+func TestModel_HandleRunes_InsertsAtCursor(t *testing.T) {
+	m := InitialModel()
+	m.input = "hllo"
+	m.cursor = 1 // between 'h' and 'l'
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}}
+	newM, _ := m.handleRunes(msg)
+	updated := newM.(Model)
+
+	if updated.input != "hello" {
+		t.Errorf("input = %q; want %q", updated.input, "hello")
+	}
+	if updated.cursor != 2 {
+		t.Errorf("cursor = %d; want 2 (advanced past inserted rune)", updated.cursor)
+	}
+}
+
+// TestModel_HandleBackspace_DeletesAtCursor verifies that Backspace removes the
+// character immediately to the left of the cursor, not always the last char.
+func TestModel_HandleBackspace_DeletesAtCursor(t *testing.T) {
+	m := InitialModel()
+	m.input = "helo"
+	m.cursor = 3 // after the extra 'l': h-e-l-|o
+
+	newM, _ := m.handleBackspace()
+	updated := newM.(Model)
+
+	if updated.input != "heo" {
+		t.Errorf("input after backspace = %q; want %q", updated.input, "heo")
+	}
+	if updated.cursor != 2 {
+		t.Errorf("cursor = %d; want 2", updated.cursor)
 	}
 }

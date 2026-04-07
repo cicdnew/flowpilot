@@ -50,9 +50,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyDown:
 			return m.handleDown()
 
-		case tea.KeyLeft, tea.KeyRight:
-			// TODO: cursor movement within input
-			return m, nil
+		case tea.KeyLeft:
+			return m.handleCursorLeft()
+
+		case tea.KeyRight:
+			return m.handleCursorRight()
 
 		case tea.KeyRunes:
 			return m.handleRunes(msg)
@@ -70,6 +72,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case StreamDoneMsg:
 		return m.handleStreamDone()
+
+	case StreamTokenMsg:
+		// Append the token to the last assistant message in history.
+		return m.appendToLastAssistantMessage(msg.Token), nil
 
 	case ErrorMsg:
 		m.err = msg.Err
@@ -111,9 +117,10 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 			m.history = append(m.history, m.input)
 			m.histIndex = -1
 
-			// Clear input
+			// Clear input and reset cursor to start.
 			input := m.input
 			m.input = ""
+			m.cursor = 0
 
 			// Start streaming
 			m.streaming = true
@@ -128,6 +135,7 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 }
 
 // handleBackspace processes Backspace key.
+// In chat mode it deletes the rune immediately to the left of the cursor.
 func (m Model) handleBackspace() (tea.Model, tea.Cmd) {
 	switch m.viewMode {
 	case ViewModeCommandPalette:
@@ -135,11 +143,22 @@ func (m Model) handleBackspace() (tea.Model, tea.Cmd) {
 			m.cmdFilter = m.cmdFilter[:len(m.cmdFilter)-1]
 		}
 	case ViewModeChat:
-		if len(m.input) > 0 {
-			m.input = m.input[:len(m.input)-1]
+		if m.cursor > 0 && len(m.input) > 0 {
+			// Find the start of the rune that ends at m.cursor.
+			runeStart := m.cursor - 1
+			for runeStart > 0 && isRuneContinuation(m.input[runeStart]) {
+				runeStart--
+			}
+			m.input = m.input[:runeStart] + m.input[m.cursor:]
+			m.cursor = runeStart
 		}
 	}
 	return m, nil
+}
+
+// isRuneContinuation reports whether b is a UTF-8 continuation byte (10xxxxxx).
+func isRuneContinuation(b byte) bool {
+	return b&0xC0 == 0x80
 }
 
 // handleUp processes Up arrow.
@@ -194,7 +213,7 @@ func (m Model) handleDown() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleRunes processes character input.
+// handleRunes processes character input, inserting at the cursor position.
 func (m Model) handleRunes(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	char := string(msg.Runes)
 
@@ -204,7 +223,33 @@ func (m Model) handleRunes(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cmdIndex = 0 // reset selection on filter change
 	case ViewModeChat:
 		if !m.streaming {
-			m.input += char
+			// Insert the new rune(s) at the cursor position.
+			m.input = m.input[:m.cursor] + char + m.input[m.cursor:]
+			m.cursor += len(char)
+		}
+	}
+	return m, nil
+}
+
+// handleCursorLeft moves the cursor one rune to the left (clamped to 0).
+func (m Model) handleCursorLeft() (tea.Model, tea.Cmd) {
+	if m.viewMode == ViewModeChat && m.cursor > 0 {
+		// Step back past any UTF-8 continuation bytes to land on the rune start.
+		m.cursor--
+		for m.cursor > 0 && isRuneContinuation(m.input[m.cursor]) {
+			m.cursor--
+		}
+	}
+	return m, nil
+}
+
+// handleCursorRight moves the cursor one rune to the right (clamped to len(input)).
+func (m Model) handleCursorRight() (tea.Model, tea.Cmd) {
+	if m.viewMode == ViewModeChat && m.cursor < len(m.input) {
+		// Advance past the current rune (which may be multi-byte).
+		m.cursor++
+		for m.cursor < len(m.input) && isRuneContinuation(m.input[m.cursor]) {
+			m.cursor++
 		}
 	}
 	return m, nil

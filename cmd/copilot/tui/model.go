@@ -36,6 +36,7 @@ type Model struct {
 	// Chat state
 	messages  []ChatMessage
 	input     string
+	cursor    int      // byte-position of the cursor within input
 	history   []string // command history
 	histIndex int      // current position in history
 
@@ -148,6 +149,26 @@ func (m Model) AppendToLastMessage(content string) Model {
 func (m Model) ClearMessages() Model {
 	m.messages = []ChatMessage{}
 	m.scrollPos = 0
+	return m
+}
+
+// StreamTokenMsg carries a single streaming token from the LLM.
+// It is sent by the streaming goroutine via p.Send() for each content chunk so
+// that the TUI can append tokens to the last assistant message in real time.
+type StreamTokenMsg struct {
+	Token string
+}
+
+// appendToLastAssistantMessage finds the last message with role "assistant" and
+// appends token to its Content. Returns an updated Model value (BubbleTea is
+// immutable). If no assistant message exists, the model is returned unchanged.
+func (m Model) appendToLastAssistantMessage(token string) Model {
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		if m.messages[i].Role == "assistant" {
+			m.messages[i].Content += token
+			return m
+		}
+	}
 	return m
 }
 

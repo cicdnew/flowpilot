@@ -1,6 +1,7 @@
 package copilot
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -211,4 +212,122 @@ func detectMaxContext(modelID string) int {
 	default:
 		return 128000
 	}
+}
+
+// StreamChatCompletion sends a streaming chat completion request.
+// Returns a channel that emits StreamChunk values until Done=true or Error.
+func (p *OpenAICompatibleProvider) StreamChatCompletion(ctx context.Context, messages []Message, tools []ToolDefinition) <-chan StreamChunk {
+	out := make(chan StreamChunk, 64)
+
+	go func() {
+		defer close(out)
+
+		body := map[string]any{
+			"model":    p.model,
+			"messages": messages,
+			"stream":   true,
+		}
+
+		if len(tools) > 0 && p.SupportsFunctionCalling() {
+			body["tools"] = tools
+			body["tool_choice"] = "auto"
+		}
+
+		jsonBody, err := json.Marshal(body)
+		if err != nil {
+			out <- StreamChunk{Error: fmt.Errorf("marshal request: %w", err)}
+			return
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/chat/completions", bytes.NewBuffer(jsonBody))
+		if err != nil {
+			out <- StreamChunk{Error: fmt.Errorf("create request: %w", err)}
+			return
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+p.apiKey)
+		req.Header.Set("Accept", "text/event-stream")
+
+		resp, err := p.client.Do(req)
+		if err != nil {
+			out <- StreamChunk{Error: fmt.Errorf("send request: %w", err)}
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			b, _ := io.ReadAll(resp.Body)
+			out <- StreamChunk{Error: fmt.Errorf("API error %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))}
+			return
+		}
+
+		scanner := bufio.NewScanner(resp.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+
+			data := strings.TrimPrefix(line, "data: ")
+			if data == "[DONE]" {
+				out <- StreamChunk{Done: true}
+				return
+			}
+
+			var streamResp struct {
+				Choices []struct {
+					Delta struct {
+						Content   string `json:"content"`
+						ToolCalls []struct {
+							Function struct {
+								Name      string         `json:"name"`
+								Arguments map[string]any `json:"arguments"`
+							} `json:"function"`
+						} `json:"tool_calls"`
+					} `json:"delta"`
+					FinishReason string `json:"finish_reason"`
+				} `json:"choices"`
+			}
+
+			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
+				continue // skip malformed chunks
+			}
+
+			if len(streamResp.Choices) == 0 {
+				continue
+			}
+
+			choice := streamResp.Choices[0]
+
+			// Handle content delta
+			if choice.Delta.Content != "" {
+				out <- StreamChunk{Content: choice.Delta.Content}
+			}
+
+			// Handle tool call delta
+			if len(choice.Delta.ToolCalls) > 0 {
+				tc := choice.Delta.ToolCalls[0]
+				out <- StreamChunk{
+					ToolCall: &ToolCall{
+						Name:      tc.Function.Name,
+						Arguments: tc.Function.Arguments,
+					},
+				}
+			}
+
+			// Check for finish
+			if choice.FinishReason != "" {
+				out <- StreamChunk{Done: true}
+				return
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			out <- StreamChunk{Error: fmt.Errorf("scanner error: %w", err)}
+		}
+	}()
+
+	return out
 }

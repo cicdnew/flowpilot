@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -12,10 +11,17 @@ import (
 	"syscall"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
+	"flowpilot/cmd/copilot/tui"
 	"flowpilot/internal/copilot"
 )
 
 var version = "dev"
+
+// Global copilot instance and root context shared across TUI handlers.
+var c *copilot.CopilotFlow
+var ctx context.Context
 
 func main() {
 	dataDir := flag.String("data-dir", "", "data directory (default ~/.flowpilot)")
@@ -24,6 +30,11 @@ func main() {
 	apiKey := flag.String("api-key", "", "API key for the LLM provider")
 	baseURL := flag.String("base-url", "", "Custom base URL for LLM provider")
 	model := flag.String("model", "", "Model name to use")
+	poll := flag.Duration("poll", 30*time.Second, "interval between pending-task polls")
+	healthInterval := flag.Int("health-interval", 300, "proxy health check interval in seconds")
+	maxFailures := flag.Int("max-failures", 3, "max proxy failures before marking unhealthy")
+	autoPoll := flag.Bool("auto-poll", false, "automatically start background worker on launch")
+	headless := flag.Bool("headless", false, "force all tasks into headless mode (default: false = visible browser)")
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
 
@@ -33,176 +44,214 @@ func main() {
 	}
 
 	cfg := copilot.Config{
-		DataDir:        *dataDir,
-		MaxConcurrency: *concurrency,
-		ModelProvider:  *provider,
-		APIKey:         *apiKey,
-		BaseURL:        *baseURL,
-		ModelName:      *model,
+		DataDir:             *dataDir,
+		MaxConcurrency:      *concurrency,
+		ModelProvider:       *provider,
+		APIKey:              *apiKey,
+		BaseURL:             *baseURL,
+		ModelName:           *model,
+		PollInterval:        *poll,
+		HealthCheckInterval: *healthInterval,
+		MaxProxyFailures:    *maxFailures,
+		Headless:            *headless,
 	}
 
-	c, err := copilot.New(cfg)
+	var err error
+	c, err = copilot.New(cfg)
 	if err != nil {
 		log.Fatalf("Failed to create copilot: %v", err)
 	}
 	defer c.Stop()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// Handle OS signals.
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithCancel(context.Background())
 	defer cancel()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		sig := <-sigCh
-		log.Printf("Received %s, shutting down...", sig)
-		cancel() // unblocks the main scan loop so defers run cleanly
+		<-sigCh
+		cancel()
 	}()
 
-	fmt.Println("FlowPilot Copilot", version)
-	fmt.Println("Type /help for commands, /exit to quit")
-	fmt.Println("----------------------------------------")
-
-	scanner := bufio.NewScanner(os.Stdin)
-	for {
-		// Exit cleanly when context is cancelled (signal received).
-		select {
-		case <-ctx.Done():
-			fmt.Println("\nGoodbye!")
-			return
-		default:
-		}
-
-		fmt.Print("> ")
-		if !scanner.Scan() {
-			break
-		}
-
-		input := strings.TrimSpace(scanner.Text())
-		if input == "" {
-			continue
-		}
-
-		// Handle slash commands
-		if strings.HasPrefix(input, "/") {
-			if err := handleCommand(ctx, c, input); err != nil {
-				if err.Error() == "exit" {
-					return
-				}
-				fmt.Printf("Error: %v\n", err)
-			}
-			continue
-		}
-
-		// Process natural language request
-		fmt.Println("Thinking...")
-		start := time.Now()
-		response, err := c.Process(ctx, input)
-		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-			continue
-		}
-
-		fmt.Printf("\n%s\n", response)
-		fmt.Printf("\n(Response time: %v, Model: %s)\n", time.Since(start), c.CurrentModel())
+	// Auto-start background worker if requested.
+	if *autoPoll {
+		c.StartPolling(ctx)
+		log.Printf("[copilot] background worker auto-started (poll: %v)", *poll)
 	}
 
-	if err := scanner.Err(); err != nil {
-		log.Printf("Scanner error: %v", err)
+	// Build initial TUI model.
+	initialModel := tui.InitialModel()
+
+	if *provider != "" && *apiKey != "" {
+		initialModel = initialModel.SetConnected(true, *provider, *model)
 	}
+	if *autoPoll {
+		initialModel = initialModel.SetWorkerRunning(true)
+	}
+
+	// Wrap in CopilotModel to intercept copilot-specific messages.
+	wrapped := CopilotModel{Model: initialModel}
+
+	p := tea.NewProgram(
+		wrapped,
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
+
+	finalModel, err := p.Run()
+	if err != nil {
+		log.Fatalf("TUI error: %v", err)
+	}
+	_ = finalModel
 }
 
-func handleCommand(ctx context.Context, c *copilot.CopilotFlow, cmd string) error {
-	parts := strings.Fields(cmd)
-	switch parts[0] {
-	case "/help":
-		fmt.Println("Available commands:")
-		fmt.Println("  /connect <provider> <api-key> [base-url] [model]")
-		fmt.Println("  /models - List available models from provider")
-		fmt.Println("  /set-model <model-id> - Switch to different model")
-		fmt.Println("  /status  - Show current connection status")
-		fmt.Println("  /exit    - Exit the copilot")
-		fmt.Println("\nSupported providers: openai, openrouter, gemini, nvidia, huggingface, github, kilo")
-		return nil
+// CopilotModel wraps tui.Model and intercepts copilot-specific messages before
+// delegating everything else to the base Bubble Tea model.
+type CopilotModel struct {
+	tui.Model
+}
 
-	case "/connect":
-		if len(parts) < 3 {
-			return fmt.Errorf("usage: /connect <provider> <api-key> [base-url] [model]")
+// Init satisfies tea.Model (delegated to the embedded model).
+func (m CopilotModel) Init() tea.Cmd {
+	return m.Model.Init()
+}
+
+// Update handles copilot-specific messages and delegates the rest to tui.Model.
+func (m CopilotModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+
+	// ── LLM provider ────────────────────────────────────────────────────────
+	case tui.ConnectRequestMsg:
+		err := c.Connect(msg.Provider, msg.APIKey, msg.BaseURL, msg.Model)
+		if err != nil {
+			return m, func() tea.Msg { return tui.ErrorMsg{Err: err} }
 		}
+		m.Model = m.Model.SetConnected(true, msg.Provider, msg.Model)
+		m.Model = m.Model.AddMessage("system", "Connected to "+msg.Provider+" successfully")
+		return m, nil
 
-		provider := parts[1]
-		apiKey := parts[2]
-		baseURL := ""
-		model := ""
-
-		if len(parts) > 3 {
-			baseURL = parts[3]
-		}
-		if len(parts) > 4 {
-			model = parts[4]
-		}
-
-		if err := c.Connect(provider, apiKey, baseURL, model); err != nil {
-			return err
-		}
-
-		fmt.Printf("Connected to %s successfully!\n", provider)
-		fmt.Printf("Using model: %s\n", c.CurrentModel())
-		return nil
-
-	case "/models":
+	case tui.ListModelsRequestMsg:
 		if !c.IsConnected() {
-			return fmt.Errorf("not connected to any provider")
+			m.Model = m.Model.AddMessage("system", "Not connected. Use /connect first.")
+			return m, nil
 		}
-
-		fmt.Println("Fetching available models...")
 		models, err := c.ListModels(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to fetch models: %w", err)
+			return m, func() tea.Msg { return tui.ErrorMsg{Err: err} }
 		}
-
-		if len(models) == 0 {
-			fmt.Println("No models available")
-			return nil
+		var infos []tui.ModelInfo
+		for _, mo := range models {
+			infos = append(infos, tui.ModelInfo{
+				ID:          mo.ID,
+				Name:        mo.Name,
+				ContextSize: mo.MaxContext,
+			})
 		}
+		m.Model = m.Model.AddMessage("system", formatModels(infos))
+		return m, nil
 
-		fmt.Printf("\n%-60s %s\n", "MODEL ID", "CONTEXT WINDOW")
-		fmt.Println(strings.Repeat("-", 100))
-		for _, m := range models {
-			fmt.Printf("%-60s %dK\n", m.ID, m.MaxContext/1000)
+	case tui.SetModelRequestMsg:
+		err := c.SetModel(msg.ModelID)
+		if err != nil {
+			return m, func() tea.Msg { return tui.ErrorMsg{Err: err} }
 		}
-		fmt.Println()
-		return nil
+		m.Model = m.Model.SetConnected(true, m.Provider, msg.ModelID)
+		m.Model = m.Model.AddMessage("system", "Switched to model: "+msg.ModelID)
+		return m, nil
 
-	case "/set-model":
-		if len(parts) < 2 {
-			return fmt.Errorf("usage: /set-model <model-id>")
+	case tui.ChatRequestMsg:
+		if !c.IsConnected() {
+			m.Model = m.Model.AddMessage("system", "Not connected. Use /connect first.")
+			return m, nil
 		}
+		m.Model = m.Model.AddMessage("assistant", "")
+		go func() {
+			err := c.ProcessStream(ctx, msg.Input, func(token string) {
+				// Token streaming — full integration can push via a channel here.
+			})
+			if err != nil {
+				log.Printf("[copilot] stream error: %v", err)
+			}
+		}()
+		return m, nil
 
-		modelID := parts[1]
-		if err := c.SetModel(modelID); err != nil {
-			return err
+	// ── Background worker ────────────────────────────────────────────────────
+	case tui.WorkerStartRequestMsg:
+		if c.IsPolling() {
+			m.Model = m.Model.AddMessage("system", "Background worker is already running.")
+			return m, nil
 		}
+		c.StartPolling(ctx)
+		m.Model = m.Model.SetWorkerRunning(true)
+		m.Model = m.Model.AddMessage("system", "Background worker started — polling for pending tasks.")
+		return m, nil
 
-		fmt.Printf("Switched to model: %s\n", modelID)
-		return nil
+	case tui.WorkerStopRequestMsg:
+		if !c.IsPolling() {
+			m.Model = m.Model.AddMessage("system", "Background worker is not running.")
+			return m, nil
+		}
+		c.StopPolling()
+		m.Model = m.Model.SetWorkerRunning(false)
+		m.Model = m.Model.AddMessage("system", "Background worker stopped.")
+		return m, nil
 
-	case "/status":
-		if c.IsConnected() {
-			fmt.Println("✅ Connected to LLM provider")
-			fmt.Printf("   Provider: %s\n", c.CurrentProvider())
-			fmt.Printf("   Model:    %s\n", c.CurrentModel())
-			fmt.Println("\nReady to process natural language requests")
+	case tui.WorkerStatusRequestMsg:
+		if c.IsPolling() {
+			m.Model = m.Model.AddMessage("system", "Background worker: RUNNING  (use /worker-stop to stop)")
 		} else {
-			fmt.Println("❌ Not connected")
-			fmt.Println("Use /connect <provider> <api-key> to connect")
+			m.Model = m.Model.AddMessage("system", "Background worker: STOPPED  (use /worker-start to start)")
 		}
-		return nil
+		return m, nil
 
-	case "/exit":
-		fmt.Println("Goodbye!")
-		return fmt.Errorf("exit") // sentinel; caller's scan loop will break on ctx cancel
+	case tui.SetHeadlessModeMsg:
+		c.SetHeadless(msg.Headless)
+		mode := "non-headless (visible browser)"
+		if msg.Headless {
+			mode = "headless"
+		}
+		m.Model = m.Model.SetHeadlessMode(msg.Headless)
+		m.Model = m.Model.AddMessage("system", "Browser mode set to: "+mode)
+		return m, nil
 
-	default:
-		return fmt.Errorf("unknown command: %s. Type /help for available commands", parts[0])
+	case tui.RunTaskRequestMsg:
+		result, err := c.RunTask(ctx, msg.Name, msg.URL, msg.Headless)
+		if err != nil {
+			m.Model = m.Model.AddMessage("system", fmt.Sprintf("Error: %v", err))
+			return m, nil
+		}
+		mode := "visible browser"
+		if msg.Headless {
+			mode = "headless"
+		}
+		m.Model = m.Model.AddMessage("system", fmt.Sprintf("Task queued: %s [%s] id=%s", msg.Name, mode, result))
+		return m, nil
 	}
+
+	// Delegate everything else (keyboard, window resize, streaming, …) to the
+	// base tui.Model.
+	newModel, cmd := m.Model.Update(msg)
+	m.Model = newModel.(tui.Model)
+	return m, cmd
+}
+
+// View delegates rendering entirely to the embedded model.
+func (m CopilotModel) View() string {
+	return m.Model.View()
+}
+
+// formatModels formats the model list for display in the chat panel.
+func formatModels(models []tui.ModelInfo) string {
+	var b strings.Builder
+	b.WriteString("Available Models:\n")
+	for _, m := range models {
+		b.WriteString(fmt.Sprintf("  %-50s", m.Name))
+		if m.ContextSize > 0 {
+			b.WriteString(fmt.Sprintf(" (%dK context)", m.ContextSize/1000))
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
 }

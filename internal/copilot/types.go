@@ -31,3 +31,11 @@ type ModelListResponse struct {
 		OwnedBy string `json:"owned_by"`
 	} `json:"data"`
 }
+
+// StreamChunk represents a chunk of streaming response.
+type StreamChunk struct {
+	Content  string    // partial content delta
+	Done     bool      // true when stream complete
+	Error    error     // non-nil if error occurred
+	ToolCall *ToolCall // populated if tool call in stream
+}

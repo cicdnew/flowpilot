@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"flowpilot/internal/batch"
 	"flowpilot/internal/browser"
@@ -31,6 +32,10 @@ type CopilotFlow struct {
 	provider     LLMProvider
 	tools        map[string]Tool
 	config       Config
+
+	pollInterval  time.Duration
+	pollingCancel context.CancelFunc
+	pollingMu     sync.Mutex
 }
 
 // Config holds copilot agent configuration.
@@ -41,6 +46,11 @@ type Config struct {
 	APIKey         string
 	BaseURL        string
 	ModelName      string
+
+	PollInterval        time.Duration // interval between pending-task polls (default 30s)
+	HealthCheckInterval int           // proxy health check interval in seconds (default 300)
+	MaxProxyFailures    int           // max proxy failures before marking unhealthy (default 3)
+	Headless            bool          // when true, force all tasks headless; false = let task.Headless decide
 }
 
 // Tool represents a callable function that the LLM can invoke.
@@ -54,6 +64,7 @@ type Tool struct {
 // LLMProvider defines the interface for all model providers.
 type LLMProvider interface {
 	ChatCompletion(ctx context.Context, messages []Message, tools []ToolDefinition) (ChatResponse, error)
+	StreamChatCompletion(ctx context.Context, messages []Message, tools []ToolDefinition) <-chan StreamChunk
 	ListModels(ctx context.Context) ([]Model, error)
 	SupportsFunctionCalling() bool
 	Model() string
@@ -68,8 +79,8 @@ type Message struct {
 
 // ToolDefinition defines the schema for function calling.
 type ToolDefinition struct {
-	Type     string        `json:"type"`
-	Function ToolFunction  `json:"function"`
+	Type     string       `json:"type"`
+	Function ToolFunction `json:"function"`
 }
 
 type ToolFunction struct {
@@ -120,10 +131,19 @@ func New(cfg Config) (*CopilotFlow, error) {
 		db.Close()
 		return nil, fmt.Errorf("init browser runner: %w", err)
 	}
-	runner.SetForceHeadless(true)
+	runner.SetForceHeadless(cfg.Headless)
 
 	if cfg.MaxConcurrency <= 0 {
 		cfg.MaxConcurrency = 10
+	}
+	if cfg.PollInterval <= 0 {
+		cfg.PollInterval = 30 * time.Second
+	}
+	if cfg.HealthCheckInterval <= 0 {
+		cfg.HealthCheckInterval = 300
+	}
+	if cfg.MaxProxyFailures <= 0 {
+		cfg.MaxProxyFailures = 3
 	}
 
 	q := queue.New(db, runner, cfg.MaxConcurrency, func(event models.TaskEvent) {
@@ -132,8 +152,8 @@ func New(cfg Config) (*CopilotFlow, error) {
 
 	pm := proxy.NewManager(db, models.ProxyPoolConfig{
 		Strategy:            models.RotationRoundRobin,
-		HealthCheckInterval: 300,
-		MaxFailures:         3,
+		HealthCheckInterval: cfg.HealthCheckInterval,
+		MaxFailures:         cfg.MaxProxyFailures,
 	})
 	q.SetProxyManager(pm)
 
@@ -148,6 +168,7 @@ func New(cfg Config) (*CopilotFlow, error) {
 		dataDir:      cfg.DataDir,
 		config:       cfg,
 		tools:        make(map[string]Tool),
+		pollInterval: cfg.PollInterval,
 	}
 
 	c.registerTools()
@@ -202,6 +223,44 @@ func (c *CopilotFlow) IsConnected() bool {
 	return c.provider != nil
 }
 
+// RunTask creates a task with the given name, URL, and headless flag, persists it
+// to the database, submits it to the execution queue, and returns the task ID.
+func (c *CopilotFlow) RunTask(ctx context.Context, name, url string, headless bool) (string, error) {
+	if name == "" {
+		name = "tui-task"
+	}
+	if url == "" {
+		return "", fmt.Errorf("url is required")
+	}
+
+	task := models.Task{
+		ID:         fmt.Sprintf("tui-%d", time.Now().UnixNano()),
+		Name:       name,
+		URL:        url,
+		Steps:      []models.TaskStep{{Action: models.ActionNavigate, Value: url}},
+		Status:     models.TaskStatusPending,
+		Priority:   models.PriorityNormal,
+		MaxRetries: 1,
+		Headless:   headless,
+		CreatedAt:  time.Now(),
+	}
+
+	if err := c.db.CreateTask(ctx, task); err != nil {
+		return "", fmt.Errorf("create task: %w", err)
+	}
+	if err := c.queue.Submit(ctx, task); err != nil {
+		return "", fmt.Errorf("submit task: %w", err)
+	}
+	return task.ID, nil
+}
+
+// SetHeadless updates the global headless flag on the browser runner at runtime.
+// When true, all tasks are forced into headless mode regardless of their own Headless field.
+// When false, each task controls its own headless mode via task.Headless.
+func (c *CopilotFlow) SetHeadless(headless bool) {
+	c.runner.SetForceHeadless(headless)
+}
+
 // CurrentModel returns the current model name.
 func (c *CopilotFlow) CurrentModel() string {
 	c.providerMu.RLock()
@@ -224,6 +283,7 @@ func (c *CopilotFlow) CurrentProvider() string {
 
 // Stop shuts down the copilot agent cleanly.
 func (c *CopilotFlow) Stop() {
+	c.StopPolling()
 	if c.queue != nil {
 		c.queue.Stop()
 	}
@@ -232,6 +292,65 @@ func (c *CopilotFlow) Stop() {
 	}
 	if c.db != nil {
 		c.db.Close()
+	}
+}
+
+// StartPolling begins the background task-execution loop. Safe to call
+// multiple times — stops any existing loop before starting a new one.
+func (c *CopilotFlow) StartPolling(ctx context.Context) {
+	c.StopPolling() // cancel any prior loop
+
+	c.pollingMu.Lock()
+	pollingCtx, cancel := context.WithCancel(ctx)
+	c.pollingCancel = cancel
+	c.pollingMu.Unlock()
+
+	go func() {
+		log.Printf("[copilot] background worker started (poll interval: %v)", c.pollInterval)
+		ticker := time.NewTicker(c.pollInterval)
+		defer ticker.Stop()
+		c.processPending(pollingCtx)
+		for {
+			select {
+			case <-ticker.C:
+				c.processPending(pollingCtx)
+			case <-pollingCtx.Done():
+				log.Println("[copilot] background worker stopped")
+				return
+			}
+		}
+	}()
+}
+
+// StopPolling cancels the background task-execution loop.
+func (c *CopilotFlow) StopPolling() {
+	c.pollingMu.Lock()
+	cancel := c.pollingCancel
+	c.pollingCancel = nil
+	c.pollingMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// IsPolling reports whether the background worker loop is currently running.
+func (c *CopilotFlow) IsPolling() bool {
+	c.pollingMu.Lock()
+	defer c.pollingMu.Unlock()
+	return c.pollingCancel != nil
+}
+
+// processPending fetches all pending tasks from the DB and submits them to the queue.
+func (c *CopilotFlow) processPending(ctx context.Context) {
+	tasks, err := c.db.ListTasksByStatus(ctx, models.TaskStatusPending)
+	if err != nil {
+		log.Printf("[copilot] list pending tasks: %v", err)
+		return
+	}
+	for _, task := range tasks {
+		if err := c.queue.Submit(ctx, task); err != nil {
+			log.Printf("[copilot] submit task %s: %v", task.ID, err)
+		}
 	}
 }
 
@@ -319,6 +438,44 @@ func (c *CopilotFlow) registerTools() {
 		},
 		Handler: c.toolSystemStatus,
 	}
+
+	c.tools["run_task"] = Tool{
+		Name:        "run_task",
+		Description: "Create and immediately run a single browser automation task with specific steps",
+		Schema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"name": map[string]any{
+					"type":        "string",
+					"description": "Human-readable task name",
+				},
+				"url": map[string]any{
+					"type":        "string",
+					"description": "Starting URL for the task",
+				},
+				"steps": map[string]any{
+					"type":        "array",
+					"description": "List of browser steps to execute",
+					"items": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"action":   map[string]any{"type": "string"},
+							"selector": map[string]any{"type": "string"},
+							"value":    map[string]any{"type": "string"},
+						},
+						"required": []string{"action"},
+					},
+				},
+				"headless": map[string]any{
+					"type":        "boolean",
+					"description": "Run in headless mode (no visible browser window). Default false = show browser.",
+					"default":     false,
+				},
+			},
+			"required": []string{"name", "url", "steps"},
+		},
+		Handler: c.toolRunTask,
+	}
 }
 
 // GetToolDefinitions returns the tool definitions for function calling.
@@ -387,6 +544,66 @@ func (c *CopilotFlow) Process(ctx context.Context, input string) (string, error)
 	}
 
 	return response.Content, nil
+}
+
+// ProcessStream processes a natural language request with streaming response.
+// Calls onToken for each content chunk received. Returns error if stream fails.
+func (c *CopilotFlow) ProcessStream(ctx context.Context, input string, onToken func(string)) error {
+	c.providerMu.RLock()
+	p := c.provider
+	c.providerMu.RUnlock()
+
+	if p == nil {
+		return fmt.Errorf("not connected to any LLM provider. Use /connect command first")
+	}
+
+	messages := []Message{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: input},
+	}
+
+	stream := p.StreamChatCompletion(ctx, messages, c.GetToolDefinitions())
+
+	var toolCallAccum *ToolCall
+	var fullContent strings.Builder
+
+	for chunk := range stream {
+		if chunk.Error != nil {
+			return chunk.Error
+		}
+
+		if chunk.Content != "" {
+			fullContent.WriteString(chunk.Content)
+			onToken(chunk.Content)
+		}
+
+		if chunk.ToolCall != nil {
+			toolCallAccum = chunk.ToolCall
+		}
+
+		if chunk.Done {
+			break
+		}
+	}
+
+	// Execute tool call if accumulated
+	if toolCallAccum != nil {
+		tool, ok := c.tools[toolCallAccum.Name]
+		if !ok {
+			onToken(fmt.Sprintf("\n[Error: Unknown tool: %s]", toolCallAccum.Name))
+			return nil
+		}
+
+		result, err := tool.Handler(ctx, toolCallAccum.Arguments)
+		if err != nil {
+			onToken(fmt.Sprintf("\n[Error in %s: %v]", toolCallAccum.Name, err))
+			return nil
+		}
+
+		onToken(fmt.Sprintf("\n[%s result: %v]", toolCallAccum.Name, result))
+	}
+
+	return nil
 }
 
 // systemPrompt is the system prompt for the copilot.

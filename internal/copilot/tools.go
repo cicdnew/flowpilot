@@ -3,6 +3,7 @@ package copilot
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"flowpilot/internal/models"
 )
@@ -161,5 +162,80 @@ func (c *CopilotFlow) toolSystemStatus(ctx context.Context, args map[string]any)
 		},
 		"queue_depth":   c.queue.Metrics().Pending,
 		"running_tasks": c.queue.RunningCount(),
+	}, nil
+}
+
+// toolRunTask implements the run_task tool — creates a Task and submits it to the queue immediately.
+func (c *CopilotFlow) toolRunTask(ctx context.Context, args map[string]any) (any, error) {
+	name, _ := args["name"].(string)
+	if name == "" {
+		name = "copilot-task"
+	}
+	url, _ := args["url"].(string)
+	if url == "" {
+		return nil, fmt.Errorf("url is required")
+	}
+	headless, _ := args["headless"].(bool)
+
+	// Parse steps from the LLM arguments.
+	var steps []models.TaskStep
+	if stepsAny, ok := args["steps"].([]any); ok {
+		for _, s := range stepsAny {
+			stepMap, ok := s.(map[string]any)
+			if !ok {
+				continue
+			}
+			step := models.TaskStep{}
+			if a, ok := stepMap["action"].(string); ok {
+				step.Action = models.StepAction(a)
+			}
+			if sel, ok := stepMap["selector"].(string); ok {
+				step.Selector = sel
+			}
+			if val, ok := stepMap["value"].(string); ok {
+				step.Value = val
+			}
+			steps = append(steps, step)
+		}
+	}
+	if len(steps) == 0 {
+		// Default: just navigate to the URL.
+		steps = []models.TaskStep{
+			{Action: models.ActionNavigate, Value: url},
+		}
+	}
+
+	task := models.Task{
+		ID:         fmt.Sprintf("copilot-%d", time.Now().UnixNano()),
+		Name:       name,
+		URL:        url,
+		Steps:      steps,
+		Status:     models.TaskStatusPending,
+		Priority:   models.PriorityNormal,
+		MaxRetries: 1,
+		Headless:   headless,
+		CreatedAt:  time.Now(),
+	}
+
+	if err := c.db.CreateTask(ctx, task); err != nil {
+		return nil, fmt.Errorf("create task: %w", err)
+	}
+
+	if err := c.queue.Submit(ctx, task); err != nil {
+		return nil, fmt.Errorf("submit task: %w", err)
+	}
+
+	mode := "non-headless (visible browser)"
+	if headless {
+		mode = "headless"
+	}
+
+	return map[string]any{
+		"task_id": task.ID,
+		"name":    task.Name,
+		"url":     task.URL,
+		"steps":   len(task.Steps),
+		"mode":    mode,
+		"status":  "queued",
 	}, nil
 }

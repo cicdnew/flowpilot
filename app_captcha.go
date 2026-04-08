@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const errSaveCaptchaConfig = "save captcha config: %w"
+
 func (a *App) SaveCaptchaConfig(provider, apiKey string) (*models.CaptchaConfig, error) {
 	if err := a.ready(); err != nil {
 		return nil, err
@@ -30,14 +32,14 @@ func (a *App) SaveCaptchaConfig(provider, apiKey string) (*models.CaptchaConfig,
 
 	existing, err := a.db.GetActiveCaptchaConfig(a.ctx)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("save captcha config: %w", err)
+		return nil, fmt.Errorf(errSaveCaptchaConfig, err)
 	}
 	if existing != nil {
 		existing.Provider = p
 		existing.APIKey = apiKey
 		existing.Enabled = true
 		if err := a.db.UpdateCaptchaConfig(a.ctx, *existing); err != nil {
-			return nil, fmt.Errorf("save captcha config: %w", err)
+			return nil, fmt.Errorf(errSaveCaptchaConfig, err)
 		}
 		existing.APIKey = maskCredential(existing.APIKey)
 		a.refreshCaptchaSolver()
@@ -55,7 +57,7 @@ func (a *App) SaveCaptchaConfig(provider, apiKey string) (*models.CaptchaConfig,
 	}
 
 	if err := a.db.CreateCaptchaConfig(a.ctx, c); err != nil {
-		return nil, fmt.Errorf("save captcha config: %w", err)
+		return nil, fmt.Errorf(errSaveCaptchaConfig, err)
 	}
 	c.APIKey = maskCredential(c.APIKey)
 	a.refreshCaptchaSolver()

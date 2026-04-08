@@ -18,8 +18,9 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-// executeStep dispatches to the appropriate action handler.
+// executeStep dispatches to the appropriate action handler using lookup tables.
 func (r *Runner) executeStep(ctx context.Context, step models.TaskStep, result *models.TaskResult) error {
+	// Handlers that only need ctx + step (no result).
 	switch step.Action {
 	case models.ActionNavigate:
 		return r.execNavigate(ctx, step)
@@ -29,10 +30,6 @@ func (r *Runner) executeStep(ctx context.Context, step models.TaskStep, result *
 		return r.execType(ctx, step)
 	case models.ActionWait:
 		return r.execWait(ctx, step)
-	case models.ActionScreenshot:
-		return r.execScreenshot(ctx, result)
-	case models.ActionExtract:
-		return r.execExtract(ctx, step, result)
 	case models.ActionScroll:
 		return r.execScroll(ctx, step)
 	case models.ActionSelect:
@@ -41,8 +38,6 @@ func (r *Runner) executeStep(ctx context.Context, step models.TaskStep, result *
 		return r.execEval(ctx, step)
 	case models.ActionTabSwitch:
 		return r.execTabSwitch(ctx, step)
-	case models.ActionSolveCaptcha:
-		return r.execSolveCaptcha(ctx, step, result)
 	case models.ActionDoubleClick:
 		return r.execDoubleClick(ctx, step)
 	case models.ActionFileUpload:
@@ -65,6 +60,29 @@ func (r *Runner) executeStep(ctx context.Context, step models.TaskStep, result *
 		return r.execWaitFunction(ctx, step)
 	case models.ActionEmulateDevice:
 		return r.execEmulateDevice(ctx, step)
+	case models.ActionHover:
+		return r.execHover(ctx, step)
+	case models.ActionDragDrop:
+		return r.execDragDrop(ctx, step)
+	case models.ActionContextClick:
+		return r.execContextClick(ctx, step)
+	case models.ActionRandomMouse:
+		return r.execRandomMouse(ctx, step)
+	case models.ActionHumanTyping:
+		return r.execHumanTyping(ctx, step)
+	case models.ActionScreenshot:
+		return r.execScreenshot(ctx, result)
+	}
+	return r.executeStepWithResult(ctx, step, result)
+}
+
+// executeStepWithResult handles actions that require the task result.
+func (r *Runner) executeStepWithResult(ctx context.Context, step models.TaskStep, result *models.TaskResult) error {
+	switch step.Action {
+	case models.ActionExtract:
+		return r.execExtract(ctx, step, result)
+	case models.ActionSolveCaptcha:
+		return r.execSolveCaptcha(ctx, step, result)
 	case models.ActionGetTitle:
 		return r.execGetTitle(ctx, step, result)
 	case models.ActionGetAttributes:
@@ -89,12 +107,6 @@ func (r *Runner) executeStep(ctx context.Context, step models.TaskStep, result *
 		return r.execVariableMath(ctx, step, result)
 	case models.ActionVariableString:
 		return r.execVariableString(ctx, step, result)
-	case models.ActionHover:
-		return r.execHover(ctx, step)
-	case models.ActionDragDrop:
-		return r.execDragDrop(ctx, step)
-	case models.ActionContextClick:
-		return r.execContextClick(ctx, step)
 	case models.ActionHighlight:
 		return r.execHighlight(ctx, step, result)
 	case models.ActionGetCookies:
@@ -121,10 +133,6 @@ func (r *Runner) executeStep(ctx context.Context, step models.TaskStep, result *
 		return r.execDebugStep(ctx, step, result)
 	case models.ActionAntiBot:
 		return r.execAntiBot(ctx, step, result)
-	case models.ActionRandomMouse:
-		return r.execRandomMouse(ctx, step)
-	case models.ActionHumanTyping:
-		return r.execHumanTyping(ctx, step)
 	case models.ActionGetSession:
 		return r.execGetSession(ctx, step, result)
 	case models.ActionSetSession:
@@ -554,6 +562,8 @@ func (r *Runner) execGetAttributes(ctx context.Context, step models.TaskStep, re
 
 // adDiscoveryScript is injected into the page to find a visible ad element.
 // It returns a JSON-serialisable object with the ad's bounding rect and metadata.
+const errClickAd = "click_ad: %v"
+
 const adDiscoveryScript = `(function() {
   var selectors = [
     'ins.adsbygoogle',
@@ -668,7 +678,7 @@ func (r *Runner) execClickAd(ctx context.Context, step models.TaskStep, result *
 
 		// Capture before-click screenshot.
 		if _, err := r.captureAdScreenshot(ctx, result, keyPrefix, "before"); err != nil {
-			r.addLog(result, "warn", fmt.Sprintf("click_ad: %v", err))
+			r.addLog(result, "warn", fmt.Sprintf(errClickAd, err))
 		}
 
 		// For iframes, dispatch a coordinate-based click since we can't enter cross-origin frames.
@@ -693,7 +703,7 @@ func (r *Runner) execClickAd(ctx context.Context, step models.TaskStep, result *
 
 		// Capture after-click screenshot.
 		if _, err := r.captureAdScreenshot(ctx, result, keyPrefix, "after"); err != nil {
-			r.addLog(result, "warn", fmt.Sprintf("click_ad: %v", err))
+			r.addLog(result, "warn", fmt.Sprintf(errClickAd, err))
 		}
 		return nil
 	}
@@ -713,7 +723,7 @@ func (r *Runner) execClickAd(ctx context.Context, step models.TaskStep, result *
 
 	// Capture before-click screenshot.
 	if _, err := r.captureAdScreenshot(ctx, result, keyPrefix, "before"); err != nil {
-		r.addLog(result, "warn", fmt.Sprintf("click_ad: %v", err))
+		r.addLog(result, "warn", fmt.Sprintf(errClickAd, err))
 	}
 
 	// Dispatch a coordinate-based click (works for both iframes and regular elements).
@@ -728,10 +738,66 @@ func (r *Runner) execClickAd(ctx context.Context, step models.TaskStep, result *
 
 	// Capture after-click screenshot.
 	if _, err := r.captureAdScreenshot(ctx, result, keyPrefix, "after"); err != nil {
-		r.addLog(result, "warn", fmt.Sprintf("click_ad: %v", err))
+		r.addLog(result, "warn", fmt.Sprintf(errClickAd, err))
 	}
 	return nil
 }
+
+func (r *Runner) execClickAdWithSelector(ctx context.Context, selector, keyPrefix string, result *models.TaskResult) error {
+	metaJS := fmt.Sprintf(`(function() {
+  var el = document.querySelector(%q);
+  if (!el) return { found: false };
+  var rect = el.getBoundingClientRect();
+  return {
+    found: true,
+    selector: %q,
+    tag: el.tagName.toLowerCase(),
+    href: el.href || el.src || \'\',
+    x: Math.round(rect.x + rect.width / 2),
+    y: Math.round(rect.y + rect.height / 2)
+  };
+})()`, selector, selector)
+
+	var info adDiscoveryResult
+	if err := r.exec.Run(ctx, chromedp.Evaluate(metaJS, &info)); err != nil {
+		return fmt.Errorf("click_ad: evaluate selector metadata: %w", err)
+	}
+	if !info.Found {
+		return fmt.Errorf("click_ad: element not found for selector %q", selector)
+	}
+
+	result.ExtractedData[keyPrefix+"_selector"] = info.Selector
+	result.ExtractedData[keyPrefix+"_tag"] = info.Tag
+	result.ExtractedData[keyPrefix+"_href"] = info.Href
+
+	if _, err := r.captureAdScreenshot(ctx, result, keyPrefix, "before"); err != nil {
+		r.addLog(result, "warn", fmt.Sprintf(errClickAd, err))
+	}
+
+	if info.Tag == "iframe" {
+		clickJS := fmt.Sprintf(`(%s)(%v, %v)`, adClickAtScript, info.X, info.Y)
+		var clicked bool
+		if err := r.exec.Run(ctx, chromedp.Evaluate(clickJS, &clicked)); err != nil {
+			return fmt.Errorf("click_ad: dispatch click on iframe: %w", err)
+		}
+		if !clicked {
+			return fmt.Errorf("click_ad: no element at iframe center (%v, %v)", info.X, info.Y)
+		}
+	} else {
+		if err := r.exec.Run(ctx,
+			chromedp.WaitVisible(selector, chromedp.ByQuery),
+			chromedp.Click(selector, chromedp.ByQuery),
+		); err != nil {
+			return err
+		}
+	}
+
+	if _, err := r.captureAdScreenshot(ctx, result, keyPrefix, "after"); err != nil {
+		r.addLog(result, "warn", fmt.Sprintf(errClickAd, err))
+	}
+	return nil
+}
+
 
 func (r *Runner) execWhile(ctx context.Context, step models.TaskStep, result *models.TaskResult) error {
 	if step.Condition == "" {

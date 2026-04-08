@@ -187,7 +187,7 @@ func New(cfg Config) (*CopilotFlow, error) {
 }
 
 // Connect configures the LLM provider for the copilot.
-func (c *CopilotFlow) Connect(provider string, apiKey string, baseURL string, modelName string) error {
+func (c *CopilotFlow) Connect(provider, apiKey, baseURL, modelName string) error {
 	p, err := NewProvider(provider, apiKey, baseURL, modelName)
 	if err != nil {
 		return err
@@ -687,6 +687,23 @@ func (c *CopilotFlow) GetToolDefinitions() []ToolDefinition {
 	return defs
 }
 
+// buildMessages constructs the message slice for an LLM call, prepending
+// system prompt and prior conversation history.
+func (c *CopilotFlow) buildMessages(input string) []Message {
+	if c.history != nil {
+		c.history.Trim(20)
+	}
+	var prior []Message
+	if c.history != nil {
+		prior = c.history.Messages()
+	}
+	messages := make([]Message, 0, len(prior)+2)
+	messages = append(messages, Message{Role: "system", Content: systemPrompt})
+	messages = append(messages, prior...)
+	messages = append(messages, Message{Role: "user", Content: input})
+	return messages
+}
+
 // Process processes a natural language request and returns the response.
 // Prior conversation turns are prepended automatically for multi-turn context.
 func (c *CopilotFlow) Process(ctx context.Context, input string) (string, error) {
@@ -697,19 +714,7 @@ func (c *CopilotFlow) Process(ctx context.Context, input string) (string, error)
 		return "", fmt.Errorf("not connected to any LLM provider. Use /connect command first")
 	}
 
-	// Trim and include prior conversation turns for multi-turn context.
-	if c.history != nil {
-		c.history.Trim(20)
-	}
-	prior := make([]Message, 0)
-	if c.history != nil {
-		prior = c.history.Messages()
-	}
-	messages := make([]Message, 0, len(prior)+2)
-	messages = append(messages, Message{Role: "system", Content: systemPrompt})
-	messages = append(messages, prior...)
-	messages = append(messages, Message{Role: "user", Content: input})
-
+	messages := c.buildMessages(input)
 	response, err := p.ChatCompletion(ctx, messages, c.GetToolDefinitions())
 	if err != nil {
 		return "", fmt.Errorf("chat completion failed: %w", err)
@@ -760,19 +765,7 @@ func (c *CopilotFlow) ProcessStream(ctx context.Context, input string, onToken f
 		return fmt.Errorf("not connected to any LLM provider. Use /connect command first")
 	}
 
-	// Trim and include prior conversation turns for multi-turn context.
-	if c.history != nil {
-		c.history.Trim(20)
-	}
-	prior := make([]Message, 0)
-	if c.history != nil {
-		prior = c.history.Messages()
-	}
-	messages := make([]Message, 0, len(prior)+2)
-	messages = append(messages, Message{Role: "system", Content: systemPrompt})
-	messages = append(messages, prior...)
-	messages = append(messages, Message{Role: "user", Content: input})
-
+	messages := c.buildMessages(input)
 	stream := p.StreamChatCompletion(ctx, messages, c.GetToolDefinitions())
 
 	var toolCallAccum *ToolCall

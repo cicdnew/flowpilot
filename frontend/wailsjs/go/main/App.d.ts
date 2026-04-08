@@ -17,9 +17,9 @@ export function CreateProxyRoutingPreset(arg1:string,arg2:string,arg3:string,arg
 
 export function CreateRecordedFlow(arg1:string,arg2:string,arg3:string,arg4:Array<models.RecordedStep>):Promise<models.RecordedFlow>;
 
-export function CreateSchedule(arg1:string,arg2:string,arg3:string,arg4:string,arg5:models.ProxyConfig,arg6:number,arg7:boolean,arg8:Array<string>):Promise<models.Schedule>;
+export function CreateSchedule(params:{Name:string,CronExpr:string,FlowID:string,URL:string,ProxyConfig:models.ProxyConfig,Priority:number,Headless:boolean,Tags:Array<string>}):Promise<models.Schedule>;
 
-export function CreateTask(arg1:string,arg2:string,arg3:Array<models.TaskStep>,arg4:models.ProxyConfig,arg5:number,arg6:boolean,arg7:Array<string>,arg8:number,arg9:models.TaskLoggingPolicy):Promise<models.Task>;
+export function CreateTask(params:{Name:string,URL:string,Steps:Array<models.TaskStep>,ProxyConfig:models.ProxyConfig,Priority:number,AutoStart:boolean,Tags:Array<string>,Timeout:number,LoggingPolicy:models.TaskLoggingPolicy}):Promise<models.Task>;
 
 export function CreateTaskFromFlow(arg1:string,arg2:string,arg3:string,arg4:models.ProxyConfig,arg5:number,arg6:boolean,arg7:Array<string>):Promise<models.Task>;
 
@@ -145,6 +145,6 @@ export function ToggleSchedule(arg1:string,arg2:boolean):Promise<void>;
 
 export function UpdateRecordedFlow(arg1:models.RecordedFlow):Promise<void>;
 
-export function UpdateSchedule(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:models.ProxyConfig,arg7:number,arg8:boolean,arg9:Array<string>,arg10:boolean):Promise<void>;
+export function UpdateSchedule(arg1:string,params:{Name:string,CronExpr:string,FlowID:string,URL:string,ProxyConfig:models.ProxyConfig,Priority:number,Headless:boolean,Tags:Array<string>},arg3:boolean):Promise<void>;
 
-export function UpdateTask(arg1:string,arg2:string,arg3:string,arg4:Array<models.TaskStep>,arg5:models.ProxyConfig,arg6:number,arg7:Array<string>,arg8:number,arg9:models.TaskLoggingPolicy):Promise<void>;
+export function UpdateTask(arg1:string,params:{Name:string,URL:string,Steps:Array<models.TaskStep>,ProxyConfig:models.ProxyConfig,Priority:models.TaskPriority,Tags:Array<string>,Timeout:number,LoggingPolicy:models.TaskLoggingPolicy}):Promise<void>;

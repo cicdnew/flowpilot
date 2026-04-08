@@ -655,8 +655,8 @@ func (r *Runner) handleProxyRequestPaused(ctx context.Context, requestID fetch.R
 	}
 }
 
-// cdpExecutor returns a cdp executor for the given context, or nil if unavailable.
-func cdpExecutor(ctx context.Context) cdp.Executor {
+// cdpExecutor returns a combined context+executor for the given context, or nil if unavailable.
+func cdpExecutor(ctx context.Context) context.Context {
 	execCtx := chromedp.FromContext(ctx)
 	if execCtx == nil || execCtx.Target == nil {
 		return nil

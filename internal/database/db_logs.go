@@ -1,7 +1,5 @@
 package database
 
-const errInsertTaskEvent = "insert task event %s: %w"
-
 import (
 	"context"
 	"database/sql"
@@ -13,6 +11,8 @@ import (
 
 	"flowpilot/internal/models"
 )
+
+const errInsertTaskEvent = "insert task event %s: %w"
 
 func (db *DB) InsertTaskEvent(ctx context.Context, event models.TaskLifecycleEvent) error {
 	_, err := db.conn.ExecContext(ctx, `INSERT INTO task_events (id, task_id, batch_id, from_state, to_state, error, timestamp)

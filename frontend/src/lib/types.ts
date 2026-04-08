@@ -84,7 +84,7 @@ export interface ProxyConfig {
   username?: string;
   password?: string;
   geo?: string;
-  fallback?: ProxyRoutingFallback | string;
+  fallback?: ProxyRoutingFallback;
 }
 
 export interface LogEntry {
@@ -186,7 +186,7 @@ export interface ProxyRoutingPreset {
   name: string;
   randomByCountry: boolean;
   country?: string;
-  fallback?: ProxyRoutingFallback | string;
+  fallback?: ProxyRoutingFallback;
   createdAt: string;
 }
 

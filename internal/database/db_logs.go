@@ -1,5 +1,7 @@
 package database
 
+const errInsertTaskEvent = "insert task event %s: %w"
+
 import (
 	"context"
 	"database/sql"
@@ -17,7 +19,7 @@ func (db *DB) InsertTaskEvent(ctx context.Context, event models.TaskLifecycleEve
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		event.ID, event.TaskID, event.BatchID, event.FromState, event.ToState, event.Error, event.Timestamp)
 	if err != nil {
-		return fmt.Errorf("insert task event %s: %w", event.ID, err)
+		return fmt.Errorf(errInsertTaskEvent, event.ID, err)
 	}
 	return nil
 }
@@ -33,7 +35,7 @@ func insertTaskEventTx(ctx context.Context, tx *sql.Tx, event models.TaskLifecyc
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		event.ID, event.TaskID, event.BatchID, event.FromState, event.ToState, event.Error, event.Timestamp)
 	if err != nil {
-		return fmt.Errorf("insert task event %s: %w", event.ID, err)
+		return fmt.Errorf(errInsertTaskEvent, event.ID, err)
 	}
 	return nil
 }
@@ -51,7 +53,7 @@ func insertTaskEventsTx(ctx context.Context, tx *sql.Tx, events []models.TaskLif
 
 	for _, event := range events {
 		if _, err := stmt.ExecContext(ctx, event.ID, event.TaskID, event.BatchID, event.FromState, event.ToState, event.Error, event.Timestamp); err != nil {
-			return fmt.Errorf("insert task event %s: %w", event.ID, err)
+			return fmt.Errorf(errInsertTaskEvent, event.ID, err)
 		}
 	}
 	return nil

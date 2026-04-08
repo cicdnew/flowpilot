@@ -916,7 +916,7 @@ func TestMaskCredential(t *testing.T) {
 func TestAppCreateScheduleRejectsInvalidProxyConfig(t *testing.T) {
 	app := setupTestApp(t)
 
-	_, err := app.CreateSchedule("Sched", "0 * * * *", "flow-1", "https://example.com", models.ProxyConfig{Protocol: models.ProxyHTTP}, 5, false, nil)
+	_, err := app.CreateSchedule(ScheduleParams{Name: "Sched", CronExpr: "0 * * * *", FlowID: "flow-1", URL: "https://example.com", ProxyConfig: models.ProxyConfig{Protocol: models.ProxyHTTP}, Priority: 5, Headless: false, Tags: nil})
 	if err == nil {
 		t.Fatal("expected error for invalid schedule proxy config")
 	}
@@ -928,12 +928,12 @@ func TestAppCreateScheduleRejectsInvalidProxyConfig(t *testing.T) {
 func TestAppUpdateScheduleRejectsInvalidProxyConfig(t *testing.T) {
 	app := setupTestApp(t)
 
-	sched, err := app.CreateSchedule("Sched", "0 * * * *", "flow-1", "https://example.com", models.ProxyConfig{}, 5, false, nil)
+	sched, err := app.CreateSchedule(ScheduleParams{Name: "Sched", CronExpr: "0 * * * *", FlowID: "flow-1", URL: "https://example.com", ProxyConfig: models.ProxyConfig{}, Priority: 5, Headless: false, Tags: nil})
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
 
-	err = app.UpdateSchedule(sched.ID, "Sched", "0 * * * *", "flow-1", "https://example.com", models.ProxyConfig{Fallback: models.ProxyRoutingFallback("bogus")}, 5, false, nil, true)
+	err = app.UpdateSchedule(sched.ID, ScheduleParams{Name: "Sched", CronExpr: "0 * * * *", FlowID: "flow-1", URL: "https://example.com", ProxyConfig: models.ProxyConfig{Fallback: models.ProxyRoutingFallback("bogus")}, Priority: 5, Headless: false, Tags: nil}, true)
 	if err == nil {
 		t.Fatal("expected error for invalid schedule proxy config")
 	}
@@ -1869,7 +1869,7 @@ func TestAppCreateSchedule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateRecordedFlow: %v", err)
 	}
-	sched, err := app.CreateSchedule("My Schedule", "0 * * * *", flow.ID, "https://example.com", models.ProxyConfig{}, 5, false, nil)
+	sched, err := app.CreateSchedule(ScheduleParams{Name: "My Schedule", CronExpr: "0 * * * *", FlowID: flow.ID, URL: "https://example.com", ProxyConfig: models.ProxyConfig{}, Priority: 5, Headless: false, Tags: nil})
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
@@ -1882,7 +1882,7 @@ func TestAppGetSchedule(t *testing.T) {
 	app := setupTestApp(t)
 	steps := []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "https://example.com"}}
 	flow, _ := app.CreateRecordedFlow("Flow", "", "https://example.com", steps)
-	sched, err := app.CreateSchedule("Sched", "0 * * * *", flow.ID, "https://example.com", models.ProxyConfig{}, 5, false, nil)
+	sched, err := app.CreateSchedule(ScheduleParams{Name: "Sched", CronExpr: "0 * * * *", FlowID: flow.ID, URL: "https://example.com", ProxyConfig: models.ProxyConfig{}, Priority: 5, Headless: false, Tags: nil})
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
@@ -1899,8 +1899,8 @@ func TestAppListSchedules(t *testing.T) {
 	app := setupTestApp(t)
 	steps := []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "https://example.com"}}
 	flow, _ := app.CreateRecordedFlow("Flow", "", "https://example.com", steps)
-	_, _ = app.CreateSchedule("S1", "0 * * * *", flow.ID, "https://example.com", models.ProxyConfig{}, 5, false, nil)
-	_, _ = app.CreateSchedule("S2", "0 * * * *", flow.ID, "https://example.com", models.ProxyConfig{}, 5, false, nil)
+	_, _ = app.CreateSchedule(ScheduleParams{Name: "S1", CronExpr: "0 * * * *", FlowID: flow.ID, URL: "https://example.com", ProxyConfig: models.ProxyConfig{}, Priority: 5, Headless: false, Tags: nil})
+	_, _ = app.CreateSchedule(ScheduleParams{Name: "S2", CronExpr: "0 * * * *", FlowID: flow.ID, URL: "https://example.com", ProxyConfig: models.ProxyConfig{}, Priority: 5, Headless: false, Tags: nil})
 	scheds, err := app.ListSchedules()
 	if err != nil {
 		t.Fatalf("ListSchedules: %v", err)
@@ -1914,7 +1914,7 @@ func TestAppDeleteSchedule(t *testing.T) {
 	app := setupTestApp(t)
 	steps := []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "https://example.com"}}
 	flow, _ := app.CreateRecordedFlow("Flow", "", "https://example.com", steps)
-	sched, err := app.CreateSchedule("S", "0 * * * *", flow.ID, "https://example.com", models.ProxyConfig{}, 5, false, nil)
+	sched, err := app.CreateSchedule(ScheduleParams{Name: "S", CronExpr: "0 * * * *", FlowID: flow.ID, URL: "https://example.com", ProxyConfig: models.ProxyConfig{}, Priority: 5, Headless: false, Tags: nil})
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
@@ -1927,7 +1927,7 @@ func TestAppToggleSchedule(t *testing.T) {
 	app := setupTestApp(t)
 	steps := []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "https://example.com"}}
 	flow, _ := app.CreateRecordedFlow("Flow", "", "https://example.com", steps)
-	sched, err := app.CreateSchedule("S", "0 * * * *", flow.ID, "https://example.com", models.ProxyConfig{}, 5, false, nil)
+	sched, err := app.CreateSchedule(ScheduleParams{Name: "S", CronExpr: "0 * * * *", FlowID: flow.ID, URL: "https://example.com", ProxyConfig: models.ProxyConfig{}, Priority: 5, Headless: false, Tags: nil})
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
@@ -1943,11 +1943,11 @@ func TestAppUpdateSchedule(t *testing.T) {
 	app := setupTestApp(t)
 	steps := []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "https://example.com"}}
 	flow, _ := app.CreateRecordedFlow("Flow", "", "https://example.com", steps)
-	sched, err := app.CreateSchedule("S", "0 * * * *", flow.ID, "https://example.com", models.ProxyConfig{}, 5, false, nil)
+	sched, err := app.CreateSchedule(ScheduleParams{Name: "S", CronExpr: "0 * * * *", FlowID: flow.ID, URL: "https://example.com", ProxyConfig: models.ProxyConfig{}, Priority: 5, Headless: false, Tags: nil})
 	if err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
-	err = app.UpdateSchedule(sched.ID, "Updated", "0 0 * * *", flow.ID, "https://example.com", models.ProxyConfig{}, 5, false, nil, true)
+	err = app.UpdateSchedule(sched.ID, ScheduleParams{Name: "Updated", CronExpr: "0 0 * * *", FlowID: flow.ID, URL: "https://example.com", ProxyConfig: models.ProxyConfig{}, Priority: 5, Headless: false, Tags: nil}, true)
 	if err != nil {
 		t.Fatalf("UpdateSchedule: %v", err)
 	}

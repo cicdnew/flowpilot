@@ -1,5 +1,7 @@
 package copilot
 
+const errCreateRequest = "create request: %w"
+
 import (
 	"bufio"
 	"bytes"
@@ -12,7 +14,7 @@ import (
 )
 
 // NewProvider creates a new LLM provider based on the provider name.
-func NewProvider(provider string, apiKey string, baseURL string, modelName string) (LLMProvider, error) {
+func NewProvider(provider, apiKey, baseURL, modelName string) (LLMProvider, error) {
 	switch strings.ToLower(provider) {
 	case "openai", "openrouter", "gemini", "nvidia", "huggingface", "github", "github-models", "kilo":
 		return NewOpenAICompatibleProvider(provider, apiKey, baseURL, modelName), nil
@@ -31,7 +33,7 @@ type OpenAICompatibleProvider struct {
 }
 
 // NewOpenAICompatibleProvider creates a new OpenAI-compatible provider.
-func NewOpenAICompatibleProvider(provider string, apiKey string, baseURL string, modelName string) *OpenAICompatibleProvider {
+func NewOpenAICompatibleProvider(provider, apiKey, baseURL, modelName string) *OpenAICompatibleProvider {
 	if baseURL == "" {
 		switch provider {
 		case "openai":
@@ -80,7 +82,7 @@ func (p *OpenAICompatibleProvider) ChatCompletion(ctx context.Context, messages 
 
 	req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/chat/completions", bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return ChatResponse{}, fmt.Errorf("create request: %w", err)
+		return ChatResponse{}, fmt.Errorf(errCreateRequest, err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -137,7 +139,7 @@ func (p *OpenAICompatibleProvider) ChatCompletion(ctx context.Context, messages 
 func (p *OpenAICompatibleProvider) ListModels(ctx context.Context) ([]Model, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", p.baseURL+"/models", nil)
 	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
+		return nil, fmt.Errorf(errCreateRequest, err)
 	}
 
 	req.Header.Set("Authorization", "Bearer "+p.apiKey)
@@ -216,6 +218,56 @@ func detectMaxContext(modelID string) int {
 
 // StreamChatCompletion sends a streaming chat completion request.
 // Returns a channel that emits StreamChunk values until Done=true or Error.
+// processStreamLine parses a single SSE line from the LLM stream and sends
+// any resulting chunks to out. Returns (done=true, nil) when the stream is
+// finished, (false, err) on a fatal parse error, or (false, nil) to continue.
+func (p *OpenAICompatibleProvider) processStreamLine(line string, out chan<- StreamChunk) (bool, error) {
+	if !strings.HasPrefix(line, "data: ") {
+		return false, nil
+	}
+	data := strings.TrimPrefix(line, "data: ")
+	if data == "[DONE]" {
+		out <- StreamChunk{Done: true}
+		return true, nil
+	}
+
+	var streamResp struct {
+		Choices []struct {
+			Delta struct {
+				Content   string `json:"content"`
+				ToolCalls []struct {
+					Function struct {
+						Name      string         `json:"name"`
+						Arguments map[string]any `json:"arguments"`
+					} `json:"function"`
+				} `json:"tool_calls"`
+			} `json:"delta"`
+			FinishReason string `json:"finish_reason"`
+		} `json:"choices"`
+	}
+
+	if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
+		return false, nil // skip malformed chunks
+	}
+	if len(streamResp.Choices) == 0 {
+		return false, nil
+	}
+
+	choice := streamResp.Choices[0]
+	if choice.Delta.Content != "" {
+		out <- StreamChunk{Content: choice.Delta.Content}
+	}
+	if len(choice.Delta.ToolCalls) > 0 {
+		tc := choice.Delta.ToolCalls[0]
+		out <- StreamChunk{ToolCall: &ToolCall{Name: tc.Function.Name, Arguments: tc.Function.Arguments}}
+	}
+	if choice.FinishReason != "" {
+		out <- StreamChunk{Done: true}
+		return true, nil
+	}
+	return false, nil
+}
+
 func (p *OpenAICompatibleProvider) StreamChatCompletion(ctx context.Context, messages []Message, tools []ToolDefinition) <-chan StreamChunk {
 	out := make(chan StreamChunk, 64)
 
@@ -241,7 +293,7 @@ func (p *OpenAICompatibleProvider) StreamChatCompletion(ctx context.Context, mes
 
 		req, err := http.NewRequestWithContext(ctx, "POST", p.baseURL+"/chat/completions", bytes.NewBuffer(jsonBody))
 		if err != nil {
-			out <- StreamChunk{Error: fmt.Errorf("create request: %w", err)}
+			out <- StreamChunk{Error: fmt.Errorf(errCreateRequest, err)}
 			return
 		}
 
@@ -264,62 +316,12 @@ func (p *OpenAICompatibleProvider) StreamChatCompletion(ctx context.Context, mes
 
 		scanner := bufio.NewScanner(resp.Body)
 		for scanner.Scan() {
-			line := scanner.Text()
-
-			if !strings.HasPrefix(line, "data: ") {
-				continue
-			}
-
-			data := strings.TrimPrefix(line, "data: ")
-			if data == "[DONE]" {
-				out <- StreamChunk{Done: true}
+			done, err := p.processStreamLine(scanner.Text(), out)
+			if err != nil {
+				out <- StreamChunk{Error: err}
 				return
 			}
-
-			var streamResp struct {
-				Choices []struct {
-					Delta struct {
-						Content   string `json:"content"`
-						ToolCalls []struct {
-							Function struct {
-								Name      string         `json:"name"`
-								Arguments map[string]any `json:"arguments"`
-							} `json:"function"`
-						} `json:"tool_calls"`
-					} `json:"delta"`
-					FinishReason string `json:"finish_reason"`
-				} `json:"choices"`
-			}
-
-			if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
-				continue // skip malformed chunks
-			}
-
-			if len(streamResp.Choices) == 0 {
-				continue
-			}
-
-			choice := streamResp.Choices[0]
-
-			// Handle content delta
-			if choice.Delta.Content != "" {
-				out <- StreamChunk{Content: choice.Delta.Content}
-			}
-
-			// Handle tool call delta
-			if len(choice.Delta.ToolCalls) > 0 {
-				tc := choice.Delta.ToolCalls[0]
-				out <- StreamChunk{
-					ToolCall: &ToolCall{
-						Name:      tc.Function.Name,
-						Arguments: tc.Function.Arguments,
-					},
-				}
-			}
-
-			// Check for finish
-			if choice.FinishReason != "" {
-				out <- StreamChunk{Done: true}
+			if done {
 				return
 			}
 		}

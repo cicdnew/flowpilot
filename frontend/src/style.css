@@ -105,8 +105,8 @@ textarea:focus-visible {
 }
 
 .btn-primary {
-  background: linear-gradient(180deg, #3b82f6, #2563eb);
-  color: white;
+  background: linear-gradient(180deg, #2563eb, #1d4ed8);
+  color: #ffffff;
   box-shadow: 0 10px 30px rgba(37, 99, 235, 0.28);
 }
 
@@ -127,8 +127,8 @@ textarea:focus-visible {
 }
 
 .btn-danger {
-  background: linear-gradient(180deg, #ef4444, #dc2626);
-  color: white;
+  background: linear-gradient(180deg, #dc2626, #b91c1c);
+  color: #ffffff;
 }
 
 .btn-danger:hover:not(:disabled) {
@@ -136,8 +136,8 @@ textarea:focus-visible {
 }
 
 .btn-success {
-  background: linear-gradient(180deg, #10b981, #059669);
-  color: white;
+  background: linear-gradient(180deg, #059669, #047857);
+  color: #ffffff;
 }
 
 .btn-success:hover:not(:disabled) {
@@ -197,7 +197,7 @@ textarea:focus {
 .badge-queued { background: rgba(30, 58, 95, 0.5); color: #93c5fd; }
 .badge-running { background: rgba(6, 78, 59, 0.45); color: #6ee7b7; }
 .badge-completed { background: rgba(4, 120, 87, 0.34); color: #86efac; }
-.badge-failed { background: rgba(127, 29, 29, 0.4); color: #fca5a5; }
+.badge-failed { background: rgba(127, 29, 29, 0.6); color: #fecaca; }
 .badge-cancelled { background: rgba(63, 63, 70, 0.4); color: #d4d4d8; }
 .badge-retrying { background: rgba(120, 53, 15, 0.45); color: #fcd34d; }
 

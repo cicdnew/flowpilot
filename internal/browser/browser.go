@@ -26,6 +26,8 @@ import (
 
 const defaultTimeout = 30 * time.Second
 
+const logTaskLog = "task log"
+
 const (
 	MaxEvalScriptSize        = 10_000
 	maxEvalScriptSizeDisplay = "10000"
@@ -80,13 +82,7 @@ func (dc *debugController) resume() {
 }
 
 func (dc *debugController) step() {
-	dc.mu.Lock()
-	defer dc.mu.Unlock()
-	if dc.paused {
-		dc.paused = false
-		close(dc.pauseCh)
-		dc.pauseCh = nil
-	}
+	dc.resume()
 }
 
 func (dc *debugController) waitIfPaused(ctx context.Context) error {
@@ -240,6 +236,36 @@ func (r *Runner) resolveLoggingPolicy(task models.Task) resolvedLoggingPolicy {
 }
 
 // RunTask executes a single task with its own browser context and proxy.
+// acquireBrowserContext resolves a browser context either from a pool or by
+// creating a new allocator. The caller must call the returned cancel func.
+func (r *Runner) acquireBrowserContext(ctx context.Context, effectiveProxy models.ProxyConfig, headless bool, basePool *BrowserPool, result *models.TaskResult, start time.Time) (context.Context, context.CancelFunc, error) {
+	pool, err := r.getPoolForProxy(ctx, effectiveProxy)
+	if err != nil {
+		result.Duration = time.Since(start)
+		result.Error = fmt.Sprintf("resolve browser pool: %v", err)
+		r.addLog(result, "error", result.Error)
+		return nil, nil, err
+	}
+	if pool != nil {
+		browserCtx, poolRelease, err := pool.Acquire(ctx)
+		if err != nil {
+			result.Duration = time.Since(start)
+			result.Error = fmt.Sprintf("acquire browser from pool: %v", err)
+			r.addLog(result, "error", result.Error)
+			return nil, nil, err
+		}
+		if effectiveProxy.Server != "" {
+			r.addLog(result, "info", fmt.Sprintf("using proxy browser pool for %s", effectiveProxy.Server))
+		} else if basePool != nil {
+			r.addLog(result, "info", "using shared browser pool")
+		}
+		return browserCtx, func() { poolRelease() }, nil
+	}
+	allocCtx, allocCancel := r.createAllocator(ctx, effectiveProxy, headless)
+	browserCtx, browserCancel := chromedp.NewContext(allocCtx)
+	return browserCtx, func() { browserCancel(); allocCancel() }, nil
+}
+
 func (r *Runner) RunTask(ctx context.Context, task models.Task) (result *models.TaskResult, err error) {
 	start := time.Now()
 	policy := r.resolveLoggingPolicy(task)
@@ -273,7 +299,6 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (result *models.
 
 	var browserCtx context.Context
 	var browserCancel context.CancelFunc
-	var poolRelease func()
 
 	r.mu.Lock()
 	basePool := r.pool
@@ -289,32 +314,9 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (result *models.
 		}
 	}
 
-	pool, err := r.getPoolForProxy(ctx, effectiveProxy)
+	browserCtx, browserCancel, err = r.acquireBrowserContext(ctx, effectiveProxy, task.Headless, basePool, result, start)
 	if err != nil {
-		result.Duration = time.Since(start)
-		result.Error = fmt.Sprintf("resolve browser pool: %v", err)
-		r.addLog(result, "error", result.Error)
 		return result, err
-	}
-	if pool != nil {
-		browserCtx, poolRelease, err = pool.Acquire(ctx)
-		if err != nil {
-			result.Duration = time.Since(start)
-			result.Error = fmt.Sprintf("acquire browser from pool: %v", err)
-			r.addLog(result, "error", result.Error)
-			return result, err
-		}
-		defer poolRelease()
-		browserCancel = func() {} // no-op; poolRelease handles cleanup
-		if effectiveProxy.Server != "" {
-			r.addLog(result, "info", fmt.Sprintf("using proxy browser pool for %s", effectiveProxy.Server))
-		} else if basePool != nil {
-			r.addLog(result, "info", "using shared browser pool")
-		}
-	} else {
-		allocCtx, allocCancel := r.createAllocator(ctx, effectiveProxy, task.Headless)
-		defer allocCancel()
-		browserCtx, browserCancel = chromedp.NewContext(allocCtx)
 	}
 	defer browserCancel()
 
@@ -619,45 +621,56 @@ func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, r
 	return nil
 }
 
+func (r *Runner) handleProxyAuthRequired(ctx context.Context, requestID fetch.RequestID, proxyConfig models.ProxyConfig) {
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
+	c := cdpExecutor(ctx)
+	if c == nil {
+		return
+	}
+	if err := fetch.ContinueWithAuth(requestID, &fetch.AuthChallengeResponse{
+		Response: fetch.AuthChallengeResponseResponseProvideCredentials,
+		Username: proxyConfig.Username,
+		Password: proxyConfig.Password,
+	}).Do(c); err != nil {
+		log.Printf("proxy auth continue failed: %v", err)
+	}
+}
+
+func (r *Runner) handleProxyRequestPaused(ctx context.Context, requestID fetch.RequestID) {
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
+	c := cdpExecutor(ctx)
+	if c == nil {
+		return
+	}
+	if err := fetch.ContinueRequest(requestID).Do(c); err != nil {
+		log.Printf("proxy request continue failed: %v", err)
+	}
+}
+
+// cdpExecutor returns a cdp executor for the given context, or nil if unavailable.
+func cdpExecutor(ctx context.Context) cdp.Executor {
+	execCtx := chromedp.FromContext(ctx)
+	if execCtx == nil || execCtx.Target == nil {
+		return nil
+	}
+	return cdp.WithExecutor(ctx, execCtx.Target)
+}
+
 func (r *Runner) setupProxyAuth(ctx context.Context, proxyConfig models.ProxyConfig) error {
 	chromedp.ListenTarget(ctx, func(ev any) {
 		switch e := ev.(type) {
 		case *fetch.EventAuthRequired:
-			go func() {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-				execCtx := chromedp.FromContext(ctx)
-				if execCtx == nil || execCtx.Target == nil {
-					return
-				}
-				c := cdp.WithExecutor(ctx, execCtx.Target)
-				if err := fetch.ContinueWithAuth(e.RequestID, &fetch.AuthChallengeResponse{
-					Response: fetch.AuthChallengeResponseResponseProvideCredentials,
-					Username: proxyConfig.Username,
-					Password: proxyConfig.Password,
-				}).Do(c); err != nil {
-					log.Printf("proxy auth continue failed: %v", err)
-				}
-			}()
+			go r.handleProxyAuthRequired(ctx, e.RequestID, proxyConfig)
 		case *fetch.EventRequestPaused:
-			go func() {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-				execCtx := chromedp.FromContext(ctx)
-				if execCtx == nil || execCtx.Target == nil {
-					return
-				}
-				c := cdp.WithExecutor(ctx, execCtx.Target)
-				if err := fetch.ContinueRequest(e.RequestID).Do(c); err != nil {
-					log.Printf("proxy request continue failed: %v", err)
-				}
-			}()
+			go r.handleProxyRequestPaused(ctx, e.RequestID)
 		}
 	})
 
@@ -680,13 +693,13 @@ func (r *Runner) addLog(result *models.TaskResult, level, message string) {
 	attrs := []any{"task_id", result.TaskID, "level", level, "message", message}
 	switch level {
 	case "error":
-		logs.Logger.Error("task log", attrs...)
+		logs.Logger.Error(logTaskLog, attrs...)
 	case "warn":
-		logs.Logger.Warn("task log", attrs...)
+		logs.Logger.Warn(logTaskLog, attrs...)
 	case "debug":
-		logs.Logger.Debug("task log", attrs...)
+		logs.Logger.Debug(logTaskLog, attrs...)
 	default:
-		logs.Logger.Info("task log", attrs...)
+		logs.Logger.Info(logTaskLog, attrs...)
 	}
 }
 

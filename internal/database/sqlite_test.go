@@ -705,7 +705,7 @@ func TestUpdateTask(t *testing.T) {
 	}
 	newProxy := models.ProxyConfig{Server: "new.proxy:9090", Username: "u2", Password: "p2"}
 
-	if err := db.UpdateTask(context.Background(), "upd-1", "Updated", "https://updated.com", newSteps, newProxy, models.PriorityHigh, []string{"updated-tag"}, 0, nil); err != nil {
+	if err := db.UpdateTask(context.Background(), "upd-1", database.TaskUpdateParams{Name: "Updated", URL: "https://updated.com", Steps: newSteps, ProxyConfig: newProxy, Priority: models.PriorityHigh, Tags: []string{"updated-tag"}, Timeout: 0, LoggingPolicy: nil}); err != nil {
 		t.Fatalf("UpdateTask: %v", err)
 	}
 
@@ -740,7 +740,7 @@ func TestUpdateTaskReencryptsProxyCredentials(t *testing.T) {
 	}
 
 	newProxy := models.ProxyConfig{Server: "new.proxy:9090", Username: "second_user", Password: "second_pass"}
-	if err := db.UpdateTask(context.Background(), task.ID, "Updated", "https://updated.com", []models.TaskStep{{Action: models.ActionNavigate, Value: "https://updated.com"}}, newProxy, models.PriorityHigh, []string{"updated-tag"}, 0, nil); err != nil {
+	if err := db.UpdateTask(context.Background(), task.ID, database.TaskUpdateParams{Name: "Updated", URL: "https://updated.com", Steps: []models.TaskStep{{Action: models.ActionNavigate, Value: "https://updated.com"}}, ProxyConfig: newProxy, Priority: models.PriorityHigh, Tags: []string{"updated-tag"}, Timeout: 0, LoggingPolicy: nil}); err != nil {
 		t.Fatalf("UpdateTask: %v", err)
 	}
 
@@ -915,7 +915,7 @@ func TestUpdateTaskRejectsRunning(t *testing.T) {
 		t.Fatalf("UpdateTaskStatus: %v", err)
 	}
 
-	err := db.UpdateTask(context.Background(), "upd-run-1", "New Name", "https://x.com", nil, models.ProxyConfig{}, models.PriorityNormal, nil, 0, nil)
+	err := db.UpdateTask(context.Background(), "upd-run-1", database.TaskUpdateParams{Name: "New Name", URL: "https://x.com", Steps: nil, ProxyConfig: models.ProxyConfig{}, Priority: models.PriorityNormal, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err == nil {
 		t.Fatal("expected error when updating running task")
 	}
@@ -1657,7 +1657,7 @@ func TestUpdateProxyHealthNotFound(t *testing.T) {
 
 func TestUpdateTaskNotFound(t *testing.T) {
 	db := setupTestDB(t)
-	err := db.UpdateTask(context.Background(), "nonexistent", "Name", "https://example.com", nil, models.ProxyConfig{}, models.PriorityNormal, nil, 0, nil)
+	err := db.UpdateTask(context.Background(), "nonexistent", database.TaskUpdateParams{Name: "Name", URL: "https://example.com", Steps: nil, ProxyConfig: models.ProxyConfig{}, Priority: models.PriorityNormal, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err == nil {
 		t.Fatal("expected error for nonexistent task update")
 	}
@@ -1711,9 +1711,8 @@ func TestUpdateTaskOnFailedTask(t *testing.T) {
 		t.Fatalf("UpdateTaskStatus: %v", err)
 	}
 
-	err := db.UpdateTask(context.Background(), "upd-failed-1", "Retried", "https://example.com", []models.TaskStep{
-		{Action: models.ActionNavigate, Value: "https://example.com"},
-	}, models.ProxyConfig{}, models.PriorityNormal, nil, 0, nil)
+	err := db.UpdateTask(context.Background(), "upd-failed-1", database.TaskUpdateParams{Name: "Retried", URL: "https://example.com", Steps: []models.TaskStep{
+		{Action: models.ActionNavigate, ProxyConfig: Value: "https://example.com"}, Priority: }, Tags: models.ProxyConfig{}, Timeout: models.PriorityNormal, LoggingPolicy: nil, 0, nil})
 	if err != nil {
 		t.Fatalf("UpdateTask on failed task should succeed: %v", err)
 	}
@@ -3907,7 +3906,7 @@ func TestUpdateTaskDB(t *testing.T) {
 	if err := db.CreateTask(ctx, task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
-	if err := db.UpdateTask(ctx, task.ID, "Updated", task.URL, task.Steps, task.Proxy, task.Priority, task.Tags, task.Timeout, task.LoggingPolicy); err != nil {
+	if err := db.UpdateTask(ctx, task.ID, database.TaskUpdateParams{Name: "Updated", URL: task.URL, Steps: task.Steps, ProxyConfig: task.Proxy, Priority: task.Priority, Tags: task.Tags, Timeout: task.Timeout, LoggingPolicy: task.LoggingPolicy}); err != nil {
 		t.Fatalf("UpdateTask: %v", err)
 	}
 }

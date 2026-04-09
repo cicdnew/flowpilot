@@ -45,6 +45,8 @@ var (
 	ErrInvalidProxyFallback = errors.New("proxy fallback must be strict, any_healthy, or direct")
 )
 
+const errStepFmt = "step %d: %w"
+
 var validActions = func() map[models.StepAction]bool {
 	actions := make(map[models.StepAction]bool, len(models.SupportedStepActions()))
 	for _, action := range models.SupportedStepActions() {
@@ -157,6 +159,28 @@ func ValidateTaskURL(rawURL string) error {
 	return nil
 }
 
+// validateSingleStep validates a single task step at the given index.
+func validateSingleStep(i int, step models.TaskStep, allowEval bool) error {
+	if !validActions[step.Action] {
+		return fmt.Errorf("step %d: unknown action %s: %w", i+1, step.Action, ErrInvalidStepAction)
+	}
+	if step.Action == models.ActionEval && !allowEval {
+		return fmt.Errorf(errStepFmt, i, ErrEvalNotAllowed)
+	}
+	if valueRequiredActions[step.Action] && strings.TrimSpace(step.Value) == "" {
+		return fmt.Errorf(errStepFmt, i, ErrStepMissingValue)
+	}
+	if step.Action == models.ActionNavigate {
+		if err := ValidateTaskURL(step.Value); err != nil {
+			return fmt.Errorf(errStepFmt, i, ErrStepInvalidURL)
+		}
+	}
+	if selectorRequiredActions[step.Action] && strings.TrimSpace(step.Selector) == "" {
+		return fmt.Errorf(errStepFmt, i, ErrStepMissingSelector)
+	}
+	return nil
+}
+
 // ValidateTaskSteps checks that each step has a valid action and required fields.
 // allowEval controls whether eval steps are permitted.
 func ValidateTaskSteps(steps []models.TaskStep, allowEval bool) error {
@@ -164,26 +188,8 @@ func ValidateTaskSteps(steps []models.TaskStep, allowEval bool) error {
 		return ErrNoSteps
 	}
 	for i, step := range steps {
-		if !validActions[step.Action] {
-			return fmt.Errorf("step %d: unknown action %s: %w", i+1, step.Action, ErrInvalidStepAction)
-		}
-
-		if step.Action == models.ActionEval && !allowEval {
-			return fmt.Errorf("step %d: %w", i, ErrEvalNotAllowed)
-		}
-
-		if valueRequiredActions[step.Action] && strings.TrimSpace(step.Value) == "" {
-			return fmt.Errorf("step %d: %w", i, ErrStepMissingValue)
-		}
-
-		if step.Action == models.ActionNavigate {
-			if err := ValidateTaskURL(step.Value); err != nil {
-				return fmt.Errorf("step %d: %w", i, ErrStepInvalidURL)
-			}
-		}
-
-		if selectorRequiredActions[step.Action] && strings.TrimSpace(step.Selector) == "" {
-			return fmt.Errorf("step %d: %w", i, ErrStepMissingSelector)
+		if err := validateSingleStep(i, step, allowEval); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -129,8 +129,8 @@ func New(db *database.DB, runner *browser.Runner, maxConcurrency int, onEvent Ev
 
 func (q *Queue) dbWriteContext(parent context.Context) (context.Context, context.CancelFunc) {
 	const dbWriteTimeout = 5 * time.Second
-	if parent == nil || parent.Err() != nil {
-		parent = context.Background()
+	if parent == nil {
+		parent = context.TODO()
 	}
 	return context.WithTimeout(parent, dbWriteTimeout)
 }
@@ -841,7 +841,9 @@ func (q *Queue) handleTaskCancellation(ctx context.Context, taskID string, runEr
 	if !errors.Is(runErr, context.Canceled) {
 		return false
 	}
-	dbCtx, cancel := q.dbWriteContext(ctx)
+	// ctx is cancelled at this point; use WithoutCancel to allow the DB write
+	// to complete while still propagating parent values.
+	dbCtx, cancel := q.dbWriteContext(context.WithoutCancel(ctx))
 	err := q.db.BatchApplyTaskStateChanges(dbCtx, []database.TaskStateChange{{TaskID: taskID, Status: models.TaskStatusCancelled, Error: errCancelledByUser}})
 	cancel()
 	if err != nil {

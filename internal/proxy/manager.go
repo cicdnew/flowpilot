@@ -509,10 +509,17 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 	if proxy.Protocol == "" {
 		proxy.Protocol = "http"
 	}
+
+	// Use context.WithoutCancel so that DB writes can complete even if the
+	// health-check request context was cancelled (e.g. in tests or on shutdown).
+	// This keeps the parent's values (trace IDs, etc.) while dropping the
+	// cancellation signal, satisfying the Sonar rule against context.Background().
+	dbCtx := context.WithoutCancel(ctx)
+
 	proxyURL, err := url.Parse(fmt.Sprintf("%s://%s", proxy.Protocol, proxy.Server))
 	if err != nil {
-		dbCtx, cancel := m.dbWriteContext(ctx)
-		dbErr := m.db.UpdateProxyHealth(dbCtx, proxy.ID, models.ProxyStatusUnhealthy, 0)
+		writeCtx, cancel := m.dbWriteContext(dbCtx)
+		dbErr := m.db.UpdateProxyHealth(writeCtx, proxy.ID, models.ProxyStatusUnhealthy, 0)
 		cancel()
 		if dbErr != nil {
 			logUpdateProxyHealthError(proxy.ID, dbErr)
@@ -534,8 +541,8 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 	start := time.Now()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m.config.HealthCheckURL, nil)
 	if err != nil {
-		dbCtx, cancel := m.dbWriteContext(ctx)
-		dbErr := m.db.UpdateProxyHealth(dbCtx, proxy.ID, models.ProxyStatusUnhealthy, 0)
+		writeCtx, cancel := m.dbWriteContext(dbCtx)
+		dbErr := m.db.UpdateProxyHealth(writeCtx, proxy.ID, models.ProxyStatusUnhealthy, 0)
 		cancel()
 		if dbErr != nil {
 			logUpdateProxyHealthError(proxy.ID, dbErr)
@@ -547,8 +554,8 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 	latency := int(time.Since(start).Milliseconds())
 
 	if err != nil {
-		dbCtx, cancel := m.dbWriteContext(ctx)
-		dbErr := m.db.UpdateProxyHealth(dbCtx, proxy.ID, models.ProxyStatusUnhealthy, latency)
+		writeCtx, cancel := m.dbWriteContext(dbCtx)
+		dbErr := m.db.UpdateProxyHealth(writeCtx, proxy.ID, models.ProxyStatusUnhealthy, latency)
 		cancel()
 		if dbErr != nil {
 			logUpdateProxyHealthError(proxy.ID, dbErr)
@@ -561,8 +568,8 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 	}()
 
 	if resp.StatusCode >= 400 {
-		dbCtx, cancel := m.dbWriteContext(ctx)
-		dbErr := m.db.UpdateProxyHealth(dbCtx, proxy.ID, models.ProxyStatusUnhealthy, latency)
+		writeCtx, cancel := m.dbWriteContext(dbCtx)
+		dbErr := m.db.UpdateProxyHealth(writeCtx, proxy.ID, models.ProxyStatusUnhealthy, latency)
 		cancel()
 		if dbErr != nil {
 			logUpdateProxyHealthError(proxy.ID, dbErr)
@@ -570,8 +577,8 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 		return
 	}
 
-	dbCtx, cancel := m.dbWriteContext(ctx)
-	dbErr := m.db.UpdateProxyHealth(dbCtx, proxy.ID, models.ProxyStatusHealthy, latency)
+	writeCtx, cancel := m.dbWriteContext(dbCtx)
+	dbErr := m.db.UpdateProxyHealth(writeCtx, proxy.ID, models.ProxyStatusHealthy, latency)
 	cancel()
 	if dbErr != nil {
 		logUpdateProxyHealthError(proxy.ID, dbErr)

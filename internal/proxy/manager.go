@@ -92,9 +92,6 @@ func NewManager(db *database.DB, config models.ProxyPoolConfig) *Manager {
 
 func (m *Manager) dbWriteContext(parent context.Context) (context.Context, context.CancelFunc) {
 	const dbWriteTimeout = 5 * time.Second
-	if parent == nil || parent.Err() != nil {
-		parent = context.Background()
-	}
 	return context.WithTimeout(parent, dbWriteTimeout)
 }
 

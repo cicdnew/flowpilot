@@ -867,7 +867,6 @@ func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execE
 			shouldRetry: true,
 			task:        retryTask,
 			backoff:     backoff,
-			parentCtx:   parentCtx,
 		}
 	}
 

@@ -12,12 +12,14 @@ import (
 	"flowpilot/internal/models"
 )
 
+const errInsertTaskEvent = "insert task event %s: %w"
+
 func (db *DB) InsertTaskEvent(ctx context.Context, event models.TaskLifecycleEvent) error {
 	_, err := db.conn.ExecContext(ctx, `INSERT INTO task_events (id, task_id, batch_id, from_state, to_state, error, timestamp)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		event.ID, event.TaskID, event.BatchID, event.FromState, event.ToState, event.Error, event.Timestamp)
 	if err != nil {
-		return fmt.Errorf("insert task event %s: %w", event.ID, err)
+		return fmt.Errorf(errInsertTaskEvent, event.ID, err)
 	}
 	return nil
 }
@@ -33,7 +35,7 @@ func insertTaskEventTx(ctx context.Context, tx *sql.Tx, event models.TaskLifecyc
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		event.ID, event.TaskID, event.BatchID, event.FromState, event.ToState, event.Error, event.Timestamp)
 	if err != nil {
-		return fmt.Errorf("insert task event %s: %w", event.ID, err)
+		return fmt.Errorf(errInsertTaskEvent, event.ID, err)
 	}
 	return nil
 }
@@ -51,7 +53,7 @@ func insertTaskEventsTx(ctx context.Context, tx *sql.Tx, events []models.TaskLif
 
 	for _, event := range events {
 		if _, err := stmt.ExecContext(ctx, event.ID, event.TaskID, event.BatchID, event.FromState, event.ToState, event.Error, event.Timestamp); err != nil {
-			return fmt.Errorf("insert task event %s: %w", event.ID, err)
+			return fmt.Errorf(errInsertTaskEvent, event.ID, err)
 		}
 	}
 	return nil

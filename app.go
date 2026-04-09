@@ -241,7 +241,7 @@ func (a *App) startup(ctx context.Context) {
 		}
 	}
 
-	a.proxyManager = proxy.NewManager(db, models.ProxyPoolConfig{
+	a.proxyManager = proxy.NewManager(a.db, models.ProxyPoolConfig{
 		Strategy:            models.RotationRoundRobin,
 		HealthCheckInterval: a.config.HealthCheckInterval,
 		MaxFailures:         a.config.MaxProxyFailures,
@@ -249,7 +249,7 @@ func (a *App) startup(ctx context.Context) {
 	})
 	go a.proxyManager.StartHealthChecks(ctx)
 
-	a.queue = queue.New(db, runner, a.config.QueueConcurrency, func(event models.TaskEvent) {
+	a.queue = queue.New(a.db, runner, a.config.QueueConcurrency, func(event models.TaskEvent) {
 		safeWailsEmit(ctx, "task:event", event)
 	})
 	a.queue.SetProxyManager(a.proxyManager)
@@ -261,10 +261,10 @@ func (a *App) startup(ctx context.Context) {
 		logWarningf(ctx, "recover stale tasks: %v", err)
 	}
 
-	a.batchEngine = batch.New(db)
+	a.batchEngine = batch.New(a.db)
 
 	logsDir := filepath.Join(a.dataDir, "logs")
-	logExporter, err := logs.NewExporter(db, logsDir)
+	logExporter, err := logs.NewExporter(a.db, logsDir)
 	if err != nil {
 		a.initErr = fmt.Errorf("init log exporter: %w", err)
 		logErrorf(ctx, errStartupFailed, a.initErr)

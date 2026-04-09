@@ -1,7 +1,5 @@
 package copilot
 
-const errCreateRequest = "create request: %w"
-
 import (
 	"bufio"
 	"bytes"
@@ -12,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 )
+
+const errCreateRequest = "create request: %w"
 
 // NewProvider creates a new LLM provider based on the provider name.
 func NewProvider(provider, apiKey, baseURL, modelName string) (LLMProvider, error) {

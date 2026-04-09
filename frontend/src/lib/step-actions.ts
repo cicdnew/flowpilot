@@ -39,7 +39,7 @@ export const stepActionState = writable<StepActionState>({
 let loadPromise: Promise<StepActionState> | null = null;
 
 function getWailsApp(): WailsAppMethods | undefined {
-  return (window as Window & {
+  return (globalThis as typeof globalThis & {
     go?: {
       main?: {
         App?: WailsAppMethods;
@@ -92,7 +92,7 @@ export function ensureStepActionStateLoaded(): Promise<StepActionState> {
   if (get(stepActionState).loaded) {
     return Promise.resolve(get(stepActionState));
   }
-  if (loadPromise) {
+  if (loadPromise !== null) {
     return loadPromise;
   }
   loadPromise = resolveStepActionState()

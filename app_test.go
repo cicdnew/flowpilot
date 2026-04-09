@@ -64,7 +64,7 @@ func validSteps() []models.TaskStep {
 func TestAppCreateTaskValid(t *testing.T) {
 	app := setupTestApp(t)
 
-	task, err := app.CreateTask("Test Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, err := app.CreateTask(CreateTaskParams{Name: "Test Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestAppCreateTaskValid(t *testing.T) {
 func TestAppCreateTaskEmptyName(t *testing.T) {
 	app := setupTestApp(t)
 
-	_, err := app.CreateTask("", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	_, err := app.CreateTask(CreateTaskParams{Name: "", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err == nil {
 		t.Fatal("expected error for empty name, got nil")
 	}
@@ -91,7 +91,7 @@ func TestAppCreateTaskEmptyName(t *testing.T) {
 func TestAppCreateTaskInvalidURL(t *testing.T) {
 	app := setupTestApp(t)
 
-	_, err := app.CreateTask("Task", "not-a-url", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	_, err := app.CreateTask(CreateTaskParams{Name: "Task", URL: "not-a-url", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err == nil {
 		t.Fatal("expected error for invalid URL, got nil")
 	}
@@ -106,7 +106,7 @@ func TestAppCreateTaskInvalidStepAction(t *testing.T) {
 	badSteps := []models.TaskStep{
 		{Action: "bogus_action"},
 	}
-	_, err := app.CreateTask("Task", "https://example.com", badSteps, models.ProxyConfig{}, 5, false, nil, 0, nil)
+	_, err := app.CreateTask(CreateTaskParams{Name: "Task", URL: "https://example.com", Steps: badSteps, ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err == nil {
 		t.Fatal("expected error for invalid step action, got nil")
 	}
@@ -118,7 +118,7 @@ func TestAppCreateTaskInvalidStepAction(t *testing.T) {
 func TestAppCreateTaskInvalidPriority(t *testing.T) {
 	app := setupTestApp(t)
 
-	_, err := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{}, 99, false, nil, 0, nil)
+	_, err := app.CreateTask(CreateTaskParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 99, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err == nil {
 		t.Fatal("expected error for invalid priority, got nil")
 	}
@@ -169,7 +169,7 @@ func TestAppAddProxyInvalidServer(t *testing.T) {
 func TestAppDeleteTask(t *testing.T) {
 	app := setupTestApp(t)
 
-	task, err := app.CreateTask("Delete Me", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, err := app.CreateTask(CreateTaskParams{Name: "Delete Me", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -187,7 +187,7 @@ func TestAppDeleteTask(t *testing.T) {
 func TestAppGetTask(t *testing.T) {
 	app := setupTestApp(t)
 
-	created, err := app.CreateTask("Get Me", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	created, err := app.CreateTask(CreateTaskParams{Name: "Get Me", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestAppListTasks(t *testing.T) {
 	app := setupTestApp(t)
 
 	for i := 0; i < 3; i++ {
-		_, err := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+		_, err := app.CreateTask(CreateTaskParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 		if err != nil {
 			t.Fatalf("CreateTask %d: %v", i, err)
 		}
@@ -235,7 +235,7 @@ func TestAppCreateTaskEvalBlocked(t *testing.T) {
 	evalSteps := []models.TaskStep{
 		{Action: models.ActionEval, Value: "document.cookie"},
 	}
-	_, err := app.CreateTask("Eval Task", "https://example.com", evalSteps, models.ProxyConfig{}, 5, false, nil, 0, nil)
+	_, err := app.CreateTask(CreateTaskParams{Name: "Eval Task", URL: "https://example.com", Steps: evalSteps, ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err == nil {
 		t.Fatal("expected error for eval step, got nil")
 	}
@@ -250,7 +250,7 @@ func TestAppCreateTaskRejectsMalformedSupportedStep(t *testing.T) {
 	steps := []models.TaskStep{
 		{Action: models.ActionFileUpload, Value: "/tmp/upload.txt"},
 	}
-	_, err := app.CreateTask("Upload Task", "https://example.com", steps, models.ProxyConfig{}, 5, false, nil, 0, nil)
+	_, err := app.CreateTask(CreateTaskParams{Name: "Upload Task", URL: "https://example.com", Steps: steps, ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err == nil {
 		t.Fatal("expected error for malformed supported step, got nil")
 	}
@@ -269,7 +269,7 @@ func TestAppSensitiveMethodsRequireReady(t *testing.T) {
 		{
 			name: "create task",
 			call: func() error {
-				_, err := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+				_, err := app.CreateTask(CreateTaskParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 				return err
 			},
 		},
@@ -354,11 +354,11 @@ func setupTestAppWithQueue(t *testing.T) *App {
 func TestAppListTasksByStatus(t *testing.T) {
 	app := setupTestApp(t)
 
-	_, err := app.CreateTask("Pending 1", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	_, err := app.CreateTask(CreateTaskParams{Name: "Pending 1", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
-	_, err = app.CreateTask("Pending 2", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	_, err = app.CreateTask(CreateTaskParams{Name: "Pending 2", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -384,7 +384,7 @@ func TestAppGetTaskStats(t *testing.T) {
 	app := setupTestApp(t)
 
 	for i := 0; i < 3; i++ {
-		_, err := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+		_, err := app.CreateTask(CreateTaskParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 		if err != nil {
 			t.Fatalf("CreateTask %d: %v", i, err)
 		}
@@ -444,7 +444,7 @@ func TestAppDeleteProxy(t *testing.T) {
 func TestAppExportResultsJSON(t *testing.T) {
 	app := setupTestApp(t)
 
-	task, err := app.CreateTask("Export Test", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, err := app.CreateTask(CreateTaskParams{Name: "Export Test", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -480,7 +480,7 @@ func TestAppExportResultsJSON(t *testing.T) {
 func TestAppExportResultsCSV(t *testing.T) {
 	app := setupTestApp(t)
 
-	task, err := app.CreateTask("CSV Test", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, err := app.CreateTask(CreateTaskParams{Name: "CSV Test", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -539,7 +539,7 @@ func TestAppExportResultsJSONEmpty(t *testing.T) {
 func TestAppStartTaskWithQueue(t *testing.T) {
 	app := setupTestAppWithQueue(t)
 
-	task, err := app.CreateTask("Queue Test", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, err := app.CreateTask(CreateTaskParams{Name: "Queue Test", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -562,7 +562,7 @@ func TestAppStartTaskNotFound(t *testing.T) {
 func TestAppCancelTask(t *testing.T) {
 	app := setupTestAppWithQueue(t)
 
-	task, err := app.CreateTask("Cancel Test", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, err := app.CreateTask(CreateTaskParams{Name: "Cancel Test", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -584,7 +584,7 @@ func TestAppCancelTask(t *testing.T) {
 func TestAppUpdateTask(t *testing.T) {
 	app := setupTestApp(t)
 
-	task, err := app.CreateTask("Original", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, err := app.CreateTask(CreateTaskParams{Name: "Original", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -672,7 +672,7 @@ func TestAppCreateBatchRejectsInvalidProxyConfig(t *testing.T) {
 func TestAppUpdateTaskValidation(t *testing.T) {
 	app := setupTestApp(t)
 
-	task, err := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, err := app.CreateTask(CreateTaskParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -686,7 +686,7 @@ func TestAppUpdateTaskValidation(t *testing.T) {
 func TestAppCreateTaskRejectsInvalidLoggingPolicy(t *testing.T) {
 	app := setupTestApp(t)
 
-	_, err := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, &models.TaskLoggingPolicy{MaxExecutionLogs: 5001})
+	_, err := app.CreateTask(CreateTaskParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: &models.TaskLoggingPolicy{MaxExecutionLogs: 5001}})
 	if err == nil {
 		t.Fatal("expected error for invalid logging policy, got nil")
 	}
@@ -698,7 +698,7 @@ func TestAppCreateTaskRejectsInvalidLoggingPolicy(t *testing.T) {
 func TestAppUpdateTaskRejectsInvalidLoggingPolicy(t *testing.T) {
 	app := setupTestApp(t)
 
-	task, err := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, err := app.CreateTask(CreateTaskParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -715,7 +715,7 @@ func TestAppUpdateTaskRejectsInvalidLoggingPolicy(t *testing.T) {
 func TestAppCreateTaskRejectsInvalidProxyConfig(t *testing.T) {
 	app := setupTestApp(t)
 
-	_, err := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{Protocol: models.ProxyHTTP}, 5, false, nil, 0, nil)
+	_, err := app.CreateTask(CreateTaskParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{Protocol: models.ProxyHTTP}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err == nil {
 		t.Fatal("expected error for invalid proxy config")
 	}
@@ -727,7 +727,7 @@ func TestAppCreateTaskRejectsInvalidProxyConfig(t *testing.T) {
 func TestAppUpdateTaskRejectsInvalidProxyConfig(t *testing.T) {
 	app := setupTestApp(t)
 
-	task, err := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, err := app.CreateTask(CreateTaskParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -744,7 +744,7 @@ func TestAppUpdateTaskRejectsInvalidProxyConfig(t *testing.T) {
 func TestAppUpdateTaskRejectsMalformedSupportedStep(t *testing.T) {
 	app := setupTestApp(t)
 
-	task, err := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, err := app.CreateTask(CreateTaskParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -780,17 +780,7 @@ func TestAppStartAllPending(t *testing.T) {
 	app := setupTestAppWithQueue(t)
 
 	for i := 0; i < 3; i++ {
-		_, err := app.CreateTask(
-			fmt.Sprintf("Pending %d", i),
-			"https://example.com",
-			validSteps(),
-			models.ProxyConfig{},
-			5,
-			false,
-			nil,
-			0,
-			nil,
-		)
+		_, err := app.CreateTask(CreateTaskParams{Name: fmt.Sprintf("Pending %d", i), URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 		if err != nil {
 			t.Fatalf("CreateTask %d: %v", i, err)
 		}
@@ -813,7 +803,7 @@ func TestAppGetRunningCount(t *testing.T) {
 func TestAppDeleteTaskCancelsRunning(t *testing.T) {
 	app := setupTestAppWithQueue(t)
 
-	task, err := app.CreateTask("Cancel Delete", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, err := app.CreateTask(CreateTaskParams{Name: "Cancel Delete", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -848,7 +838,7 @@ func TestAppDeleteProxyNotFound(t *testing.T) {
 func TestAppCreateTaskAutoStart(t *testing.T) {
 	app := setupTestAppWithQueue(t)
 
-	task, err := app.CreateTask("Auto Start", "https://example.com", validSteps(), models.ProxyConfig{}, 5, true, []string{"test"}, 0, nil)
+	task, err := app.CreateTask(CreateTaskParams{Name: "Auto Start", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: true, Tags: []string{"test"}, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask with autoStart: %v", err)
 	}
@@ -946,13 +936,7 @@ func TestAppListTasksPaginated(t *testing.T) {
 	app := setupTestApp(t)
 
 	for i := 0; i < 10; i++ {
-		_, err := app.CreateTask(
-			fmt.Sprintf("Task %d", i),
-			"https://example.com",
-			validSteps(),
-			models.ProxyConfig{},
-			5, false, nil, 0, nil,
-		)
+		_, err := app.CreateTask(CreateTaskParams{Name: fmt.Sprintf("Task %d", i), URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 		if err != nil {
 			t.Fatalf("CreateTask %d: %v", i, err)
 		}
@@ -1024,7 +1008,7 @@ func TestAppGetAuditTrail(t *testing.T) {
 func TestAppPurgeOldData(t *testing.T) {
 	app := setupTestApp(t)
 
-	_, err := app.CreateTask("Old Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	_, err := app.CreateTask(CreateTaskParams{Name: "Old Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -2012,7 +1996,7 @@ func TestAppDeleteCaptchaConfig(t *testing.T) {
 
 func TestAppExportImportTask(t *testing.T) {
 	app := setupTestApp(t)
-	task, err := app.CreateTask("Export Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, err := app.CreateTask(CreateTaskParams{Name: "Export Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -2054,7 +2038,7 @@ func TestAppExportImportFlow(t *testing.T) {
 
 func TestAppListTaskEvents(t *testing.T) {
 	app := setupTestApp(t)
-	task, _ := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, _ := app.CreateTask(CreateTaskParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	events, err := app.ListTaskEvents(task.ID)
 	if err != nil {
 		t.Fatalf("ListTaskEvents: %v", err)
@@ -2322,7 +2306,7 @@ func TestAppExportTaskLogs(t *testing.T) {
 		t.Fatalf("NewExporter: %v", err)
 	}
 	app.logExporter = le
-	task, _ := app.CreateTask("Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, false, nil, 0, nil)
+	task, _ := app.CreateTask(CreateTaskParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	_, err = app.ExportTaskLogs(task.ID)
 	if err != nil {
 		t.Fatalf("ExportTaskLogs: %v", err)

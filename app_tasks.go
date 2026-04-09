@@ -11,46 +11,61 @@ import (
 	"github.com/google/uuid"
 )
 
-func (a *App) CreateTask(name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority int, autoStart bool, tags []string, timeout int, loggingPolicy *models.TaskLoggingPolicy) (*models.Task, error) {
+const errCreateTask = "create task: %w"
+
+// CreateTaskParams holds parameters for creating a task.
+type CreateTaskParams struct {
+	Name          string
+	URL           string
+	Steps         []models.TaskStep
+	ProxyConfig   models.ProxyConfig
+	Priority      int
+	AutoStart     bool
+	Tags          []string
+	Timeout       int
+	LoggingPolicy *models.TaskLoggingPolicy
+}
+
+func (a *App) CreateTask(p CreateTaskParams) (*models.Task, error) {
 	if err := a.ready(); err != nil {
 		return nil, err
 	}
-	if err := validation.ValidateTask(name, url, steps, models.TaskPriority(priority), false); err != nil {
-		return nil, fmt.Errorf("create task: %w", err)
+	if err := validation.ValidateTask(p.Name, p.URL, p.Steps, models.TaskPriority(p.Priority), false); err != nil {
+		return nil, fmt.Errorf(errCreateTask, err)
 	}
-	if err := validation.ValidateTags(tags); err != nil {
-		return nil, fmt.Errorf("create task: %w", err)
+	if err := validation.ValidateTags(p.Tags); err != nil {
+		return nil, fmt.Errorf(errCreateTask, err)
 	}
-	if err := validation.ValidateTimeout(timeout); err != nil {
-		return nil, fmt.Errorf("create task: %w", err)
+	if err := validation.ValidateTimeout(p.Timeout); err != nil {
+		return nil, fmt.Errorf(errCreateTask, err)
 	}
-	if err := validation.ValidateProxyConfig(proxyConfig); err != nil {
-		return nil, fmt.Errorf("create task: %w", err)
+	if err := validation.ValidateProxyConfig(p.ProxyConfig); err != nil {
+		return nil, fmt.Errorf(errCreateTask, err)
 	}
-	if err := validation.ValidateTaskLoggingPolicy(loggingPolicy); err != nil {
-		return nil, fmt.Errorf("create task: %w", err)
+	if err := validation.ValidateTaskLoggingPolicy(p.LoggingPolicy); err != nil {
+		return nil, fmt.Errorf(errCreateTask, err)
 	}
 
 	task := models.Task{
 		ID:            uuid.New().String(),
-		Name:          name,
-		URL:           url,
-		Steps:         steps,
-		Proxy:         proxyConfig,
-		Priority:      models.TaskPriority(priority),
+		Name:          p.Name,
+		URL:           p.URL,
+		Steps:         p.Steps,
+		Proxy:         p.ProxyConfig,
+		Priority:      models.TaskPriority(p.Priority),
 		Status:        models.TaskStatusPending,
 		MaxRetries:    models.DefaultMaxRetries,
-		Timeout:       timeout,
-		Tags:          tags,
+		Timeout:       p.Timeout,
+		Tags:          p.Tags,
 		CreatedAt:     time.Now(),
-		LoggingPolicy: loggingPolicy,
+		LoggingPolicy: p.LoggingPolicy,
 	}
 
 	if err := a.db.CreateTask(a.ctx, task); err != nil {
-		return nil, fmt.Errorf("create task: %w", err)
+		return nil, fmt.Errorf(errCreateTask, err)
 	}
 
-	if autoStart {
+	if p.AutoStart {
 		if err := a.queue.Submit(a.ctx, task); err != nil {
 			return nil, fmt.Errorf("submit task: %w", err)
 		}

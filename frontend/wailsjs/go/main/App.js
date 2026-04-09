@@ -30,12 +30,12 @@ export function CreateRecordedFlow(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['CreateRecordedFlow'](arg1, arg2, arg3, arg4);
 }
 
-export function CreateSchedule(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
-  return window['go']['main']['App']['CreateSchedule'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+export function CreateSchedule(params) {
+  return window['go']['main']['App']['CreateSchedule'](params);
 }
 
-export function CreateTask(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
-  return window['go']['main']['App']['CreateTask'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+export function CreateTask(params) {
+  return window['go']['main']['App']['CreateTask'](params);
 }
 
 export function CreateTaskFromFlow(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
@@ -286,10 +286,10 @@ export function UpdateRecordedFlow(arg1) {
   return window['go']['main']['App']['UpdateRecordedFlow'](arg1);
 }
 
-export function UpdateSchedule(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10) {
-  return window['go']['main']['App']['UpdateSchedule'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10);
+export function UpdateSchedule(arg1, params, arg3) {
+  return window['go']['main']['App']['UpdateSchedule'](arg1, params, arg3);
 }
 
-export function UpdateTask(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
-  return window['go']['main']['App']['UpdateTask'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+export function UpdateTask(arg1, params) {
+  return window['go']['main']['App']['UpdateTask'](arg1, params);
 }

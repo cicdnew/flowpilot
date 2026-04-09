@@ -129,9 +129,6 @@ func New(db *database.DB, runner *browser.Runner, maxConcurrency int, onEvent Ev
 
 func (q *Queue) dbWriteContext(parent context.Context) (context.Context, context.CancelFunc) {
 	const dbWriteTimeout = 5 * time.Second
-	if parent == nil {
-		parent = context.TODO()
-	}
 	return context.WithTimeout(parent, dbWriteTimeout)
 }
 
@@ -1009,11 +1006,11 @@ func (q *Queue) scheduleRetry(ctx context.Context, ri retryInfo) {
 	case <-timer.C:
 	case <-q.stopCh:
 		timer.Stop()
-		q.markRetryCancelled(ri.task.ID, "cancelled during retry backoff (queue stopped)")
+		q.markRetryCancelled(ctx, ri.task.ID, "cancelled during retry backoff (queue stopped)")
 		return
 	case <-ctx.Done():
 		timer.Stop()
-		q.markRetryCancelled(ri.task.ID, "cancelled during retry backoff")
+		q.markRetryCancelled(ctx, ri.task.ID, "cancelled during retry backoff")
 		return
 	}
 
@@ -1023,8 +1020,10 @@ func (q *Queue) scheduleRetry(ctx context.Context, ri retryInfo) {
 	}
 }
 
-func (q *Queue) markRetryCancelled(taskID string, reason string) {
-	dbCtx, cancel := q.dbWriteContext(nil)
+func (q *Queue) markRetryCancelled(ctx context.Context, taskID string, reason string) {
+	// ctx may be cancelled; use WithoutCancel to preserve parent values while
+	// allowing the DB write to complete.
+	dbCtx, cancel := q.dbWriteContext(context.WithoutCancel(ctx))
 	err := q.db.BatchApplyTaskStateChanges(dbCtx, []database.TaskStateChange{{TaskID: taskID, Status: models.TaskStatusCancelled, Error: reason}})
 	cancel()
 	if err != nil {

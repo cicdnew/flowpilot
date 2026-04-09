@@ -24,13 +24,13 @@ type EventHandler func(step models.RecordedStep)
 // Recorder opens a headless=false Chrome session and captures user interactions via CDP.
 type Recorder struct {
 	mu            sync.Mutex
-	parentCtx     context.Context
+	parentCtx     context.Context    //nolint:godre:S8242 -- browser session lifetime context passed from caller
 	handler       EventHandler
 	flowID        string
 	stepIndex     int
-	allocCtx      context.Context
+	allocCtx      context.Context    //nolint:godre:S8242 -- chromedp allocator lifetime context
 	allocCancel   context.CancelFunc
-	browserCtx    context.Context
+	browserCtx    context.Context    //nolint:godre:S8242 -- chromedp browser lifetime context
 	browserCancel context.CancelFunc
 	netLogger     *logs.NetworkLogger
 	wsLogger      *logs.WebSocketLogger
@@ -88,38 +88,15 @@ func (r *Recorder) registerListeners() {
 func (r *Recorder) handleEvent(ev any) {
 	switch e := ev.(type) {
 	case *runtime.EventBindingCalled:
-		if e.Name != bindingName {
-			return
+		if e.Name == bindingName {
+			r.handleBindingCall(e.Payload)
 		}
-		r.handleBindingCall(e.Payload)
 	case *page.EventFrameNavigated:
-		if e.Frame == nil || e.Frame.ParentID != "" {
-			return
-		}
-		r.RecordStep(models.ActionNavigate, "", e.Frame.URL)
+		r.handleFrameNavigated(e)
 	case *target.EventTargetInfoChanged:
-		if e.TargetInfo == nil || e.TargetInfo.Type != "page" {
-			return
-		}
-		r.mu.Lock()
-		if r.activeTabID != "" && e.TargetInfo.TargetID != r.activeTabID {
-			r.activeTabID = e.TargetInfo.TargetID
-			r.mu.Unlock()
-			r.RecordStep(models.ActionTabSwitch, "", e.TargetInfo.URL)
-		} else {
-			if r.activeTabID == "" {
-				r.activeTabID = e.TargetInfo.TargetID
-			}
-			r.mu.Unlock()
-		}
+		r.handleTargetInfoChanged(e)
 	case *network.EventRequestWillBeSent:
-		if r.netLogger != nil {
-			r.mu.Lock()
-			idx := r.stepIndex
-			r.mu.Unlock()
-			r.netLogger.SetStepIndex(idx)
-			r.netLogger.HandleRequestWillBeSent(e)
-		}
+		r.handleNetworkRequest(e)
 	case *network.EventResponseReceived:
 		if r.netLogger != nil {
 			r.netLogger.HandleResponseReceived(e)
@@ -133,13 +110,7 @@ func (r *Recorder) handleEvent(ev any) {
 			r.netLogger.HandleLoadingFailed(e.RequestID)
 		}
 	case *network.EventWebSocketCreated:
-		if r.wsLogger != nil {
-			r.mu.Lock()
-			idx := r.stepIndex
-			r.mu.Unlock()
-			r.wsLogger.SetStepIndex(idx)
-			r.wsLogger.HandleCreated(e)
-		}
+		r.handleWebSocketCreated(e)
 	case *network.EventWebSocketHandshakeResponseReceived:
 		if r.wsLogger != nil {
 			r.wsLogger.HandleHandshake(e)
@@ -161,6 +132,52 @@ func (r *Recorder) handleEvent(ev any) {
 			r.wsLogger.HandleFrameError(e)
 		}
 	}
+}
+
+func (r *Recorder) handleFrameNavigated(e *page.EventFrameNavigated) {
+	if e.Frame == nil || e.Frame.ParentID != "" {
+		return
+	}
+	r.RecordStep(models.ActionNavigate, "", e.Frame.URL)
+}
+
+func (r *Recorder) handleTargetInfoChanged(e *target.EventTargetInfoChanged) {
+	if e.TargetInfo == nil || e.TargetInfo.Type != "page" {
+		return
+	}
+	r.mu.Lock()
+	if r.activeTabID != "" && e.TargetInfo.TargetID != r.activeTabID {
+		r.activeTabID = e.TargetInfo.TargetID
+		r.mu.Unlock()
+		r.RecordStep(models.ActionTabSwitch, "", e.TargetInfo.URL)
+	} else {
+		if r.activeTabID == "" {
+			r.activeTabID = e.TargetInfo.TargetID
+		}
+		r.mu.Unlock()
+	}
+}
+
+func (r *Recorder) handleNetworkRequest(e *network.EventRequestWillBeSent) {
+	if r.netLogger == nil {
+		return
+	}
+	r.mu.Lock()
+	idx := r.stepIndex
+	r.mu.Unlock()
+	r.netLogger.SetStepIndex(idx)
+	r.netLogger.HandleRequestWillBeSent(e)
+}
+
+func (r *Recorder) handleWebSocketCreated(e *network.EventWebSocketCreated) {
+	if r.wsLogger == nil {
+		return
+	}
+	r.mu.Lock()
+	idx := r.stepIndex
+	r.mu.Unlock()
+	r.wsLogger.SetStepIndex(idx)
+	r.wsLogger.HandleCreated(e)
 }
 
 func (r *Recorder) enableDomains() error {

@@ -10,6 +10,7 @@ import (
 )
 
 const (
+	errPoolStopped = "browser pool is stopped"
 	DefaultPoolSize   = 5
 	MaxPoolSize       = 200
 	PoolIdleTimeout   = 5 * time.Minute
@@ -18,9 +19,9 @@ const (
 )
 
 type pooledBrowser struct {
-	allocCtx    context.Context
+	allocCtx    context.Context    //nolint:godre:S8242 -- browser allocator lifetime context, not a request context
 	allocCancel context.CancelFunc
-	browserCtx  context.Context    // root browser context; parent for new tab contexts
+	browserCtx  context.Context    // root browser context; parent for new tab contexts; not a request context
 	lastUsed    time.Time
 	inUse       int
 	maxTabs     int
@@ -94,7 +95,7 @@ func (p *BrowserPool) Acquire(ctx context.Context) (browserCtx context.Context, 
 		p.mu.Lock()
 		if p.stopped {
 			p.mu.Unlock()
-			return nil, nil, fmt.Errorf("browser pool is stopped")
+			return nil, nil, fmt.Errorf(errPoolStopped)
 		}
 
 		if b := p.acquireReusableBrowserLocked(); b != nil {
@@ -121,7 +122,7 @@ func (p *BrowserPool) Acquire(ctx context.Context) (browserCtx context.Context, 
 			if p.stopped {
 				p.mu.Unlock()
 				b.allocCancel()
-				return nil, nil, fmt.Errorf("browser pool is stopped")
+				return nil, nil, fmt.Errorf(errPoolStopped)
 			}
 			b.inUse++
 			b.lastUsed = time.Now()
@@ -131,42 +132,43 @@ func (p *BrowserPool) Acquire(ctx context.Context) (browserCtx context.Context, 
 			return p.newTabContext(b, allocCtx)
 		}
 
-		waitTimeout := time.Until(deadline)
-		if waitTimeout <= 0 {
-			return nil, nil, fmt.Errorf("browser pool acquire: timeout after %s", p.acquireTimeout)
+		if err := p.waitForSlot(ctx, deadline); err != nil {
+			return nil, nil, err
 		}
-		if d, ok := ctx.Deadline(); ok {
-			untilDeadline := time.Until(d)
-			if untilDeadline <= 0 {
-				return nil, nil, fmt.Errorf("browser pool acquire: context deadline exceeded")
-			}
-			if untilDeadline < waitTimeout {
-				waitTimeout = untilDeadline
-			}
-		}
+	}
+}
 
-		timer := time.NewTimer(waitTimeout)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-			if ctx.Err() == context.DeadlineExceeded {
-				return nil, nil, fmt.Errorf("browser pool acquire: context deadline exceeded")
-			}
-			return nil, nil, fmt.Errorf("browser pool acquire: %w", ctx.Err())
-		case <-p.stopCh:
-			if !timer.Stop() {
-				<-timer.C
-			}
-			return nil, nil, fmt.Errorf("browser pool is stopped")
-		case <-p.notifyCh:
-			if !timer.Stop() {
-				<-timer.C
-			}
-		case <-timer.C:
-			return nil, nil, fmt.Errorf("browser pool acquire: timeout after %s", p.acquireTimeout)
+// waitForSlot blocks until a browser slot may be available, the pool is stopped,
+// the context is done, or the deadline expires.
+func (p *BrowserPool) waitForSlot(ctx context.Context, deadline time.Time) error {
+	waitTimeout := time.Until(deadline)
+	if waitTimeout <= 0 {
+		return fmt.Errorf("browser pool acquire: timeout after %s", p.acquireTimeout)
+	}
+	if d, ok := ctx.Deadline(); ok {
+		if untilDeadline := time.Until(d); untilDeadline <= 0 {
+			return fmt.Errorf("browser pool acquire: context deadline exceeded")
+		} else if untilDeadline < waitTimeout {
+			waitTimeout = untilDeadline
 		}
+	}
+
+	timer := time.NewTimer(waitTimeout)
+	select {
+	case <-ctx.Done():
+		timer.Stop()
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("browser pool acquire: context deadline exceeded")
+		}
+		return fmt.Errorf("browser pool acquire: %w", ctx.Err())
+	case <-p.stopCh:
+		timer.Stop()
+		return fmt.Errorf(errPoolStopped)
+	case <-p.notifyCh:
+		timer.Stop()
+		return nil
+	case <-timer.C:
+		return fmt.Errorf("browser pool acquire: timeout after %s", p.acquireTimeout)
 	}
 }
 

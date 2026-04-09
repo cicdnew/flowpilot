@@ -1020,7 +1020,7 @@ func (q *Queue) scheduleRetry(ctx context.Context, ri retryInfo) {
 	}
 }
 
-func (q *Queue) markRetryCancelled(ctx context.Context, taskID string, reason string) {
+func (q *Queue) markRetryCancelled(ctx context.Context, taskID, reason string) {
 	// ctx may be cancelled; use WithoutCancel to preserve parent values while
 	// allowing the DB write to complete.
 	dbCtx, cancel := q.dbWriteContext(context.WithoutCancel(ctx))

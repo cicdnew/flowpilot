@@ -1,8 +1,6 @@
 module flowpilot
 
-go 1.24.0
-
-toolchain go1.24.13
+go 1.25.0
 
 require (
 	github.com/charmbracelet/bubbletea v0.27.0
@@ -12,7 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/tursodatabase/libsql-go v0.0.0-20240416075003-747366ff79c4
 	github.com/wailsapp/wails/v2 v2.11.0
-	golang.org/x/net v0.35.0
+	golang.org/x/net v0.52.0
 )
 
 require (
@@ -58,11 +56,11 @@ require (
 	github.com/wailsapp/go-webview2 v1.0.22 // indirect
 	github.com/wailsapp/mimetype v1.4.1 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/crypto v0.33.0 // indirect
+	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc // indirect
-	golang.org/x/sync v0.11.0 // indirect
-	golang.org/x/sys v0.34.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/text v0.35.0 // indirect
 )
 
 replace github.com/tursodatabase/libsql-go => github.com/tursodatabase/go-libsql v0.0.0-20251219133454-43644db490ff

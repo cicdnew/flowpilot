@@ -92,10 +92,15 @@ func NewManager(db *database.DB, config models.ProxyPoolConfig) *Manager {
 
 func (m *Manager) dbWriteContext(parent context.Context) (context.Context, context.CancelFunc) {
 	const dbWriteTimeout = 5 * time.Second
-	if parent != nil && parent.Err() == nil {
-		return context.WithTimeout(parent, dbWriteTimeout)
+	if parent == nil || parent.Err() != nil {
+		parent = context.Background()
 	}
-	return context.WithTimeout(context.Background(), dbWriteTimeout)
+	return context.WithTimeout(parent, dbWriteTimeout)
+}
+
+func logUpdateProxyHealthError(proxyID string, err error) {
+	const updateProxyHealthErrFmt = "update proxy %s health: %v"
+	log.Printf(updateProxyHealthErrFmt, proxyID, err)
 }
 
 // StartHealthChecks begins periodic proxy health checks.
@@ -510,7 +515,7 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 		dbErr := m.db.UpdateProxyHealth(dbCtx, proxy.ID, models.ProxyStatusUnhealthy, 0)
 		cancel()
 		if dbErr != nil {
-			log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
+			logUpdateProxyHealthError(proxy.ID, dbErr)
 		}
 		return
 	}
@@ -533,7 +538,7 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 		dbErr := m.db.UpdateProxyHealth(dbCtx, proxy.ID, models.ProxyStatusUnhealthy, 0)
 		cancel()
 		if dbErr != nil {
-			log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
+			logUpdateProxyHealthError(proxy.ID, dbErr)
 		}
 		return
 	}
@@ -546,7 +551,7 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 		dbErr := m.db.UpdateProxyHealth(dbCtx, proxy.ID, models.ProxyStatusUnhealthy, latency)
 		cancel()
 		if dbErr != nil {
-			log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
+			logUpdateProxyHealthError(proxy.ID, dbErr)
 		}
 		return
 	}
@@ -560,7 +565,7 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 		dbErr := m.db.UpdateProxyHealth(dbCtx, proxy.ID, models.ProxyStatusUnhealthy, latency)
 		cancel()
 		if dbErr != nil {
-			log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
+			logUpdateProxyHealthError(proxy.ID, dbErr)
 		}
 		return
 	}
@@ -569,6 +574,6 @@ func (m *Manager) checkProxy(ctx context.Context, proxy models.Proxy) {
 	dbErr := m.db.UpdateProxyHealth(dbCtx, proxy.ID, models.ProxyStatusHealthy, latency)
 	cancel()
 	if dbErr != nil {
-		log.Printf("update proxy %s health: %v", proxy.ID, dbErr)
+		logUpdateProxyHealthError(proxy.ID, dbErr)
 	}
 }

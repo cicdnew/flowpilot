@@ -147,4 +147,4 @@ export function UpdateRecordedFlow(arg1:models.RecordedFlow):Promise<void>;
 
 export function UpdateSchedule(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:models.ProxyConfig,arg7:number,arg8:boolean,arg9:Array<string>,arg10:boolean):Promise<void>;
 
-export function UpdateTask(arg1:string,arg2:string,arg3:string,arg4:Array<models.TaskStep>,arg5:models.ProxyConfig,arg6:number,arg7:Array<string>,arg8:number,arg9:models.TaskLoggingPolicy):Promise<void>;
+export function UpdateTask(arg1:string,arg2:models.TaskUpdateParams,arg3:number):Promise<void>;

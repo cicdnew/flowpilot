@@ -4,6 +4,9 @@ export namespace models {
 	    if (!a) {
 	        return a;
 	    }
+	    if (!classs) {
+	        return a;
+	    }
 	    if (a.slice && a.map) {
 	        return (a as any[]).map(elem => convertValues(elem, classs));
 	    } else if ("object" === typeof a) {
@@ -734,7 +737,35 @@ export namespace models {
 	
 	
 	
-	export class TaskLifecycleEvent {
+	export class TaskUpdateParams {
+    name: string;
+    url: string;
+    steps: TaskStep[];
+    proxyConfig: ProxyConfig;
+    priority: number;
+    tags?: string[];
+    timeout: number;
+    loggingPolicy?: TaskLoggingPolicy;
+
+    static createFrom(source: any = {}) {
+        return new TaskUpdateParams(source);
+    }
+
+    constructor(source: any = {}) {
+        if ('string' === typeof source) source = JSON.parse(source);
+        this.name = source["name"];
+        this.url = source["url"];
+        this.steps = convertValues(source["steps"], TaskStep);
+        this.proxyConfig = convertValues(source["proxyConfig"], ProxyConfig);
+        this.priority = source["priority"];
+        this.tags = source["tags"];
+        this.timeout = source["timeout"];
+        this.loggingPolicy = convertValues(source["loggingPolicy"], TaskLoggingPolicy);
+    }
+
+}
+
+export class TaskLifecycleEvent {
 	    id: string;
 	    taskId: string;
 	    batchId?: string;
@@ -867,4 +898,3 @@ export namespace models {
 	}
 
 }
-

@@ -632,7 +632,7 @@ func applyStateChange(ctx context.Context, change TaskStateChange, stateMap map[
 		return models.TaskLifecycleEvent{}, false, fmt.Errorf("task %s not found", change.TaskID)
 	}
 	if isTerminal(state.status) && !isTerminal(change.Status) {
-		return models.TaskLifecycleEvent{}, true, nil
+		return models.TaskLifecycleEvent{}, true, fmt.Errorf("invalid state transition for task %s: cannot transition from terminal state %s to non-terminal state %s", change.TaskID, state.status, change.Status)
 	}
 
 	now := time.Now()
@@ -745,6 +745,7 @@ func (db *DB) BatchApplyTaskStateChanges(ctx context.Context, changes []TaskStat
 		}
 		if !skip {
 			events = append(events, event)
+			stateMap[change.TaskID] = taskState{status: event.ToState, batchID: stateMap[change.TaskID].batchID}
 		}
 	}
 

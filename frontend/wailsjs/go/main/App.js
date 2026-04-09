@@ -290,6 +290,6 @@ export function UpdateSchedule(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, a
   return window['go']['main']['App']['UpdateSchedule'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10);
 }
 
-export function UpdateTask(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9) {
-  return window['go']['main']['App']['UpdateTask'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9);
+export function UpdateTask(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UpdateTask'](arg1, arg2, arg3);
 }

@@ -67,7 +67,7 @@ func DefaultAppConfig() AppConfig {
 }
 
 type App struct {
-	ctx               context.Context
+	ctx               context.Context //nolint:godre:S8242 -- stored by Wails runtime in startup()
 	db                *database.DB
 	runner            *browser.Runner
 	pool              *browser.BrowserPool
@@ -93,6 +93,8 @@ type App struct {
 	configPath    string
 	configModTime time.Time
 }
+
+const errStartupFailed = "startup failed: %v"
 
 func NewApp() *App {
 	return &App{config: DefaultAppConfig()}
@@ -137,42 +139,27 @@ func (a *App) loadConfigFromDisk() error {
 	return nil
 }
 
-func (a *App) startup(ctx context.Context) {
-	a.ctx = ctx
+// startupFail sets a.initErr, logs the failure, and signals the caller to return.
+func (a *App) startupFail(ctx context.Context, err error) {
+	a.initErr = err
+	logErrorf(ctx, errStartupFailed, err)
+}
 
+// initDataDir resolves the home directory and creates the app data directory.
+func (a *App) initDataDir() error {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		a.initErr = fmt.Errorf("get home directory: %w", err)
-		logErrorf(ctx, "startup failed: %v", a.initErr)
-		return
+		return fmt.Errorf("get home directory: %w", err)
 	}
 	a.dataDir = filepath.Join(home, ".flowpilot")
 	if err := os.MkdirAll(a.dataDir, 0o700); err != nil {
-		a.initErr = fmt.Errorf("create data directory: %w", err)
-		logErrorf(ctx, "startup failed: %v", a.initErr)
-		return
+		return fmt.Errorf("create data directory: %w", err)
 	}
+	return nil
+}
 
-	a.configMu.Lock()
-	a.configPath = filepath.Join(a.dataDir, "config.json")
-	a.configMu.Unlock()
-	if err := a.loadConfigFromDisk(); err != nil {
-		a.initErr = fmt.Errorf("load config: %w", err)
-		logErrorf(ctx, "startup failed: %v", a.initErr)
-		return
-	}
-	wailsRuntimeLoggingEnabled.Store(true)
-	a.configMu.Lock()
-	logLevel := a.config.LogSlogLevel
-	a.configMu.Unlock()
-	logs.Init(logLevel)
-
-	if err := crypto.InitKey(a.dataDir); err != nil {
-		a.initErr = fmt.Errorf("init encryption: %w", err)
-		logErrorf(ctx, "startup failed: %v", a.initErr)
-		return
-	}
-
+// initDatabase resolves the database config from env vars and opens the database.
+func (a *App) initDatabase() error {
 	dbConfig := database.DatabaseConfig{URL: filepath.Join(a.dataDir, "tasks.db")}
 	if databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL")); databaseURL != "" {
 		dbConfig.URL = databaseURL
@@ -183,17 +170,47 @@ func (a *App) startup(ctx context.Context) {
 	}
 	db, err := database.NewWithConfig(dbConfig)
 	if err != nil {
-		a.initErr = fmt.Errorf("init database: %w", err)
-		logErrorf(ctx, "startup failed: %v", a.initErr)
-		return
+		return fmt.Errorf("init database: %w", err)
 	}
 	a.db = db
+	return nil
+}
+
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
+
+	if err := a.initDataDir(); err != nil {
+		a.startupFail(ctx, err)
+		return
+	}
+
+	a.configMu.Lock()
+	a.configPath = filepath.Join(a.dataDir, "config.json")
+	a.configMu.Unlock()
+	if err := a.loadConfigFromDisk(); err != nil {
+		a.startupFail(ctx, fmt.Errorf("load config: %w", err))
+		return
+	}
+	wailsRuntimeLoggingEnabled.Store(true)
+	a.configMu.Lock()
+	logLevel := a.config.LogSlogLevel
+	a.configMu.Unlock()
+	logs.Init(logLevel)
+
+	if err := crypto.InitKey(a.dataDir); err != nil {
+		a.startupFail(ctx, fmt.Errorf("init encryption: %w", err))
+		return
+	}
+
+	if err := a.initDatabase(); err != nil {
+		a.startupFail(ctx, err)
+		return
+	}
 
 	screenshotDir := filepath.Join(a.dataDir, "screenshots")
 	runner, err := browser.NewRunner(screenshotDir)
 	if err != nil {
-		a.initErr = fmt.Errorf("init browser runner: %w", err)
-		logErrorf(ctx, "startup failed: %v", a.initErr)
+		a.startupFail(ctx, fmt.Errorf("init browser runner: %w", err))
 		return
 	}
 	a.runner = runner
@@ -250,7 +267,7 @@ func (a *App) startup(ctx context.Context) {
 	logExporter, err := logs.NewExporter(db, logsDir)
 	if err != nil {
 		a.initErr = fmt.Errorf("init log exporter: %w", err)
-		logErrorf(ctx, "startup failed: %v", a.initErr)
+		logErrorf(ctx, errStartupFailed, a.initErr)
 		return
 	}
 	a.logExporter = logExporter
@@ -382,21 +399,26 @@ func (a *App) checkAndReloadConfig(ctx context.Context) {
 		logInfof(ctx, "config hot-reload: ProxyConcurrency updated (%d → %d)", old.ProxyConcurrency, newCfg.ProxyConcurrency)
 	}
 
-	if (newCfg.HealthCheckInterval != 0 && newCfg.HealthCheckInterval != old.HealthCheckInterval) ||
-		(newCfg.HealthCheckURL != "" && newCfg.HealthCheckURL != old.HealthCheckURL) {
-		if a.proxyManager != nil {
-			interval := old.HealthCheckInterval
-			if newCfg.HealthCheckInterval != 0 {
-				interval = newCfg.HealthCheckInterval
-			}
-			url := old.HealthCheckURL
-			if newCfg.HealthCheckURL != "" {
-				url = newCfg.HealthCheckURL
-			}
-			a.proxyManager.UpdateHealthCheckConfig(interval, url)
-			logInfof(ctx, "config hot-reload: HealthCheck updated (interval=%ds, url=%s)", interval, url)
-		}
+	a.applyHealthCheckReload(ctx, old, newCfg)
+}
+
+// applyHealthCheckReload updates the proxy manager health-check config if relevant fields changed.
+func (a *App) applyHealthCheckReload(ctx context.Context, old, newCfg AppConfig) {
+	intervalChanged := newCfg.HealthCheckInterval != 0 && newCfg.HealthCheckInterval != old.HealthCheckInterval
+	urlChanged := newCfg.HealthCheckURL != "" && newCfg.HealthCheckURL != old.HealthCheckURL
+	if (!intervalChanged && !urlChanged) || a.proxyManager == nil {
+		return
 	}
+	interval := old.HealthCheckInterval
+	if newCfg.HealthCheckInterval != 0 {
+		interval = newCfg.HealthCheckInterval
+	}
+	url := old.HealthCheckURL
+	if newCfg.HealthCheckURL != "" {
+		url = newCfg.HealthCheckURL
+	}
+	a.proxyManager.UpdateHealthCheckConfig(interval, url)
+	logInfof(ctx, "config hot-reload: HealthCheck updated (interval=%ds, url=%s)", interval, url)
 }
 
 func (a *App) cleanup() {

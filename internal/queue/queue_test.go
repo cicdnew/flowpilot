@@ -948,7 +948,7 @@ func TestHandleFailureRetriesWithBackoff(t *testing.T) {
 		t.Fatal("expected shouldRetry to be true")
 	}
 
-	go q.scheduleRetry(ri)
+	go q.scheduleRetry(context.Background(), ri)
 
 	time.Sleep(2 * time.Second)
 
@@ -985,7 +985,7 @@ func TestHandleFailureRetryStoppedByQueueStop(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		q.scheduleRetry(ri)
+		q.scheduleRetry(context.Background(), ri)
 		close(done)
 	}()
 
@@ -1027,7 +1027,7 @@ func TestHandleFailureRetryResubmitsTask(t *testing.T) {
 	}
 
 	ri.backoff = 10 * time.Millisecond
-	q.scheduleRetry(ri)
+	q.scheduleRetry(context.Background(), ri)
 
 	deadline := time.Now().Add(3 * time.Second)
 	for {
@@ -1092,7 +1092,7 @@ func TestHandleFailureRetryStoppedByContextCancel(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		q.scheduleRetry(ri)
+		q.scheduleRetry(ctx, ri)
 		close(done)
 	}()
 
@@ -2024,14 +2024,11 @@ func TestScheduleRetryAfterStop(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 	q.Stop()
-	parentCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	ri := retryInfo{
-		task:      task,
-		backoff:   1 * time.Millisecond,
-		parentCtx: parentCtx,
+		task:    task,
+		backoff: 1 * time.Millisecond,
 	}
-	q.scheduleRetry(ri)
+	q.scheduleRetry(ctx, ri)
 }
 
 func TestScheduleRetryContextCancelled(t *testing.T) {
@@ -2049,9 +2046,8 @@ func TestScheduleRetryContextCancelled(t *testing.T) {
 	ri := retryInfo{
 		task:      task,
 		backoff:   1 * time.Millisecond,
-		parentCtx: ctx,
 	}
-	q.scheduleRetry(ri)
+	q.scheduleRetry(ctx, ri)
 }
 
 func TestHandleSuccessNilResult(t *testing.T) {
@@ -2409,8 +2405,8 @@ func TestScheduleRetryBackoff(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 	q.SetRetryBackoffBaseMs(1)
-	ri := retryInfo{task: task, backoff: 1 * time.Millisecond, parentCtx: ctx, shouldRetry: true}
-	go q.scheduleRetry(ri)
+	ri := retryInfo{task: task, backoff: 1 * time.Millisecond, shouldRetry: true}
+	go q.scheduleRetry(ctx, ri)
 	// give goroutine time to start then stop queue
 	time.Sleep(5 * time.Millisecond)
 	q.Stop()

@@ -35,6 +35,7 @@ var webhookClient = &http.Client{Timeout: 10 * time.Second}
 var ErrBatchPaused = errors.New("batch is paused")
 
 const errCancelledByUser = "cancelled by user"
+const errUpdateStatusFmt = "update status: %v"
 
 // Queue manages task scheduling, concurrency limiting, and execution using
 // a fixed worker pool with a priority heap. Higher-priority tasks are
@@ -128,10 +129,11 @@ func New(db *database.DB, runner *browser.Runner, maxConcurrency int, onEvent Ev
 
 func (q *Queue) dbWriteContext(parent context.Context) (context.Context, context.CancelFunc) {
 	const dbWriteTimeout = 5 * time.Second
-	if parent != nil && parent.Err() == nil {
-		return context.WithTimeout(parent, dbWriteTimeout)
-	}
-	return context.WithTimeout(context.Background(), dbWriteTimeout)
+	return context.WithTimeout(parent, dbWriteTimeout)
+}
+
+func emitUpdateStatusError(q *Queue, taskID string, err error) {
+	q.emitEvent(taskID, models.TaskStatusFailed, fmt.Sprintf(errUpdateStatusFmt, err))
 }
 
 // SetProxyManager attaches a proxy manager for automatic proxy selection.
@@ -611,51 +613,28 @@ func (q *Queue) dequeueRunnableLocked() (*heapItem, bool, bool) {
 		item := heap.Pop(&q.pq).(*heapItem)
 		delete(q.heapSet, item.task.ID)
 
-		if q.cancelled[item.task.ID] {
-			delete(q.cancelled, item.task.ID)
-			item.cancel()
+		if q.handleCancelledItemLocked(item) {
 			continue
 		}
-		if item.task.BatchID != "" && q.paused[item.task.BatchID] {
-			heap.Push(&q.pausedPQ, item)
-			q.pausedSet[item.task.ID] = struct{}{}
+		if q.handlePausedItemLocked(item) {
 			continue
 		}
 
-		autoProxy := item.task.Proxy.Server == "" && q.proxyManager != nil && (item.task.Proxy.Geo != "" || item.task.Proxy.Fallback != "")
-		countsAgainstProxyLimit := item.task.Proxy.Server != "" || autoProxy
-		if countsAgainstProxyLimit && q.proxyConcurrencyLimit > 0 && q.runningProxied >= q.proxyConcurrencyLimit {
+		autoProxy, countsAgainstProxyLimit := q.proxyUsageForItemLocked(item)
+		if q.proxyLimitReached(countsAgainstProxyLimit) {
 			deferred = append(deferred, item)
 			continue
 		}
-		if autoProxy && q.proxyManager != nil {
-			fallback := item.task.Proxy.Fallback
-			if fallback == "" {
-				fallback = models.ProxyFallbackStrict
-			}
-			available, wait, err := q.proxyManager.HasAvailableProxy(item.ctx, item.task.Proxy.Geo, fallback)
-			if err == nil && !available {
-				deferred = append(deferred, item)
-				q.scheduleProxyWake(wait)
-				continue
-			}
+		if q.deferForUnavailableProxyLocked(item, autoProxy, &deferred) {
+			continue
 		}
 
-		for _, pending := range deferred {
-			heap.Push(&q.pq, pending)
-			q.heapSet[pending.task.ID] = struct{}{}
-		}
-		q.running[item.task.ID] = item.cancel
-		if countsAgainstProxyLimit {
-			q.runningProxied++
-		}
+		q.restoreDeferredLocked(deferred)
+		q.markRunningLocked(item, countsAgainstProxyLimit)
 		return item, countsAgainstProxyLimit, autoProxy
 	}
 
-	for _, pending := range deferred {
-		heap.Push(&q.pq, pending)
-		q.heapSet[pending.task.ID] = struct{}{}
-	}
+	q.restoreDeferredLocked(deferred)
 	return nil, false, false
 }
 
@@ -665,122 +644,102 @@ type retryInfo struct {
 	backoff     time.Duration
 }
 
+func (q *Queue) handleCancelledItemLocked(item *heapItem) bool {
+	if !q.cancelled[item.task.ID] {
+		return false
+	}
+	delete(q.cancelled, item.task.ID)
+	item.cancel()
+	return true
+}
+
+func (q *Queue) handlePausedItemLocked(item *heapItem) bool {
+	if item.task.BatchID == "" || !q.paused[item.task.BatchID] {
+		return false
+	}
+	heap.Push(&q.pausedPQ, item)
+	q.pausedSet[item.task.ID] = struct{}{}
+	return true
+}
+
+func (q *Queue) proxyUsageForItemLocked(item *heapItem) (bool, bool) {
+	autoProxy := item.task.Proxy.Server == "" && q.proxyManager != nil && (item.task.Proxy.Geo != "" || item.task.Proxy.Fallback != "")
+	countsAgainstProxyLimit := item.task.Proxy.Server != "" || autoProxy
+	return autoProxy, countsAgainstProxyLimit
+}
+
+func (q *Queue) proxyLimitReached(countsAgainstProxyLimit bool) bool {
+	return countsAgainstProxyLimit && q.proxyConcurrencyLimit > 0 && q.runningProxied >= q.proxyConcurrencyLimit
+}
+
+func (q *Queue) deferForUnavailableProxyLocked(item *heapItem, autoProxy bool, deferred *[]*heapItem) bool {
+	if !autoProxy || q.proxyManager == nil {
+		return false
+	}
+	fallback := item.task.Proxy.Fallback
+	if fallback == "" {
+		fallback = models.ProxyFallbackStrict
+	}
+	available, wait, err := q.proxyManager.HasAvailableProxy(item.ctx, item.task.Proxy.Geo, fallback)
+	if err != nil || available {
+		return false
+	}
+	*deferred = append(*deferred, item)
+	q.scheduleProxyWake(wait)
+	return true
+}
+
+func (q *Queue) restoreDeferredLocked(deferred []*heapItem) {
+	for _, pending := range deferred {
+		heap.Push(&q.pq, pending)
+		q.heapSet[pending.task.ID] = struct{}{}
+	}
+}
+
+func (q *Queue) markRunningLocked(item *heapItem, countsAgainstProxyLimit bool) {
+	q.running[item.task.ID] = item.cancel
+	if countsAgainstProxyLimit {
+		q.runningProxied++
+	}
+}
+
 func (q *Queue) executeTask(ctx context.Context, task models.Task, countsAgainstProxyLimit bool, autoProxy bool) {
-	defer func() {
-		q.mu.Lock()
-		delete(q.running, task.ID)
-		delete(q.cancelled, task.ID)
-		if countsAgainstProxyLimit && q.runningProxied > 0 {
-			q.runningProxied--
-		}
-		q.mu.Unlock()
-		q.cond.Broadcast()
-	}()
-
-	q.mu.Lock()
-	if q.stopped || q.cancelled[task.ID] {
-		delete(q.cancelled, task.ID)
-		q.mu.Unlock()
+	defer q.finishExecuteTask(task.ID, &countsAgainstProxyLimit)
+	if q.shouldSkipExecution(task.ID) {
 		return
 	}
-	q.mu.Unlock()
 
-	taskTimeout := 5 * time.Minute
-	if task.Timeout > 0 {
-		taskTimeout = time.Duration(task.Timeout) * time.Second
-	}
-	taskCtx, cancel := context.WithTimeout(ctx, taskTimeout)
+	taskCtx, cancel := q.newTaskContext(ctx, task.Timeout)
 	defer cancel()
-
-	// Update the cancel func so Cancel() uses the timeout-aware one.
-	q.mu.Lock()
-	if q.stopped || q.cancelled[task.ID] {
-		delete(q.cancelled, task.ID)
-		q.mu.Unlock()
+	if q.shouldSkipExecution(task.ID) {
 		return
 	}
-	q.running[task.ID] = cancel
-	q.mu.Unlock()
+	q.setTaskCancel(task.ID, cancel)
 
-	pm := q.getProxyManager()
 	var reservation *proxy.Reservation
-	if autoProxy && pm != nil {
-		fallback := task.Proxy.Fallback
-		if fallback == "" {
-			fallback = models.ProxyFallbackStrict
-		}
-		lease, fallbackUsed, direct, err := pm.ReserveProxyWithFallback(taskCtx, task.Proxy.Geo, fallback)
-		if err == nil {
-			if lease != nil {
-				reservation = lease
-				task.Proxy = lease.ProxyConfig()
-				task.Proxy.Fallback = fallback
-			} else if direct {
-				task.Proxy = models.ProxyConfig{}
-				q.mu.Lock()
-				if countsAgainstProxyLimit && q.runningProxied > 0 {
-					q.runningProxied--
-					countsAgainstProxyLimit = false
-				}
-				q.mu.Unlock()
-				q.cond.Broadcast()
-			}
-			if fallbackUsed {
-				q.emitEvent(task.ID, models.TaskStatusQueued, fmt.Sprintf("proxy country fallback applied for %s", task.Proxy.Geo))
-			}
-		} else if errors.Is(err, proxy.ErrNoHealthyProxies) {
-			q.mu.Lock()
-			if countsAgainstProxyLimit && q.runningProxied > 0 {
-				q.runningProxied--
-				countsAgainstProxyLimit = false
-			}
-			q.mu.Unlock()
-			q.cond.Broadcast()
-			q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("reserve proxy: %v", err))
-			return
-		} else {
-			q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("reserve proxy: %v", err))
-			return
-		}
+	var ok bool
+	task, reservation, countsAgainstProxyLimit, ok = q.prepareAutoProxy(taskCtx, task, countsAgainstProxyLimit, autoProxy)
+	if !ok {
+		return
 	}
 
 	if err := q.enqueueTaskStateChange(database.TaskStateChange{TaskID: task.ID, Status: models.TaskStatusRunning}); err != nil {
-		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
+		emitUpdateStatusError(q, task.ID, err)
 		return
 	}
 	q.emitEvent(task.ID, models.TaskStatusRunning, "")
 
 	result, err := q.runner.RunTask(taskCtx, task)
-
-	if reservation != nil {
-		if completeErr := reservation.Complete(err == nil); completeErr != nil {
-			q.emitEvent(task.ID, task.Status, fmt.Sprintf("proxy usage recording failed: %v", completeErr))
-		}
-	}
-
-	var retry retryInfo
-	if err != nil {
-		// Check if this is a cancellation error
-		if errors.Is(err, context.Canceled) {
-			// Task was cancelled, update status accordingly
-			dbCtx, dbCancel := q.dbWriteContext(ctx)
-			if err := q.db.BatchApplyTaskStateChanges(dbCtx, []database.TaskStateChange{{TaskID: task.ID, Status: models.TaskStatusCancelled, Error: errCancelledByUser}}); err != nil {
-				dbCancel()
-				q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
-			} else {
-				dbCancel()
-				q.mu.Lock()
-				q.metrics.TotalFailed++ // Still count as failed for metrics
-				q.mu.Unlock()
-			}
-			q.emitEvent(task.ID, models.TaskStatusCancelled, errCancelledByUser)
-			return
-		}
-		retry = q.handleFailure(ctx, task, err, result)
-	} else {
+	q.completeTaskReservation(task, reservation, err)
+	if err == nil {
 		q.handleSuccess(taskCtx, task, result)
+		return
+	}
+	if q.handleTaskCancellation(ctx, task.ID, err) {
+		return
 	}
 
+	retry := q.handleFailure(ctx, task, err, result)
 	if retry.shouldRetry {
 		q.workerWg.Add(1)
 		go func() {
@@ -788,6 +747,111 @@ func (q *Queue) executeTask(ctx context.Context, task models.Task, countsAgainst
 			q.scheduleRetry(ctx, retry)
 		}()
 	}
+}
+
+func (q *Queue) finishExecuteTask(taskID string, countsAgainstProxyLimit *bool) {
+	q.mu.Lock()
+	delete(q.running, taskID)
+	delete(q.cancelled, taskID)
+	if *countsAgainstProxyLimit && q.runningProxied > 0 {
+		q.runningProxied--
+	}
+	q.mu.Unlock()
+	q.cond.Broadcast()
+}
+
+func (q *Queue) shouldSkipExecution(taskID string) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if !q.stopped && !q.cancelled[taskID] {
+		return false
+	}
+	delete(q.cancelled, taskID)
+	return true
+}
+
+func (q *Queue) newTaskContext(parent context.Context, timeoutSeconds int) (context.Context, context.CancelFunc) {
+	taskTimeout := 5 * time.Minute
+	if timeoutSeconds > 0 {
+		taskTimeout = time.Duration(timeoutSeconds) * time.Second
+	}
+	return context.WithTimeout(parent, taskTimeout)
+}
+
+func (q *Queue) setTaskCancel(taskID string, cancel context.CancelFunc) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.running[taskID] = cancel
+}
+
+func (q *Queue) prepareAutoProxy(taskCtx context.Context, task models.Task, countsAgainstProxyLimit bool, autoProxy bool) (models.Task, *proxy.Reservation, bool, bool) {
+	pm := q.getProxyManager()
+	if !autoProxy || pm == nil {
+		return task, nil, countsAgainstProxyLimit, true
+	}
+	fallback := task.Proxy.Fallback
+	if fallback == "" {
+		fallback = models.ProxyFallbackStrict
+	}
+	lease, fallbackUsed, direct, err := pm.ReserveProxyWithFallback(taskCtx, task.Proxy.Geo, fallback)
+	if err != nil {
+		if errors.Is(err, proxy.ErrNoHealthyProxies) {
+			q.releaseExecutionProxySlot(&countsAgainstProxyLimit)
+		}
+		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("reserve proxy: %v", err))
+		return task, nil, countsAgainstProxyLimit, false
+	}
+	if lease != nil {
+		task.Proxy = lease.ProxyConfig()
+		task.Proxy.Fallback = fallback
+	}
+	if direct {
+		task.Proxy = models.ProxyConfig{}
+		q.releaseExecutionProxySlot(&countsAgainstProxyLimit)
+	}
+	if fallbackUsed {
+		q.emitEvent(task.ID, models.TaskStatusQueued, fmt.Sprintf("proxy country fallback applied for %s", task.Proxy.Geo))
+	}
+	return task, lease, countsAgainstProxyLimit, true
+}
+
+func (q *Queue) releaseExecutionProxySlot(countsAgainstProxyLimit *bool) {
+	q.mu.Lock()
+	if *countsAgainstProxyLimit && q.runningProxied > 0 {
+		q.runningProxied--
+		*countsAgainstProxyLimit = false
+	}
+	q.mu.Unlock()
+	q.cond.Broadcast()
+}
+
+func (q *Queue) completeTaskReservation(task models.Task, reservation *proxy.Reservation, runErr error) {
+	if reservation == nil {
+		return
+	}
+	if completeErr := reservation.Complete(runErr == nil); completeErr != nil {
+		q.emitEvent(task.ID, task.Status, fmt.Sprintf("proxy usage recording failed: %v", completeErr))
+	}
+}
+
+func (q *Queue) handleTaskCancellation(ctx context.Context, taskID string, runErr error) bool {
+	if !errors.Is(runErr, context.Canceled) {
+		return false
+	}
+	// ctx is cancelled at this point; use WithoutCancel to allow the DB write
+	// to complete while still propagating parent values.
+	dbCtx, cancel := q.dbWriteContext(context.WithoutCancel(ctx))
+	err := q.db.BatchApplyTaskStateChanges(dbCtx, []database.TaskStateChange{{TaskID: taskID, Status: models.TaskStatusCancelled, Error: errCancelledByUser}})
+	cancel()
+	if err != nil {
+		emitUpdateStatusError(q, taskID, err)
+	} else {
+		q.mu.Lock()
+		q.metrics.TotalFailed++
+		q.mu.Unlock()
+	}
+	q.emitEvent(taskID, models.TaskStatusCancelled, errCancelledByUser)
+	return true
 }
 
 // UpdateMetrics updates the in-memory TaskMetrics snapshot.
@@ -829,59 +893,14 @@ func (q *Queue) persistRetryLogs(ctx context.Context, taskID string, result *mod
 
 func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execErr error, result *models.TaskResult) retryInfo {
 	if task.RetryCount < task.MaxRetries {
-		q.persistRetryLogs(parentCtx, task.ID, result)
-		if err := q.enqueueTaskStateChange(database.TaskStateChange{TaskID: task.ID, Status: models.TaskStatusRetrying, Error: execErr.Error(), IncrementRetry: true}); err != nil {
-			q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("increment retry: %v", err))
-			return retryInfo{}
-		}
-		q.emitEvent(task.ID, models.TaskStatusRetrying, execErr.Error())
-
-		q.mu.Lock()
-		baseMs := q.retryBackoffBaseMs
-		q.mu.Unlock()
-		if baseMs <= 0 {
-			baseMs = 5000
-		}
-		backoffMs := float64(baseMs) * math.Pow(2, float64(task.RetryCount))
-		const maxBackoffMs = 300000 // 5 minutes
-		if backoffMs > maxBackoffMs {
-			backoffMs = maxBackoffMs
-		}
-		backoff := time.Duration(backoffMs) * time.Millisecond
-
-		logs.Logger.Info("task retrying",
-			slog.String("task_id", task.ID),
-			slog.String("action", "retry"),
-			slog.Int("retry_count", task.RetryCount+1),
-			slog.Int("max_retries", task.MaxRetries),
-			slog.String("error", execErr.Error()),
-		)
-
-		retryTask := task
-		retryTask.RetryCount++
-		retryTask.Status = models.TaskStatusPending
-		retryTask.Steps = make([]models.TaskStep, len(task.Steps))
-		copy(retryTask.Steps, task.Steps)
-
-		return retryInfo{
-			shouldRetry: true,
-			task:        retryTask,
-			backoff:     backoff,
-		}
+		return q.prepareRetry(parentCtx, task, execErr, result)
 	}
 
-	stepLogs := []models.StepLog(nil)
-	networkLogs := []models.NetworkLog(nil)
-	var duration time.Duration
-	if result != nil {
-		stepLogs = result.StepLogs
-		networkLogs = result.NetworkLogs
-		duration = result.Duration
-	}
+	stepLogs, networkLogs, duration, extractedDataKeys := failureArtifacts(result)
 	dbCtx, cancel := q.dbWriteContext(parentCtx)
 	defer cancel()
 	if err := q.db.FinalizeTaskFailure(dbCtx, task.ID, execErr.Error(), stepLogs, networkLogs); err != nil {
-		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
+		emitUpdateStatusError(q, task.ID, err)
 		return retryInfo{}
 	}
 	q.mu.Lock()
@@ -895,15 +914,61 @@ func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execE
 	)
 	q.emitEvent(task.ID, models.TaskStatusFailed, execErr.Error())
 	if task.WebhookURL != "" && webhookEventEnabled(task.WebhookEvents, string(models.TaskStatusFailed)) {
-		var extractedDataKeys []string
-		if result != nil {
-			for k := range result.ExtractedData {
-				extractedDataKeys = append(extractedDataKeys, k)
-			}
-		}
 		q.dispatchWebhook(task.WebhookURL, task.ID, models.TaskStatusFailed, duration, execErr.Error(), extractedDataKeys)
 	}
 	return retryInfo{}
+}
+
+func (q *Queue) prepareRetry(parentCtx context.Context, task models.Task, execErr error, result *models.TaskResult) retryInfo {
+	q.persistRetryLogs(parentCtx, task.ID, result)
+	if err := q.enqueueTaskStateChange(database.TaskStateChange{TaskID: task.ID, Status: models.TaskStatusRetrying, Error: execErr.Error(), IncrementRetry: true}); err != nil {
+		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("increment retry: %v", err))
+		return retryInfo{}
+	}
+	q.emitEvent(task.ID, models.TaskStatusRetrying, execErr.Error())
+
+	backoff := q.retryBackoff(task.RetryCount)
+	logs.Logger.Info("task retrying",
+		slog.String("task_id", task.ID),
+		slog.String("action", "retry"),
+		slog.Int("retry_count", task.RetryCount+1),
+		slog.Int("max_retries", task.MaxRetries),
+		slog.String("error", execErr.Error()),
+	)
+
+	retryTask := task
+	retryTask.RetryCount++
+	retryTask.Status = models.TaskStatusPending
+	retryTask.Steps = make([]models.TaskStep, len(task.Steps))
+	copy(retryTask.Steps, task.Steps)
+
+	return retryInfo{shouldRetry: true, task: retryTask, backoff: backoff}
+}
+
+func (q *Queue) retryBackoff(retryCount int) time.Duration {
+	q.mu.Lock()
+	baseMs := q.retryBackoffBaseMs
+	q.mu.Unlock()
+	if baseMs <= 0 {
+		baseMs = 5000
+	}
+	backoffMs := float64(baseMs) * math.Pow(2, float64(retryCount))
+	const maxBackoffMs = 300000
+	if backoffMs > maxBackoffMs {
+		backoffMs = maxBackoffMs
+	}
+	return time.Duration(backoffMs) * time.Millisecond
+}
+
+func failureArtifacts(result *models.TaskResult) ([]models.StepLog, []models.NetworkLog, time.Duration, []string) {
+	if result == nil {
+		return nil, nil, 0, nil
+	}
+	extractedDataKeys := make([]string, 0, len(result.ExtractedData))
+	for k := range result.ExtractedData {
+		extractedDataKeys = append(extractedDataKeys, k)
+	}
+	return result.StepLogs, result.NetworkLogs, result.Duration, extractedDataKeys
 }
 
 func (q *Queue) handleSuccess(execCtx context.Context, task models.Task, result *models.TaskResult) {
@@ -941,34 +1006,39 @@ func (q *Queue) scheduleRetry(ctx context.Context, ri retryInfo) {
 	case <-timer.C:
 	case <-q.stopCh:
 		timer.Stop()
-		dbCtx, cancel := q.dbWriteContext(ctx)
-		err := q.db.BatchApplyTaskStateChanges(dbCtx, []database.TaskStateChange{{TaskID: ri.task.ID, Status: models.TaskStatusCancelled, Error: "cancelled during retry backoff (queue stopped)"}})
-		cancel()
-		if err != nil {
-			q.emitEvent(ri.task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
-		}
+		q.markRetryCancelled(ctx, ri.task.ID, "cancelled during retry backoff (queue stopped)")
 		return
 	case <-ctx.Done():
 		timer.Stop()
-		dbCtx, cancel := q.dbWriteContext(ctx)
-		err := q.db.BatchApplyTaskStateChanges(dbCtx, []database.TaskStateChange{{TaskID: ri.task.ID, Status: models.TaskStatusCancelled, Error: "cancelled during retry backoff"}})
-		cancel()
-		if err != nil {
-			q.emitEvent(ri.task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err))
-		}
+		q.markRetryCancelled(ctx, ri.task.ID, "cancelled during retry backoff")
 		return
 	}
 
 	// Re-submit via the heap instead of spawning another goroutine.
 	if err := q.Submit(ctx, ri.task); err != nil {
-		dbCtx, cancel := q.dbWriteContext(ctx)
-		err2 := q.db.BatchApplyTaskStateChanges(dbCtx, []database.TaskStateChange{{TaskID: ri.task.ID, Status: models.TaskStatusFailed, Error: fmt.Sprintf("retry re-submit: %v", err)}})
-		cancel()
-		if err2 != nil {
-			q.emitEvent(ri.task.ID, models.TaskStatusFailed, fmt.Sprintf("update status: %v", err2))
-		}
-		q.emitEvent(ri.task.ID, models.TaskStatusFailed, fmt.Sprintf("retry re-submit: %v", err))
+		q.failRetryResubmit(ctx, ri.task.ID, err)
 	}
+}
+
+func (q *Queue) markRetryCancelled(ctx context.Context, taskID, reason string) {
+	// ctx may be cancelled; use WithoutCancel to preserve parent values while
+	// allowing the DB write to complete.
+	dbCtx, cancel := q.dbWriteContext(context.WithoutCancel(ctx))
+	err := q.db.BatchApplyTaskStateChanges(dbCtx, []database.TaskStateChange{{TaskID: taskID, Status: models.TaskStatusCancelled, Error: reason}})
+	cancel()
+	if err != nil {
+		emitUpdateStatusError(q, taskID, err)
+	}
+}
+
+func (q *Queue) failRetryResubmit(ctx context.Context, taskID string, submitErr error) {
+	dbCtx, cancel := q.dbWriteContext(ctx)
+	err := q.db.BatchApplyTaskStateChanges(dbCtx, []database.TaskStateChange{{TaskID: taskID, Status: models.TaskStatusFailed, Error: fmt.Sprintf("retry re-submit: %v", submitErr)}})
+	cancel()
+	if err != nil {
+		emitUpdateStatusError(q, taskID, err)
+	}
+	q.emitEvent(taskID, models.TaskStatusFailed, fmt.Sprintf("retry re-submit: %v", submitErr))
 }
 
 func (q *Queue) emitEvent(taskID string, status models.TaskStatus, errMsg string) {

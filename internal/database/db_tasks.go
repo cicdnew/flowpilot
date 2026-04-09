@@ -54,6 +54,8 @@ type TaskStateChange struct {
 	IncrementRetry bool
 }
 
+const errScanTaskRowFmt = "scan task row: %w"
+
 func (db *DB) scanTask(row scanner) (*models.Task, error) {
 	var t models.Task
 	var stepsJSON, resultJSON, tagsJSON, loggingPolicyJSON, webhookEventsJSON string
@@ -290,7 +292,7 @@ func (db *DB) ListTasks(ctx context.Context) ([]models.Task, error) {
 	for rows.Next() {
 		task, err := db.scanTaskRow(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan task row: %w", err)
+			return nil, fmt.Errorf(errScanTaskRowFmt, err)
 		}
 		tasks = append(tasks, *task)
 	}
@@ -313,7 +315,7 @@ func (db *DB) ListTasksByStatus(ctx context.Context, status models.TaskStatus) (
 	for rows.Next() {
 		task, err := db.scanTaskRow(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan task row: %w", err)
+			return nil, fmt.Errorf(errScanTaskRowFmt, err)
 		}
 		tasks = append(tasks, *task)
 	}
@@ -566,7 +568,7 @@ func (db *DB) ListTasksPaginated(ctx context.Context, page, pageSize int, status
 	for rows.Next() {
 		task, err := db.scanTaskSummaryRow(rows)
 		if err != nil {
-			return models.PaginatedTasks{}, fmt.Errorf("scan task row: %w", err)
+			return models.PaginatedTasks{}, fmt.Errorf(errScanTaskRowFmt, err)
 		}
 		tasks = append(tasks, *task)
 	}
@@ -684,28 +686,72 @@ func (db *DB) BatchApplyTaskStateChanges(ctx context.Context, changes []TaskStat
 	}
 	defer tx.Rollback()
 
+	prepared, err := prepareBatchStateStmts(ctx, tx)
+	if err != nil {
+		return err
+	}
+	defer closeBatchStateStmts(prepared)
+
+	stateMap, err := prefetchTaskStates(ctx, tx, changes)
+	if err != nil {
+		return err
+	}
+
+	events, err := applyStateChanges(ctx, changes, stateMap, prepared)
+	if err != nil {
+		return err
+	}
+	if err := insertTaskEventsTx(ctx, tx, events); err != nil {
+		return fmt.Errorf("insert task events: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit batch state update: %w", err)
+	}
+	return nil
+}
+
+func prepareBatchStateStmts(ctx context.Context, tx *sql.Tx) (batchStmts, error) {
 	runningStmt, err := tx.PrepareContext(ctx, `UPDATE tasks SET status = ?, started_at = ? WHERE id = ?`)
 	if err != nil {
-		return fmt.Errorf("prepare running status update: %w", err)
+		return batchStmts{}, fmt.Errorf("prepare running status update: %w", err)
 	}
-	defer runningStmt.Close()
 	terminalStmt, err := tx.PrepareContext(ctx, `UPDATE tasks SET status = ?, error = ?, completed_at = ? WHERE id = ?`)
 	if err != nil {
-		return fmt.Errorf("prepare terminal status update: %w", err)
+		_ = runningStmt.Close()
+		return batchStmts{}, fmt.Errorf("prepare terminal status update: %w", err)
 	}
-	defer terminalStmt.Close()
 	defaultStmt, err := tx.PrepareContext(ctx, `UPDATE tasks SET status = ?, error = ? WHERE id = ?`)
 	if err != nil {
-		return fmt.Errorf("prepare default status update: %w", err)
+		_ = terminalStmt.Close()
+		_ = runningStmt.Close()
+		return batchStmts{}, fmt.Errorf("prepare default status update: %w", err)
 	}
-	defer defaultStmt.Close()
 	retryStmt, err := tx.PrepareContext(ctx, `UPDATE tasks SET retry_count = retry_count + 1, status = ? WHERE id = ?`)
 	if err != nil {
-		return fmt.Errorf("prepare retry status update: %w", err)
+		_ = defaultStmt.Close()
+		_ = terminalStmt.Close()
+		_ = runningStmt.Close()
+		return batchStmts{}, fmt.Errorf("prepare retry status update: %w", err)
 	}
-	defer retryStmt.Close()
+	return batchStmts{running: runningStmt, terminal: terminalStmt, def: defaultStmt, retry: retryStmt}, nil
+}
 
-	// Prefetch current status and batch_id for all tasks in one query to eliminate N+1.
+func closeBatchStateStmts(stmts batchStmts) {
+	if stmts.running != nil {
+		_ = stmts.running.Close()
+	}
+	if stmts.terminal != nil {
+		_ = stmts.terminal.Close()
+	}
+	if stmts.def != nil {
+		_ = stmts.def.Close()
+	}
+	if stmts.retry != nil {
+		_ = stmts.retry.Close()
+	}
+}
+
+func prefetchTaskStates(ctx context.Context, tx *sql.Tx, changes []TaskStateChange) (map[string]taskState, error) {
 	taskIDs := make([]string, len(changes))
 	for i, c := range changes {
 		taskIDs[i] = c.TaskID
@@ -718,43 +764,37 @@ func (db *DB) BatchApplyTaskStateChanges(ctx context.Context, changes []TaskStat
 	}
 	rows, err := tx.QueryContext(ctx, `SELECT id, status, batch_id FROM tasks WHERE id IN (`+strings.Join(placeholders, ",")+`)`, fetchArgs...)
 	if err != nil {
-		return fmt.Errorf("prefetch task states: %w", err)
+		return nil, fmt.Errorf("prefetch task states: %w", err)
 	}
+	defer rows.Close()
+
 	stateMap := make(map[string]taskState, len(changes))
 	for rows.Next() {
 		var tid string
 		var ts taskState
 		if err := rows.Scan(&tid, &ts.status, &ts.batchID); err != nil {
-			rows.Close()
-			return fmt.Errorf("scan task state: %w", err)
+			return nil, fmt.Errorf("scan task state: %w", err)
 		}
 		stateMap[tid] = ts
 	}
-	rows.Close()
 	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate task states: %w", err)
+		return nil, fmt.Errorf("iterate task states: %w", err)
 	}
+	return stateMap, nil
+}
 
-	prepared := batchStmts{running: runningStmt, terminal: terminalStmt, def: defaultStmt, retry: retryStmt}
-
+func applyStateChanges(ctx context.Context, changes []TaskStateChange, stateMap map[string]taskState, prepared batchStmts) ([]models.TaskLifecycleEvent, error) {
 	events := make([]models.TaskLifecycleEvent, 0, len(changes))
 	for _, change := range changes {
-		event, skip, applyErr := applyStateChange(ctx, change, stateMap, prepared)
-		if applyErr != nil {
-			return applyErr
+		event, skip, err := applyStateChange(ctx, change, stateMap, prepared)
+		if err != nil {
+			return nil, err
 		}
 		if !skip {
 			events = append(events, event)
 		}
 	}
-
-	if err := insertTaskEventsTx(ctx, tx, events); err != nil {
-		return fmt.Errorf("insert task events: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit batch state update: %w", err)
-	}
-	return nil
+	return events, nil
 }
 
 func (db *DB) BatchUpdateTaskStatus(ctx context.Context, taskIDs []string, status models.TaskStatus, errMsg string) error {

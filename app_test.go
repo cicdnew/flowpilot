@@ -295,7 +295,7 @@ func TestAppSensitiveMethodsRequireReady(t *testing.T) {
 		{
 			name: "update task",
 			call: func() error {
-				return app.UpdateTask("task-1", "Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, nil, 0, nil)
+				return app.UpdateTask("task-1", database.TaskUpdateParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Tags: nil, Timeout: 0, LoggingPolicy: nil}, 5)
 			},
 		},
 		{
@@ -593,7 +593,7 @@ func TestAppUpdateTask(t *testing.T) {
 		{Action: models.ActionNavigate, Value: "https://updated.com"},
 		{Action: models.ActionClick, Selector: "#new"},
 	}
-	err = app.UpdateTask(task.ID, "Updated", "https://updated.com", newSteps, models.ProxyConfig{}, 10, []string{"updated"}, 0, nil)
+	err = app.UpdateTask(task.ID, database.TaskUpdateParams{Name: "Updated", URL: "https://updated.com", Steps: newSteps, ProxyConfig: models.ProxyConfig{}, Tags: []string{"updated"}, Timeout: 0, LoggingPolicy: nil}, 10)
 	if err != nil {
 		t.Fatalf("UpdateTask: %v", err)
 	}
@@ -677,7 +677,7 @@ func TestAppUpdateTaskValidation(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	err = app.UpdateTask(task.ID, "", "https://example.com", validSteps(), models.ProxyConfig{}, 5, nil, 0, nil)
+	err = app.UpdateTask(task.ID, database.TaskUpdateParams{Name: "", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Tags: nil, Timeout: 0, LoggingPolicy: nil}, 5)
 	if err == nil {
 		t.Fatal("expected validation error for empty name")
 	}
@@ -703,7 +703,7 @@ func TestAppUpdateTaskRejectsInvalidLoggingPolicy(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	err = app.UpdateTask(task.ID, "Task", "https://example.com", validSteps(), models.ProxyConfig{}, 5, nil, 0, &models.TaskLoggingPolicy{MaxExecutionLogs: -1})
+	err = app.UpdateTask(task.ID, database.TaskUpdateParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{}, Tags: nil, Timeout: 0, LoggingPolicy: &models.TaskLoggingPolicy{MaxExecutionLogs: -1}}, 5)
 	if err == nil {
 		t.Fatal("expected error for invalid logging policy")
 	}
@@ -732,7 +732,7 @@ func TestAppUpdateTaskRejectsInvalidProxyConfig(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	err = app.UpdateTask(task.ID, "Task", "https://example.com", validSteps(), models.ProxyConfig{Fallback: models.ProxyRoutingFallback("bogus")}, 5, nil, 0, nil)
+	err = app.UpdateTask(task.ID, database.TaskUpdateParams{Name: "Task", URL: "https://example.com", Steps: validSteps(), ProxyConfig: models.ProxyConfig{Fallback: models.ProxyRoutingFallback("bogus")}, Tags: nil, Timeout: 0, LoggingPolicy: nil}, 5)
 	if err == nil {
 		t.Fatal("expected error for invalid proxy config")
 	}
@@ -749,7 +749,7 @@ func TestAppUpdateTaskRejectsMalformedSupportedStep(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 
-	err = app.UpdateTask(task.ID, "Task", "https://example.com", []models.TaskStep{{Action: models.ActionGetAttributes}}, models.ProxyConfig{}, 5, nil, 0, nil)
+	err = app.UpdateTask(task.ID, database.TaskUpdateParams{Name: "Task", URL: "https://example.com", Steps: []models.TaskStep{{Action: models.ActionGetAttributes}}, ProxyConfig: models.ProxyConfig{}, Tags: nil, Timeout: 0, LoggingPolicy: nil}, 5)
 	if err == nil {
 		t.Fatal("expected validation error for malformed supported step")
 	}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"flowpilot/internal/database"
 	"flowpilot/internal/models"
 	"flowpilot/internal/validation"
 
@@ -130,26 +131,27 @@ func (a *App) CancelTask(id string) error {
 	return a.queue.Cancel(id)
 }
 
-func (a *App) UpdateTask(id, name, url string, steps []models.TaskStep, proxyConfig models.ProxyConfig, priority int, tags []string, timeout int, loggingPolicy *models.TaskLoggingPolicy) error {
+func (a *App) UpdateTask(id string, p database.TaskUpdateParams, priority int) error {
 	if err := a.ready(); err != nil {
 		return err
 	}
-	if err := validation.ValidateTask(name, url, steps, models.TaskPriority(priority), false); err != nil {
+	if err := validation.ValidateTask(p.Name, p.URL, p.Steps, models.TaskPriority(priority), false); err != nil {
 		return fmt.Errorf("update task: %w", err)
 	}
-	if err := validation.ValidateTags(tags); err != nil {
+	if err := validation.ValidateTags(p.Tags); err != nil {
 		return fmt.Errorf("update task: %w", err)
 	}
-	if err := validation.ValidateTimeout(timeout); err != nil {
+	if err := validation.ValidateTimeout(p.Timeout); err != nil {
 		return fmt.Errorf("update task: %w", err)
 	}
-	if err := validation.ValidateProxyConfig(proxyConfig); err != nil {
+	if err := validation.ValidateProxyConfig(p.ProxyConfig); err != nil {
 		return fmt.Errorf("update task: %w", err)
 	}
-	if err := validation.ValidateTaskLoggingPolicy(loggingPolicy); err != nil {
+	if err := validation.ValidateTaskLoggingPolicy(p.LoggingPolicy); err != nil {
 		return fmt.Errorf("update task: %w", err)
 	}
-	return a.db.UpdateTask(a.ctx, id, name, url, steps, proxyConfig, models.TaskPriority(priority), tags, timeout, loggingPolicy)
+	p.Priority = models.TaskPriority(priority)
+	return a.db.UpdateTask(a.ctx, id, p)
 }
 
 func (a *App) DeleteTask(id string) error {

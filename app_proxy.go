@@ -87,6 +87,20 @@ func (a *App) ListProxyCountryStats() ([]models.ProxyCountryStats, error) {
 	return a.proxyManager.CountryStats(proxies, activeLocalEndpoints), nil
 }
 
+// validateProxyRoutingPreset validates proxy routing preset parameters (S3776)
+func (a *App) validateProxyRoutingPreset(preset *models.ProxyRoutingPreset) error {
+	if preset.Name == "" {
+		return fmt.Errorf("preset name is required")
+	}
+	if preset.Fallback == "" {
+		preset.Fallback = models.ProxyFallbackStrict
+	}
+	if preset.RandomByCountry && preset.Country == "" {
+		return fmt.Errorf("country is required for random-by-country presets")
+	}
+	return nil
+}
+
 func (a *App) CreateProxyRoutingPreset(name, country, fallback string, randomByCountry bool) (*models.ProxyRoutingPreset, error) {
 	if err := a.ready(); err != nil {
 		return nil, err
@@ -99,14 +113,8 @@ func (a *App) CreateProxyRoutingPreset(name, country, fallback string, randomByC
 		RandomByCountry: randomByCountry,
 		CreatedAt:       time.Now(),
 	}
-	if preset.Name == "" {
-		return nil, fmt.Errorf("preset name is required")
-	}
-	if preset.Fallback == "" {
-		preset.Fallback = models.ProxyFallbackStrict
-	}
-	if preset.RandomByCountry && preset.Country == "" {
-		return nil, fmt.Errorf("country is required for random-by-country presets")
+	if err := a.validateProxyRoutingPreset(&preset); err != nil {
+		return nil, err
 	}
 	if err := a.db.CreateProxyRoutingPreset(a.ctx, preset); err != nil {
 		return nil, err

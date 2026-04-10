@@ -95,30 +95,23 @@ func insertNetworkLogsTx(ctx context.Context, tx *sql.Tx, taskID string, logs []
 	return nil
 }
 
-func (db *DB) FinalizeTaskSuccess(ctx context.Context, taskID string, result models.TaskResult) error {
-	tx, err := db.conn.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin finalize success tx: %w", err)
-	}
-	defer tx.Rollback()
-
+// getTaskStatusAndBatch retrieves task status and batch ID (S3776)
+func getTaskStatusAndBatch(ctx context.Context, tx *sql.Tx, taskID string) (models.TaskStatus, string, error) {
 	var fromStatus models.TaskStatus
 	var batchID string
 	if err := tx.QueryRowContext(ctx, `SELECT status, batch_id FROM tasks WHERE id = ?`, taskID).Scan(&fromStatus, &batchID); err != nil {
 		if err == sql.ErrNoRows {
-			return fmt.Errorf(errTaskNotFound, taskID)
+			return "", "", fmt.Errorf(errTaskNotFound, taskID)
 		}
-		return fmt.Errorf("failed querying task status for %s: %w", taskID, err)
+		return "", "", fmt.Errorf("failed querying task status for %s: %w", taskID, err)
 	}
+	return fromStatus, batchID, nil
+}
 
-	storedResult := slimTaskResult(result)
-	resultJSON, err := json.Marshal(storedResult)
-	if err != nil {
-		return fmt.Errorf("marshal result: %w", err)
-	}
-
+// updateTaskSuccess updates task to completed status (S3776)
+func updateTaskSuccess(ctx context.Context, tx *sql.Tx, taskID string, resultJSON string) error {
 	now := time.Now()
-	res, err := tx.ExecContext(ctx, `UPDATE tasks SET result = ?, status = ?, error = ?, completed_at = ? WHERE id = ?`, string(resultJSON), models.TaskStatusCompleted, "", now, taskID)
+	res, err := tx.ExecContext(ctx, `UPDATE tasks SET result = ?, status = ?, error = ?, completed_at = ? WHERE id = ?`, resultJSON, models.TaskStatusCompleted, "", now, taskID)
 	if err != nil {
 		return fmt.Errorf("update task %s success: %w", taskID, err)
 	}
@@ -128,6 +121,30 @@ func (db *DB) FinalizeTaskSuccess(ctx context.Context, taskID string, result mod
 	}
 	if rowsAffected == 0 {
 		return fmt.Errorf(errTaskNotFound, taskID)
+	}
+	return nil
+}
+
+func (db *DB) FinalizeTaskSuccess(ctx context.Context, taskID string, result models.TaskResult) error {
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin finalize success tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	fromStatus, batchID, err := getTaskStatusAndBatch(ctx, tx, taskID)
+	if err != nil {
+		return err
+	}
+
+	storedResult := slimTaskResult(result)
+	resultJSON, err := json.Marshal(storedResult)
+	if err != nil {
+		return fmt.Errorf("marshal result: %w", err)
+	}
+
+	if err := updateTaskSuccess(ctx, tx, taskID, string(resultJSON)); err != nil {
+		return err
 	}
 
 	if err := insertStepLogsTx(ctx, tx, taskID, result.StepLogs); err != nil {
@@ -155,22 +172,8 @@ func (db *DB) FinalizeTaskSuccess(ctx context.Context, taskID string, result mod
 	return nil
 }
 
-func (db *DB) FinalizeTaskFailure(ctx context.Context, taskID string, errMsg string, stepLogs []models.StepLog, networkLogs []models.NetworkLog) error {
-	tx, err := db.conn.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin finalize failure tx: %w", err)
-	}
-	defer tx.Rollback()
-
-	var fromStatus models.TaskStatus
-	var batchID string
-	if err := tx.QueryRowContext(ctx, `SELECT status, batch_id FROM tasks WHERE id = ?`, taskID).Scan(&fromStatus, &batchID); err != nil {
-		if err == sql.ErrNoRows {
-			return fmt.Errorf(errTaskNotFound, taskID)
-		}
-		return fmt.Errorf("failed querying task status for %s: %w", taskID, err)
-	}
-
+// updateTaskFailure updates task to failed status (S3776)
+func updateTaskFailure(ctx context.Context, tx *sql.Tx, taskID string, errMsg string) error {
 	now := time.Now()
 	res, err := tx.ExecContext(ctx, `UPDATE tasks SET status = ?, error = ?, completed_at = ? WHERE id = ?`, models.TaskStatusFailed, errMsg, now, taskID)
 	if err != nil {
@@ -182,6 +185,24 @@ func (db *DB) FinalizeTaskFailure(ctx context.Context, taskID string, errMsg str
 	}
 	if rowsAffected == 0 {
 		return fmt.Errorf(errTaskNotFound, taskID)
+	}
+	return nil
+}
+
+func (db *DB) FinalizeTaskFailure(ctx context.Context, taskID string, errMsg string, stepLogs []models.StepLog, networkLogs []models.NetworkLog) error {
+	tx, err := db.conn.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin finalize failure tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	fromStatus, batchID, err := getTaskStatusAndBatch(ctx, tx, taskID)
+	if err != nil {
+		return err
+	}
+
+	if err := updateTaskFailure(ctx, tx, taskID, errMsg); err != nil {
+		return err
 	}
 
 	if err := insertStepLogsTx(ctx, tx, taskID, stepLogs); err != nil {

@@ -171,25 +171,25 @@ func (q *Queue) getProxyManager() *proxy.Manager {
 }
 
 // Submit enqueues a task for execution. Returns ErrQueueFull if at capacity.
-func (q *Queue) Submit(ctx context.Context, task models.Task) error {
-	q.mu.Lock()
+// validateSubmitTask checks if a task can be submitted to the queue (S3776)
+func (q *Queue) validateSubmitTask(taskID string) error {
 	if q.stopped {
-		q.mu.Unlock()
 		return fmt.Errorf("queue is stopped")
 	}
-	if q.isTaskEnqueued(task.ID) {
-		q.mu.Unlock()
-		return fmt.Errorf("task %s is already running", task.ID)
+	if q.isTaskEnqueued(taskID) {
+		return fmt.Errorf("task %s is already running", taskID)
 	}
-	if q.isTaskInHeap(task.ID) {
-		q.mu.Unlock()
-		return fmt.Errorf("task %s is already pending", task.ID)
+	if q.isTaskInHeap(taskID) {
+		return fmt.Errorf("task %s is already pending", taskID)
 	}
 	if q.maxPending > 0 && q.pq.Len()+q.pausedPQ.Len() >= q.maxPending {
-		q.mu.Unlock()
 		return ErrQueueFull
 	}
+	return nil
+}
 
+// addTaskToHeap adds a task to the priority queue (S3776)
+func (q *Queue) addTaskToHeap(task models.Task, ctx context.Context) (*heapItem, context.CancelFunc) {
 	taskCtx, cancel := context.WithCancel(ctx)
 	item := &heapItem{
 		task:    task,
@@ -200,6 +200,17 @@ func (q *Queue) Submit(ctx context.Context, task models.Task) error {
 	heap.Push(&q.pq, item)
 	q.heapSet[item.task.ID] = struct{}{}
 	q.metrics.TotalSubmitted++
+	return item, cancel
+}
+
+func (q *Queue) Submit(ctx context.Context, task models.Task) error {
+	q.mu.Lock()
+	if err := q.validateSubmitTask(task.ID); err != nil {
+		q.mu.Unlock()
+		return err
+	}
+
+	item, cancel := q.addTaskToHeap(task, ctx)
 	q.mu.Unlock()
 
 	if err := q.enqueueTaskStateChange(database.TaskStateChange{TaskID: task.ID, Status: models.TaskStatusQueued}); err != nil {
@@ -216,23 +227,19 @@ func (q *Queue) Submit(ctx context.Context, task models.Task) error {
 	return nil
 }
 
-// SubmitBatch enqueues multiple tasks with a single lock acquisition and DB transaction.
-func (q *Queue) SubmitBatch(ctx context.Context, tasks []models.Task) error {
-	if len(tasks) == 0 {
-		return nil
-	}
-
-	q.mu.Lock()
+// validateBatchSubmit checks if a batch of tasks can be submitted (S3776)
+func (q *Queue) validateBatchSubmit(taskCount int) error {
 	if q.stopped {
-		q.mu.Unlock()
 		return fmt.Errorf("queue is stopped")
 	}
-
-	if q.maxPending > 0 && q.pq.Len()+q.pausedPQ.Len()+len(tasks) > q.maxPending {
-		q.mu.Unlock()
+	if q.maxPending > 0 && q.pq.Len()+q.pausedPQ.Len()+taskCount > q.maxPending {
 		return ErrQueueFull
 	}
+	return nil
+}
 
+// addTasksToBatch adds eligible tasks to the queue (S3776)
+func (q *Queue) addTasksToBatch(ctx context.Context, tasks []models.Task) []models.Task {
 	added := make([]models.Task, 0, len(tasks))
 	for _, task := range tasks {
 		if q.isTaskEnqueued(task.ID) || q.isTaskInHeap(task.ID) {
@@ -250,6 +257,22 @@ func (q *Queue) SubmitBatch(ctx context.Context, tasks []models.Task) error {
 		q.metrics.TotalSubmitted++
 		added = append(added, task)
 	}
+	return added
+}
+
+// SubmitBatch enqueues multiple tasks with a single lock acquisition and DB transaction.
+func (q *Queue) SubmitBatch(ctx context.Context, tasks []models.Task) error {
+	if len(tasks) == 0 {
+		return nil
+	}
+
+	q.mu.Lock()
+	if err := q.validateBatchSubmit(len(tasks)); err != nil {
+		q.mu.Unlock()
+		return err
+	}
+
+	added := q.addTasksToBatch(ctx, tasks)
 	q.mu.Unlock()
 
 	if len(added) == 0 {

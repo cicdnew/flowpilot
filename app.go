@@ -176,46 +176,17 @@ func (a *App) initDatabase() error {
 	return nil
 }
 
-func (a *App) startup(ctx context.Context) {
-	a.ctx = ctx
-
-	if err := a.initDataDir(); err != nil {
-		a.startupFail(ctx, err)
-		return
-	}
-
-	a.configMu.Lock()
-	a.configPath = filepath.Join(a.dataDir, "config.json")
-	a.configMu.Unlock()
-	if err := a.loadConfigFromDisk(); err != nil {
-		a.startupFail(ctx, fmt.Errorf("load config: %w", err))
-		return
-	}
-	wailsRuntimeLoggingEnabled.Store(true)
-	a.configMu.Lock()
-	logLevel := a.config.LogSlogLevel
-	a.configMu.Unlock()
-	logs.Init(logLevel)
-
-	if err := crypto.InitKey(a.dataDir); err != nil {
-		a.startupFail(ctx, fmt.Errorf("init encryption: %w", err))
-		return
-	}
-
-	if err := a.initDatabase(); err != nil {
-		a.startupFail(ctx, err)
-		return
-	}
-
+// initBrowserAndPool sets up browser runner and connection pool (S3776)
+func (a *App) initBrowserAndPool(ctx context.Context) error {
 	screenshotDir := filepath.Join(a.dataDir, "screenshots")
 	runner, err := browser.NewRunner(screenshotDir)
 	if err != nil {
-		a.startupFail(ctx, fmt.Errorf("init browser runner: %w", err))
-		return
+		return fmt.Errorf("init browser runner: %w", err)
 	}
 	a.runner = runner
 	a.localProxyManager = localproxy.NewManager(5 * time.Minute)
 	a.runner.SetLocalProxyManager(a.localProxyManager)
+	
 	stepLogs := a.config.CaptureStepLogs
 	networkLogs := a.config.CaptureNetworkLogs
 	screenshots := a.config.CaptureScreenshots
@@ -232,6 +203,46 @@ func (a *App) startup(ctx context.Context) {
 	}, chromedp.DefaultExecAllocatorOptions[:])
 	a.pool = pool
 	a.runner.SetPool(pool)
+	return nil
+}
+
+// initStartupPhase1 performs initial setup (dirs, config, crypto, db) (S3776)
+func (a *App) initStartupPhase1(ctx context.Context) error {
+	if err := a.initDataDir(); err != nil {
+		return err
+	}
+
+	a.configMu.Lock()
+	a.configPath = filepath.Join(a.dataDir, "config.json")
+	a.configMu.Unlock()
+	if err := a.loadConfigFromDisk(); err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	wailsRuntimeLoggingEnabled.Store(true)
+	a.configMu.Lock()
+	logLevel := a.config.LogSlogLevel
+	a.configMu.Unlock()
+	logs.Init(logLevel)
+
+	if err := crypto.InitKey(a.dataDir); err != nil {
+		return fmt.Errorf("init encryption: %w", err)
+	}
+
+	return a.initDatabase()
+}
+
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
+
+	if err := a.initStartupPhase1(ctx); err != nil {
+		a.startupFail(ctx, err)
+		return
+	}
+
+	if err := a.initBrowserAndPool(ctx); err != nil {
+		a.startupFail(ctx, err)
+		return
+	}
 
 	captchaConfig, err := a.db.GetActiveCaptchaConfig(a.ctx)
 	if err == nil && captchaConfig != nil {

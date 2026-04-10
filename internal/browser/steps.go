@@ -76,80 +76,57 @@ func (r *Runner) executeStep(ctx context.Context, step models.TaskStep, result *
 	return r.executeStepWithResult(ctx, step, result)
 }
 
+// stepHandlerWithResult is a handler function for steps that need task result
+type stepHandlerWithResult func(context.Context, models.TaskStep, *models.TaskResult) error
+
+// getStepHandlerWithResult returns the handler for a step action (S1479 - reduce switch complexity)
+func (r *Runner) getStepHandlerWithResult(action models.TaskAction) stepHandlerWithResult {
+	handlers := map[models.TaskAction]stepHandlerWithResult{
+		models.ActionExtract:        r.execExtract,
+		models.ActionSolveCaptcha:   r.execSolveCaptcha,
+		models.ActionGetTitle:       r.execGetTitle,
+		models.ActionGetAttributes:  r.execGetAttributes,
+		models.ActionClickAd:        r.execClickAd,
+		models.ActionWhile:          r.execWhile,
+		models.ActionEndWhile:       r.execEndWhile,
+		models.ActionIfExists:       r.execIfExists,
+		models.ActionIfNotExists:    r.execIfNotExists,
+		models.ActionIfVisible:      r.execIfVisible,
+		models.ActionIfEnabled:      r.execIfEnabled,
+		models.ActionVariableSet:    r.execVariableSet,
+		models.ActionVariableMath:   r.execVariableMath,
+		models.ActionVariableString: r.execVariableString,
+		models.ActionHighlight:      r.execHighlight,
+		models.ActionGetCookies:     r.execGetCookies,
+		models.ActionSetCookie:      r.execSetCookie,
+		models.ActionDeleteCookies:  r.execDeleteCookies,
+		models.ActionGetStorage:     r.execGetStorage,
+		models.ActionSetStorage:     r.execSetStorage,
+		models.ActionDeleteStorage:  r.execDeleteStorage,
+		models.ActionDownload:       r.execDownload,
+		models.ActionSelectRandom:   r.execSelectRandom,
+		models.ActionDebugPause:     r.execDebugPause,
+		models.ActionDebugResume:    r.execDebugResume,
+		models.ActionDebugStep:      r.execDebugStep,
+		models.ActionAntiBot:        r.execAntiBot,
+		models.ActionGetSession:     r.execGetSession,
+		models.ActionSetSession:     r.execSetSession,
+		models.ActionLoadSession:    r.execLoadSession,
+		models.ActionSaveSession:    r.execSaveSession,
+		models.ActionCacheGet:       r.execCacheGet,
+		models.ActionCacheSet:       r.execCacheSet,
+		models.ActionCacheClear:     r.execCacheClear,
+	}
+	return handlers[action]
+}
+
 // executeStepWithResult handles actions that require the task result.
 func (r *Runner) executeStepWithResult(ctx context.Context, step models.TaskStep, result *models.TaskResult) error {
-	switch step.Action {
-	case models.ActionExtract:
-		return r.execExtract(ctx, step, result)
-	case models.ActionSolveCaptcha:
-		return r.execSolveCaptcha(ctx, step, result)
-	case models.ActionGetTitle:
-		return r.execGetTitle(ctx, step, result)
-	case models.ActionGetAttributes:
-		return r.execGetAttributes(ctx, step, result)
-	case models.ActionClickAd:
-		return r.execClickAd(ctx, step, result)
-	case models.ActionWhile:
-		return r.execWhile(ctx, step, result)
-	case models.ActionEndWhile:
-		return r.execEndWhile(ctx, step, result)
-	case models.ActionIfExists:
-		return r.execIfExists(ctx, step, result)
-	case models.ActionIfNotExists:
-		return r.execIfNotExists(ctx, step, result)
-	case models.ActionIfVisible:
-		return r.execIfVisible(ctx, step, result)
-	case models.ActionIfEnabled:
-		return r.execIfEnabled(ctx, step, result)
-	case models.ActionVariableSet:
-		return r.execVariableSet(ctx, step, result)
-	case models.ActionVariableMath:
-		return r.execVariableMath(ctx, step, result)
-	case models.ActionVariableString:
-		return r.execVariableString(ctx, step, result)
-	case models.ActionHighlight:
-		return r.execHighlight(ctx, step, result)
-	case models.ActionGetCookies:
-		return r.execGetCookies(ctx, step, result)
-	case models.ActionSetCookie:
-		return r.execSetCookie(ctx, step, result)
-	case models.ActionDeleteCookies:
-		return r.execDeleteCookies(ctx, step, result)
-	case models.ActionGetStorage:
-		return r.execGetStorage(ctx, step, result)
-	case models.ActionSetStorage:
-		return r.execSetStorage(ctx, step, result)
-	case models.ActionDeleteStorage:
-		return r.execDeleteStorage(ctx, step, result)
-	case models.ActionDownload:
-		return r.execDownload(ctx, step, result)
-	case models.ActionSelectRandom:
-		return r.execSelectRandom(ctx, step, result)
-	case models.ActionDebugPause:
-		return r.execDebugPause(ctx, step, result)
-	case models.ActionDebugResume:
-		return r.execDebugResume(ctx, step, result)
-	case models.ActionDebugStep:
-		return r.execDebugStep(ctx, step, result)
-	case models.ActionAntiBot:
-		return r.execAntiBot(ctx, step, result)
-	case models.ActionGetSession:
-		return r.execGetSession(ctx, step, result)
-	case models.ActionSetSession:
-		return r.execSetSession(ctx, step, result)
-	case models.ActionLoadSession:
-		return r.execLoadSession(ctx, step, result)
-	case models.ActionSaveSession:
-		return r.execSaveSession(ctx, step, result)
-	case models.ActionCacheGet:
-		return r.execCacheGet(ctx, step, result)
-	case models.ActionCacheSet:
-		return r.execCacheSet(ctx, step, result)
-	case models.ActionCacheClear:
-		return r.execCacheClear(ctx, step, result)
-	default:
+	handler := r.getStepHandlerWithResult(step.Action)
+	if handler == nil {
 		return fmt.Errorf("unknown action: %s", step.Action)
 	}
+	return handler(ctx, step, result)
 }
 
 func (r *Runner) execNavigate(ctx context.Context, step models.TaskStep) error {

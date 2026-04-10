@@ -54,7 +54,56 @@ type TaskStateChange struct {
 	IncrementRetry bool
 }
 
-const errScanTaskRowFmt = "scan task row: %w"
+const errScanTaskRowFmt = errScanTaskRow
+
+// parseTaskJSON unmarshals task-related JSON fields (S3776 - reduce complexity)
+func (db *DB) parseTaskJSON(t *models.Task, stepsJSON, resultJSON, tagsJSON, loggingPolicyJSON, webhookEventsJSON string) error {
+	if err := unmarshalIfNonEmpty(stepsJSON, &t.Steps); err != nil {
+		return fmt.Errorf("parse steps JSON: %w", err)
+	}
+	if resultJSON != "" {
+		var result models.TaskResult
+		if err := unmarshalIfNonEmpty(resultJSON, &result); err != nil {
+			return fmt.Errorf("parse result JSON: %w", err)
+		}
+		t.Result = &result
+	}
+	if err := unmarshalIfNonEmpty(tagsJSON, &t.Tags); err != nil {
+		return fmt.Errorf("parse tags JSON: %w", err)
+	}
+	if loggingPolicyJSON != "" {
+		var policy models.TaskLoggingPolicy
+		if err := unmarshalIfNonEmpty(loggingPolicyJSON, &policy); err != nil {
+			return fmt.Errorf("parse logging policy JSON: %w", err)
+		}
+		t.LoggingPolicy = &policy
+	}
+	if webhookEventsJSON != "" && webhookEventsJSON != "[]" {
+		if err := unmarshalIfNonEmpty(webhookEventsJSON, &t.WebhookEvents); err != nil {
+			return fmt.Errorf("parse webhook events JSON: %w", err)
+		}
+	}
+	return nil
+}
+
+// decryptProxyCredentials decrypts proxy username and password (S3776 - reduce complexity)
+func (db *DB) decryptProxyCredentials(t *models.Task) error {
+	if t.Proxy.Username != "" {
+		decUser, err := crypto.Decrypt(t.Proxy.Username)
+		if err != nil {
+			return fmt.Errorf("decrypt proxy username for task %s: %w", t.ID, err)
+		}
+		t.Proxy.Username = decUser
+	}
+	if t.Proxy.Password != "" {
+		decPass, err := crypto.Decrypt(t.Proxy.Password)
+		if err != nil {
+			return fmt.Errorf("decrypt proxy password for task %s: %w", t.ID, err)
+		}
+		t.Proxy.Password = decPass
+	}
+	return nil
+}
 
 func (db *DB) scanTask(row scanner) (*models.Task, error) {
 	var t models.Task
@@ -82,45 +131,12 @@ func (db *DB) scanTask(row scanner) (*models.Task, error) {
 
 	t.Headless = headlessInt != 0
 
-	if err := unmarshalIfNonEmpty(stepsJSON, &t.Steps); err != nil {
-		return nil, fmt.Errorf("parse steps JSON: %w", err)
-	}
-	if resultJSON != "" {
-		var result models.TaskResult
-		if err := unmarshalIfNonEmpty(resultJSON, &result); err != nil {
-			return nil, fmt.Errorf("parse result JSON: %w", err)
-		}
-		t.Result = &result
-	}
-	if err := unmarshalIfNonEmpty(tagsJSON, &t.Tags); err != nil {
-		return nil, fmt.Errorf("parse tags JSON: %w", err)
-	}
-	if loggingPolicyJSON != "" {
-		var policy models.TaskLoggingPolicy
-		if err := unmarshalIfNonEmpty(loggingPolicyJSON, &policy); err != nil {
-			return nil, fmt.Errorf("parse logging policy JSON: %w", err)
-		}
-		t.LoggingPolicy = &policy
-	}
-	if webhookEventsJSON != "" && webhookEventsJSON != "[]" {
-		if err := unmarshalIfNonEmpty(webhookEventsJSON, &t.WebhookEvents); err != nil {
-			return nil, fmt.Errorf("parse webhook events JSON: %w", err)
-		}
+	if err := db.parseTaskJSON(&t, stepsJSON, resultJSON, tagsJSON, loggingPolicyJSON, webhookEventsJSON); err != nil {
+		return nil, err
 	}
 
-	if t.Proxy.Username != "" {
-		decUser, err := crypto.Decrypt(t.Proxy.Username)
-		if err != nil {
-			return nil, fmt.Errorf("decrypt proxy username for task %s: %w", t.ID, err)
-		}
-		t.Proxy.Username = decUser
-	}
-	if t.Proxy.Password != "" {
-		decPass, err := crypto.Decrypt(t.Proxy.Password)
-		if err != nil {
-			return nil, fmt.Errorf("decrypt proxy password for task %s: %w", t.ID, err)
-		}
-		t.Proxy.Password = decPass
+	if err := db.decryptProxyCredentials(&t); err != nil {
+		return nil, err
 	}
 
 	return &t, nil
@@ -335,7 +351,7 @@ func (db *DB) UpdateTaskStatus(ctx context.Context, id string, status models.Tas
 	var fromStatus models.TaskStatus
 	var batchID string
 	if err := tx.QueryRowContext(ctx, `SELECT status, batch_id FROM tasks WHERE id = ?`, id).Scan(&fromStatus, &batchID); err != nil {
-		return fmt.Errorf("task %s not found", id)
+		return fmt.Errorf(errTaskNotFound, id)
 	}
 
 	now := time.Now()
@@ -353,10 +369,10 @@ func (db *DB) UpdateTaskStatus(ctx context.Context, id string, status models.Tas
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("check update result for task %s: %w", id, err)
+		return fmt.Errorf(errCheckUpdateTask, id, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("task %s not found", id)
+		return fmt.Errorf(errTaskNotFound, id)
 	}
 
 	event := models.TaskLifecycleEvent{
@@ -389,10 +405,10 @@ func (db *DB) UpdateTaskResult(ctx context.Context, id string, result models.Tas
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("check update result for task %s: %w", id, err)
+		return fmt.Errorf(errCheckUpdateTask, id, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("task %s not found", id)
+		return fmt.Errorf(errTaskNotFound, id)
 	}
 	return nil
 }
@@ -407,7 +423,7 @@ func (db *DB) IncrementRetry(ctx context.Context, id string) error {
 		return fmt.Errorf("check retry result for task %s: %w", id, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("task %s not found", id)
+		return fmt.Errorf(errTaskNotFound, id)
 	}
 	return nil
 }
@@ -422,7 +438,7 @@ func (db *DB) ResetRetryCount(ctx context.Context, id string) error {
 		return fmt.Errorf("check reset retry result for task %s: %w", id, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("task %s not found", id)
+		return fmt.Errorf(errTaskNotFound, id)
 	}
 	return nil
 }
@@ -458,12 +474,12 @@ func (db *DB) UpdateTask(ctx context.Context, id string, p TaskUpdateParams) err
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("check update result for task %s: %w", id, err)
+		return fmt.Errorf(errCheckUpdateTask, id, err)
 	}
 	if n == 0 {
 		task, getErr := db.GetTask(ctx, id)
 		if getErr != nil {
-			return fmt.Errorf("task %s not found", id)
+			return fmt.Errorf(errTaskNotFound, id)
 		}
 		return fmt.Errorf("cannot edit task with status %s", task.Status)
 	}
@@ -496,7 +512,7 @@ func (db *DB) DeleteTask(ctx context.Context, id string) error {
 		return fmt.Errorf("check delete result for task %s: %w", id, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("task %s not found", id)
+		return fmt.Errorf(errTaskNotFound, id)
 	}
 	return tx.Commit()
 }
@@ -631,7 +647,7 @@ func isTerminal(s models.TaskStatus) bool {
 func applyStateChange(ctx context.Context, change TaskStateChange, stateMap map[string]taskState, s batchStmts) (models.TaskLifecycleEvent, bool, error) {
 	state, ok := stateMap[change.TaskID]
 	if !ok {
-		return models.TaskLifecycleEvent{}, false, fmt.Errorf("task %s not found", change.TaskID)
+		return models.TaskLifecycleEvent{}, false, fmt.Errorf(errTaskNotFound, change.TaskID)
 	}
 	if isTerminal(state.status) && !isTerminal(change.Status) {
 		return models.TaskLifecycleEvent{}, true, nil
@@ -660,7 +676,7 @@ func applyStateChange(ctx context.Context, change TaskStateChange, stateMap map[
 		return models.TaskLifecycleEvent{}, false, fmt.Errorf("check batch update result for task %s: %w", change.TaskID, err)
 	}
 	if n == 0 {
-		return models.TaskLifecycleEvent{}, false, fmt.Errorf("task %s not found", change.TaskID)
+		return models.TaskLifecycleEvent{}, false, fmt.Errorf(errTaskNotFound, change.TaskID)
 	}
 
 	event := models.TaskLifecycleEvent{

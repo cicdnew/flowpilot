@@ -586,7 +586,16 @@ func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, r
 			if err != nil {
 				code = models.ClassifyError(err)
 			}
-			stepLogger.EndStep(pc, step.Action, step.Selector, step.Value, "", startedAt, err, code)
+			stepLogger.EndStep(logs.EndStepParams{
+				StepIndex:  pc,
+				Action:     step.Action,
+				Selector:   step.Selector,
+				Value:      step.Value,
+				SnapshotID: "",
+				Start:      startedAt,
+				Err:        err,
+				Code:       code,
+			})
 		}
 
 		if err != nil {

@@ -84,7 +84,7 @@ func (db *DB) ListProxies(ctx context.Context) ([]models.Proxy, error) {
 		proxies = append(proxies, *p)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate proxies: %w", err)
+		return nil, fmt.Errorf(errIterateProxies, err)
 	}
 	return proxies, nil
 }
@@ -109,7 +109,7 @@ func (db *DB) ListProxiesBestEffort(ctx context.Context) ([]models.Proxy, int, e
 		proxies = append(proxies, *p)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, skipped, fmt.Errorf("iterate proxies: %w", err)
+		return nil, skipped, fmt.Errorf(errIterateProxies, err)
 	}
 	return proxies, skipped, nil
 }
@@ -131,7 +131,7 @@ func (db *DB) ListHealthyProxies(ctx context.Context) ([]models.Proxy, error) {
 		proxies = append(proxies, *p)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate proxies: %w", err)
+		return nil, fmt.Errorf(errIterateProxies, err)
 	}
 	return proxies, nil
 }

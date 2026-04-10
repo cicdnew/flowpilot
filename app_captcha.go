@@ -116,15 +116,15 @@ func (a *App) TestCaptchaConfig(id string) (float64, error) {
 	}
 	c, err := a.db.GetCaptchaConfig(a.ctx, id)
 	if err != nil {
-		return 0, fmt.Errorf("test captcha config: %w", err)
+		return 0, fmt.Errorf(errTestCaptchaConfig, err)
 	}
 	solver, err := captcha.NewSolver(*c)
 	if err != nil {
-		return 0, fmt.Errorf("test captcha config: %w", err)
+		return 0, fmt.Errorf(errTestCaptchaConfig, err)
 	}
 	balance, err := solver.Balance(a.ctx)
 	if err != nil {
-		return 0, fmt.Errorf("test captcha config: %w", err)
+		return 0, fmt.Errorf(errTestCaptchaConfig, err)
 	}
 	return balance, nil
 }

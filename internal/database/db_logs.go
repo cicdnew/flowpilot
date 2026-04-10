@@ -107,7 +107,7 @@ func (db *DB) FinalizeTaskSuccess(ctx context.Context, taskID string, result mod
 	var fromStatus models.TaskStatus
 	var batchID string
 	if err := tx.QueryRowContext(ctx, `SELECT status, batch_id FROM tasks WHERE id = ?`, taskID).Scan(&fromStatus, &batchID); err != nil {
-		return fmt.Errorf("task %s not found", taskID)
+		return fmt.Errorf(errTaskNotFound, taskID)
 	}
 
 	storedResult := slimTaskResult(result)
@@ -126,7 +126,7 @@ func (db *DB) FinalizeTaskSuccess(ctx context.Context, taskID string, result mod
 		return fmt.Errorf("check success update result for task %s: %w", taskID, err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("task %s not found", taskID)
+		return fmt.Errorf(errTaskNotFound, taskID)
 	}
 
 	if err := insertStepLogsTx(ctx, tx, taskID, result.StepLogs); err != nil {
@@ -164,7 +164,7 @@ func (db *DB) FinalizeTaskFailure(ctx context.Context, taskID string, errMsg str
 	var fromStatus models.TaskStatus
 	var batchID string
 	if err := tx.QueryRowContext(ctx, `SELECT status, batch_id FROM tasks WHERE id = ?`, taskID).Scan(&fromStatus, &batchID); err != nil {
-		return fmt.Errorf("task %s not found", taskID)
+		return fmt.Errorf(errTaskNotFound, taskID)
 	}
 
 	now := time.Now()
@@ -177,7 +177,7 @@ func (db *DB) FinalizeTaskFailure(ctx context.Context, taskID string, errMsg str
 		return fmt.Errorf("check failure update result for task %s: %w", taskID, err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("task %s not found", taskID)
+		return fmt.Errorf(errTaskNotFound, taskID)
 	}
 
 	if err := insertStepLogsTx(ctx, tx, taskID, stepLogs); err != nil {

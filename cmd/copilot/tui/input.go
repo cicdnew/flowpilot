@@ -101,8 +101,11 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 
 	case ViewModeModelSelect:
 		if len(m.models) > 0 && m.modelIndex < len(m.models) {
-			// TODO: emit model selection
+			model := m.models[m.modelIndex]
 			m.viewMode = ViewModeChat
+			return m, func() tea.Msg {
+				return SetModelRequestMsg{Model: model.Name}
+			}
 		}
 
 	case ViewModeHelp:

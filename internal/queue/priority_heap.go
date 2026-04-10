@@ -10,7 +10,7 @@ import (
 // heapItem wraps a task with its context and heap metadata.
 type heapItem struct {
 	task    models.Task
-	ctx     context.Context
+	ctx     context.Context     //nolint:godre:S8242 -- context stored for task cancellation
 	cancel  context.CancelFunc
 	addedAt time.Time // tiebreaker for same-priority tasks (FIFO)
 	index   int       // managed by container/heap

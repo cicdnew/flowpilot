@@ -31,24 +31,33 @@ type CreateTaskParams struct {
 	LoggingPolicy *models.TaskLoggingPolicy
 }
 
+// validateCreateTaskParams validates all create task parameters (S3776 - reduce complexity)
+func (a *App) validateCreateTaskParams(p CreateTaskParams) error {
+	checks := []struct {
+		name string
+		err  error
+	}{
+		{"task", validation.ValidateTask(p.Name, p.URL, p.Steps, models.TaskPriority(p.Priority), false)},
+		{"tags", validation.ValidateTags(p.Tags)},
+		{"timeout", validation.ValidateTimeout(p.Timeout)},
+		{"proxy", validation.ValidateProxyConfig(p.ProxyConfig)},
+		{"logging", validation.ValidateTaskLoggingPolicy(p.LoggingPolicy)},
+	}
+	
+	for _, check := range checks {
+		if check.err != nil {
+			return fmt.Errorf(errCreateTask, check.err)
+		}
+	}
+	return nil
+}
+
 func (a *App) CreateTask(p CreateTaskParams) (*models.Task, error) {
 	if err := a.ready(); err != nil {
 		return nil, err
 	}
-	if err := validation.ValidateTask(p.Name, p.URL, p.Steps, models.TaskPriority(p.Priority), false); err != nil {
-		return nil, fmt.Errorf(errCreateTask, err)
-	}
-	if err := validation.ValidateTags(p.Tags); err != nil {
-		return nil, fmt.Errorf(errCreateTask, err)
-	}
-	if err := validation.ValidateTimeout(p.Timeout); err != nil {
-		return nil, fmt.Errorf(errCreateTask, err)
-	}
-	if err := validation.ValidateProxyConfig(p.ProxyConfig); err != nil {
-		return nil, fmt.Errorf(errCreateTask, err)
-	}
-	if err := validation.ValidateTaskLoggingPolicy(p.LoggingPolicy); err != nil {
-		return nil, fmt.Errorf(errCreateTask, err)
+	if err := a.validateCreateTaskParams(p); err != nil {
+		return nil, err
 	}
 
 	task := models.Task{
@@ -151,24 +160,33 @@ func (a *App) CancelTask(id string) error {
 	return a.queue.Cancel(id)
 }
 
+// validateUpdateTaskParams validates all update task parameters (S3776 - reduce complexity)
+func (a *App) validateUpdateTaskParams(p database.TaskUpdateParams, priority int) error {
+	checks := []struct {
+		name string
+		err  error
+	}{
+		{"task", validation.ValidateTask(p.Name, p.URL, p.Steps, models.TaskPriority(priority), false)},
+		{"tags", validation.ValidateTags(p.Tags)},
+		{"timeout", validation.ValidateTimeout(p.Timeout)},
+		{"proxy", validation.ValidateProxyConfig(p.ProxyConfig)},
+		{"logging", validation.ValidateTaskLoggingPolicy(p.LoggingPolicy)},
+	}
+	
+	for _, check := range checks {
+		if check.err != nil {
+			return fmt.Errorf(errUpdateTask, check.err)
+		}
+	}
+	return nil
+}
+
 func (a *App) UpdateTask(id string, p database.TaskUpdateParams, priority int) error {
 	if err := a.ready(); err != nil {
 		return err
 	}
-	if err := validation.ValidateTask(p.Name, p.URL, p.Steps, models.TaskPriority(priority), false); err != nil {
-		return fmt.Errorf(errUpdateTask, err)
-	}
-	if err := validation.ValidateTags(p.Tags); err != nil {
-		return fmt.Errorf(errUpdateTask, err)
-	}
-	if err := validation.ValidateTimeout(p.Timeout); err != nil {
-		return fmt.Errorf(errUpdateTask, err)
-	}
-	if err := validation.ValidateProxyConfig(p.ProxyConfig); err != nil {
-		return fmt.Errorf(errUpdateTask, err)
-	}
-	if err := validation.ValidateTaskLoggingPolicy(p.LoggingPolicy); err != nil {
-		return fmt.Errorf(errUpdateTask, err)
+	if err := a.validateUpdateTaskParams(p, priority); err != nil {
+		return err
 	}
 	p.Priority = models.TaskPriority(priority)
 	return a.db.UpdateTask(a.ctx, id, p)

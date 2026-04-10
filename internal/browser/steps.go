@@ -18,6 +18,8 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
+const errElementNotFoundForSelector = "click_ad: element not found for selector %q"
+
 // executeStep dispatches to the appropriate action handler using lookup tables.
 func (r *Runner) executeStep(ctx context.Context, step models.TaskStep, result *models.TaskResult) error {
 	// Handlers that only need ctx + step (no result).
@@ -646,7 +648,7 @@ func (r *Runner) execClickAd(ctx context.Context, step models.TaskStep, result *
 			return fmt.Errorf("click_ad: evaluate selector metadata: %w", err)
 		}
 		if !info.Found {
-			return fmt.Errorf("click_ad: element not found for selector %q", step.Selector)
+			return fmt.Errorf(errElementNotFoundForSelector, step.Selector)
 		}
 
 		result.ExtractedData[keyPrefix+"_selector"] = info.Selector
@@ -740,7 +742,7 @@ func (r *Runner) execClickAdWithSelector(ctx context.Context, selector, keyPrefi
 		return fmt.Errorf("click_ad: evaluate selector metadata: %w", err)
 	}
 	if !info.Found {
-		return fmt.Errorf("click_ad: element not found for selector %q", selector)
+		return fmt.Errorf(errElementNotFoundForSelector, selector)
 	}
 
 	result.ExtractedData[keyPrefix+"_selector"] = info.Selector

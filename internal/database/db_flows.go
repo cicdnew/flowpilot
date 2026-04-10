@@ -52,7 +52,7 @@ func (db *DB) UpdateRecordedFlow(ctx context.Context, flow models.RecordedFlow) 
 		if err != nil {
 			return fmt.Errorf("check update flow %s: %w", flow.ID, err)
 		}
-		return fmt.Errorf("flow %s not found", flow.ID)
+		return fmt.Errorf(errFlowNotFound, flow.ID)
 	}
 	return nil
 }
@@ -135,7 +135,7 @@ func (db *DB) DeleteRecordedFlow(ctx context.Context, id string) error {
 		if err != nil {
 			return fmt.Errorf("check delete flow %s: %w", id, err)
 		}
-		return fmt.Errorf("flow %s not found", id)
+		return fmt.Errorf(errFlowNotFound, id)
 	}
 	return tx.Commit()
 }

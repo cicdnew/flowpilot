@@ -26,7 +26,16 @@ func TestEndStepWithError(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	testErr := errors.New("element not found")
-	l.EndStep(0, models.ActionClick, "#btn", "", "", start, testErr, models.ErrCodeSelectorNotFnd)
+	l.EndStep(EndStepParams{
+		StepIndex:  0,
+		Action:     models.ActionClick,
+		Selector:   "#btn",
+		Value:      "",
+		SnapshotID: "",
+		Start:      start,
+		Err:        testErr,
+		Code:       models.ErrCodeSelectorNotFnd,
+	})
 
 	logs := l.Logs()
 	if len(logs) != 1 {
@@ -66,7 +75,16 @@ func TestEndStepWithoutError(t *testing.T) {
 
 	time.Sleep(5 * time.Millisecond)
 
-	l.EndStep(0, models.ActionNavigate, "", "https://example.com", "snap-1", start, nil, "")
+	l.EndStep(EndStepParams{
+		StepIndex:  0,
+		Action:     models.ActionNavigate,
+		Selector:   "",
+		Value:      "https://example.com",
+		SnapshotID: "snap-1",
+		Start:      start,
+		Err:        nil,
+		Code:       "",
+	})
 
 	logs := l.Logs()
 	if len(logs) != 1 {
@@ -93,7 +111,16 @@ func TestLogsReturnedInOrder(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		start := l.StartStep(i, models.ActionClick, "#btn", "", "")
-		l.EndStep(i, models.ActionClick, "#btn", "", "", start, nil, "")
+		l.EndStep(EndStepParams{
+			StepIndex:  i,
+			Action:     models.ActionClick,
+			Selector:   "#btn",
+			Value:      "",
+			SnapshotID: "",
+			Start:      start,
+			Err:        nil,
+			Code:       "",
+		})
 	}
 
 	logs := l.Logs()
@@ -129,7 +156,16 @@ func TestMultipleStepsDifferentActions(t *testing.T) {
 
 	for i, action := range actions {
 		start := l.StartStep(i, action, "", "", "")
-		l.EndStep(i, action, "", "", "", start, nil, "")
+		l.EndStep(EndStepParams{
+			StepIndex:  i,
+			Action:     action,
+			Selector:   "",
+			Value:      "",
+			SnapshotID: "",
+			Start:      start,
+			Err:        nil,
+			Code:       "",
+		})
 	}
 
 	logs := l.Logs()

@@ -11,7 +11,12 @@ import (
 	"github.com/google/uuid"
 )
 
-const errCreateTask = "create task: %w"
+const (
+	errCreateTask   = "create task: %w"
+	errUpdateTask   = "update task: %w"
+	errTaskNotFound = "task %s not found"
+	errTaskID       = "task_id must be a non-empty string"
+)
 
 // CreateTaskParams holds parameters for creating a task.
 type CreateTaskParams struct {
@@ -151,19 +156,19 @@ func (a *App) UpdateTask(id string, p database.TaskUpdateParams, priority int) e
 		return err
 	}
 	if err := validation.ValidateTask(p.Name, p.URL, p.Steps, models.TaskPriority(priority), false); err != nil {
-		return fmt.Errorf("update task: %w", err)
+		return fmt.Errorf(errUpdateTask, err)
 	}
 	if err := validation.ValidateTags(p.Tags); err != nil {
-		return fmt.Errorf("update task: %w", err)
+		return fmt.Errorf(errUpdateTask, err)
 	}
 	if err := validation.ValidateTimeout(p.Timeout); err != nil {
-		return fmt.Errorf("update task: %w", err)
+		return fmt.Errorf(errUpdateTask, err)
 	}
 	if err := validation.ValidateProxyConfig(p.ProxyConfig); err != nil {
-		return fmt.Errorf("update task: %w", err)
+		return fmt.Errorf(errUpdateTask, err)
 	}
 	if err := validation.ValidateTaskLoggingPolicy(p.LoggingPolicy); err != nil {
-		return fmt.Errorf("update task: %w", err)
+		return fmt.Errorf(errUpdateTask, err)
 	}
 	p.Priority = models.TaskPriority(priority)
 	return a.db.UpdateTask(a.ctx, id, p)

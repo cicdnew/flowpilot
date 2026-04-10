@@ -40,7 +40,7 @@ func (db *DB) GetCaptchaConfig(ctx context.Context, id string) (*models.CaptchaC
 
 	c, err := db.scanCaptchaRow(row)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("captcha config %s not found", id)
+		return nil, fmt.Errorf(errCaptchaConfigNotFound, id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get captcha config %s: %w", id, err)
@@ -118,7 +118,7 @@ func (db *DB) UpdateCaptchaConfig(ctx context.Context, c models.CaptchaConfig) e
 		return fmt.Errorf("check update result for captcha config %s: %w", c.ID, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("captcha config %s not found", c.ID)
+		return fmt.Errorf(errCaptchaConfigNotFound, c.ID)
 	}
 	return nil
 }
@@ -133,7 +133,7 @@ func (db *DB) DeleteCaptchaConfig(ctx context.Context, id string) error {
 		return fmt.Errorf("check delete result for captcha config %s: %w", id, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("captcha config %s not found", id)
+		return fmt.Errorf(errCaptchaConfigNotFound, id)
 	}
 	return nil
 }

@@ -12,8 +12,6 @@ import (
 	"flowpilot/internal/models"
 )
 
-const errInsertTaskEvent = "insert task event %s: %w"
-
 func (db *DB) InsertTaskEvent(ctx context.Context, event models.TaskLifecycleEvent) error {
 	_, err := db.conn.ExecContext(ctx, `INSERT INTO task_events (id, task_id, batch_id, from_state, to_state, error, timestamp)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -107,7 +105,10 @@ func (db *DB) FinalizeTaskSuccess(ctx context.Context, taskID string, result mod
 	var fromStatus models.TaskStatus
 	var batchID string
 	if err := tx.QueryRowContext(ctx, `SELECT status, batch_id FROM tasks WHERE id = ?`, taskID).Scan(&fromStatus, &batchID); err != nil {
-		return fmt.Errorf("task %s not found", taskID)
+		if err == sql.ErrNoRows {
+			return fmt.Errorf(errTaskNotFound, taskID)
+		}
+		return fmt.Errorf("failed querying task status for %s: %w", taskID, err)
 	}
 
 	storedResult := slimTaskResult(result)
@@ -126,7 +127,7 @@ func (db *DB) FinalizeTaskSuccess(ctx context.Context, taskID string, result mod
 		return fmt.Errorf("check success update result for task %s: %w", taskID, err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("task %s not found", taskID)
+		return fmt.Errorf(errTaskNotFound, taskID)
 	}
 
 	if err := insertStepLogsTx(ctx, tx, taskID, result.StepLogs); err != nil {
@@ -164,7 +165,10 @@ func (db *DB) FinalizeTaskFailure(ctx context.Context, taskID string, errMsg str
 	var fromStatus models.TaskStatus
 	var batchID string
 	if err := tx.QueryRowContext(ctx, `SELECT status, batch_id FROM tasks WHERE id = ?`, taskID).Scan(&fromStatus, &batchID); err != nil {
-		return fmt.Errorf("task %s not found", taskID)
+		if err == sql.ErrNoRows {
+			return fmt.Errorf(errTaskNotFound, taskID)
+		}
+		return fmt.Errorf("failed querying task status for %s: %w", taskID, err)
 	}
 
 	now := time.Now()
@@ -177,7 +181,7 @@ func (db *DB) FinalizeTaskFailure(ctx context.Context, taskID string, errMsg str
 		return fmt.Errorf("check failure update result for task %s: %w", taskID, err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("task %s not found", taskID)
+		return fmt.Errorf(errTaskNotFound, taskID)
 	}
 
 	if err := insertStepLogsTx(ctx, tx, taskID, stepLogs); err != nil {

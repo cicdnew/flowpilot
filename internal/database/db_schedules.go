@@ -175,7 +175,7 @@ func (db *DB) UpdateSchedule(ctx context.Context, s models.Schedule) error {
 		return fmt.Errorf("check update result for schedule %s: %w", s.ID, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("schedule %s not found", s.ID)
+		return fmt.Errorf(errScheduleNotFound, s.ID)
 	}
 	return nil
 }
@@ -190,7 +190,7 @@ func (db *DB) DeleteSchedule(ctx context.Context, id string) error {
 		return fmt.Errorf("check delete result for schedule %s: %w", id, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("schedule %s not found", id)
+		return fmt.Errorf(errScheduleNotFound, id)
 	}
 	return nil
 }
@@ -232,7 +232,7 @@ func (db *DB) UpdateScheduleRun(ctx context.Context, id string, lastRun, nextRun
 		return fmt.Errorf("check update run result for schedule %s: %w", id, err)
 	}
 	if n == 0 {
-		return fmt.Errorf("schedule %s not found", id)
+		return fmt.Errorf(errScheduleNotFound, id)
 	}
 	return nil
 }

@@ -11,7 +11,12 @@ import (
 	"github.com/google/uuid"
 )
 
-const errCreateTask = "create task: %w"
+const (
+	errCreateTask   = "create task: %w"
+	errUpdateTask   = "update task: %w"
+	errTaskNotFound = "task %s not found"
+	errTaskID       = "task_id must be a non-empty string"
+)
 
 // CreateTaskParams holds parameters for creating a task.
 type CreateTaskParams struct {

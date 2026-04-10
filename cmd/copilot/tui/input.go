@@ -104,7 +104,7 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 			model := m.models[m.modelIndex]
 			m.viewMode = ViewModeChat
 			return m, func() tea.Msg {
-				return SetModelRequestMsg{Model: model.Name}
+				return SetModelRequestMsg{ModelID: model.ID}
 			}
 		}
 

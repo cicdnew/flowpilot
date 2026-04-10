@@ -351,7 +351,10 @@ func (db *DB) UpdateTaskStatus(ctx context.Context, id string, status models.Tas
 	var fromStatus models.TaskStatus
 	var batchID string
 	if err := tx.QueryRowContext(ctx, `SELECT status, batch_id FROM tasks WHERE id = ?`, id).Scan(&fromStatus, &batchID); err != nil {
-		return fmt.Errorf(errTaskNotFound, id)
+		if err == sql.ErrNoRows {
+			return fmt.Errorf(errTaskNotFound, id)
+		}
+		return fmt.Errorf("failed querying task status for %s: %w", id, err)
 	}
 
 	now := time.Now()

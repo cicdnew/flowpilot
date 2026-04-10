@@ -12,7 +12,11 @@ import (
 	"github.com/google/uuid"
 )
 
-const errSaveCaptchaConfig = "save captcha config: %w"
+const (
+	errSaveCaptchaConfig   = "save captcha config: %w"
+	errTestCaptchaConfig   = "test captcha config: %w"
+	errCaptchaConfigNotFound = "captcha config %s not found"
+)
 
 func (a *App) SaveCaptchaConfig(provider, apiKey string) (*models.CaptchaConfig, error) {
 	if err := a.ready(); err != nil {

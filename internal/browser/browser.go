@@ -266,6 +266,50 @@ func (r *Runner) acquireBrowserContext(ctx context.Context, effectiveProxy model
 	return browserCtx, func() { browserCancel(); allocCancel() }, nil
 }
 
+// setupPanicRecovery sets up panic recovery for browser execution (S3776)
+func (r *Runner) setupPanicRecovery(result *models.TaskResult, start time.Time, err *error) {
+	defer func() {
+		if p := recover(); p != nil {
+			pErr, ok := p.(error)
+			if ok && strings.Contains(pErr.Error(), "close of closed channel") {
+				r.addLog(result, "warn", "chromedp upstream panic recovered: close of closed channel")
+				return
+			}
+			panicMsg := fmt.Sprintf("unexpected browser panic: %v", p)
+			result.Error = panicMsg
+			result.Duration = time.Since(start)
+			r.addLog(result, "error", panicMsg)
+			*err = fmt.Errorf("browser panic: %v", p)
+		}
+	}()
+}
+
+// setupNetworkLogging configures network logging if enabled (S3776)
+func (r *Runner) setupNetworkLogging(ctx context.Context, taskID string, policy *taskLoggingPolicy, result *models.TaskResult) *logs.NetworkLogger {
+	if !policy.captureNetworkLogs {
+		return nil
+	}
+
+	netLogger := logs.NewNetworkLogger(taskID)
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		switch e := ev.(type) {
+		case *network.EventRequestWillBeSent:
+			netLogger.HandleRequestWillBeSent(e)
+		case *network.EventResponseReceived:
+			netLogger.HandleResponseReceived(e)
+		case *network.EventLoadingFinished:
+			netLogger.HandleLoadingFinished(e, nil)
+		case *network.EventLoadingFailed:
+			netLogger.HandleLoadingFailed(e.RequestID)
+		}
+	})
+
+	if err := chromedp.Run(ctx, network.Enable()); err != nil {
+		r.addLog(result, "warn", fmt.Sprintf("enable network logging: %v", err))
+	}
+	return netLogger
+}
+
 func (r *Runner) RunTask(ctx context.Context, task models.Task) (result *models.TaskResult, err error) {
 	start := time.Now()
 	policy := r.resolveLoggingPolicy(task)
@@ -275,27 +319,8 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (result *models.
 		LogLimit:      policy.maxExecutionLogs,
 	}
 
-	// Recover from chromedp double close panic — known upstream bug.
-	// For the "close of closed channel" case we swallow silently.
-	// For all other panics we convert to a deterministic error via named
-	// returns so the queue records a failure instead of leaving the task
-	// permanently stuck in "running" state.
-	defer func() {
-		if p := recover(); p != nil {
-			pErr, ok := p.(error)
-			if ok && strings.Contains(pErr.Error(), "close of closed channel") {
-				r.addLog(result, "warn", "chromedp upstream panic recovered: close of closed channel")
-				return
-			}
-			// Unknown panic → fill named return values so the caller always
-			// receives a populated result and a non-nil error.
-			panicMsg := fmt.Sprintf("unexpected browser panic: %v", p)
-			result.Error = panicMsg
-			result.Duration = time.Since(start)
-			r.addLog(result, "error", panicMsg)
-			err = fmt.Errorf("browser panic: %v", p)
-		}
-	}()
+	// Setup panic recovery defer (S3776)
+	r.setupPanicRecovery(result, start, &err)
 
 	var browserCtx context.Context
 	var browserCancel context.CancelFunc
@@ -320,26 +345,7 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (result *models.
 	}
 	defer browserCancel()
 
-	var netLogger *logs.NetworkLogger
-	if policy.captureNetworkLogs {
-		netLogger = logs.NewNetworkLogger(task.ID)
-		chromedp.ListenTarget(browserCtx, func(ev interface{}) {
-			switch e := ev.(type) {
-			case *network.EventRequestWillBeSent:
-				netLogger.HandleRequestWillBeSent(e)
-			case *network.EventResponseReceived:
-				netLogger.HandleResponseReceived(e)
-			case *network.EventLoadingFinished:
-				netLogger.HandleLoadingFinished(e, nil)
-			case *network.EventLoadingFailed:
-				netLogger.HandleLoadingFailed(e.RequestID)
-			}
-		})
-
-		if err := chromedp.Run(browserCtx, network.Enable()); err != nil {
-			r.addLog(result, "warn", fmt.Sprintf("enable network logging: %v", err))
-		}
-	}
+	netLogger := r.setupNetworkLogging(browserCtx, task.ID, policy, result)
 
 	if err := ClearCookies(browserCtx); err != nil {
 		r.addLog(result, "warn", fmt.Sprintf("clear cookies: %v", err))

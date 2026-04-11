@@ -14,6 +14,10 @@ import (
 	"flowpilot/internal/vision"
 )
 
+const (
+	errCreateVisualBaseline = "create visual baseline: %w"
+)
+
 func pathWithinBase(basePath, targetPath string) bool {
 	rel, err := filepath.Rel(basePath, targetPath)
 	if err != nil {
@@ -112,17 +116,17 @@ func (a *App) CreateVisualBaseline(name, taskID, screenshotPath string) (*models
 
 	resolvedPath, err := resolveExistingPathWithinBase(a.dataDir, screenshotPath)
 	if err != nil {
-		return nil, fmt.Errorf("create visual baseline: %w", err)
+		return nil, fmt.Errorf(errCreateVisualBaseline, err)
 	}
 
 	width, height, err := a.loadImageDimensions(resolvedPath)
 	if err != nil {
-		return nil, fmt.Errorf("create visual baseline: %w", err)
+		return nil, fmt.Errorf(errCreateVisualBaseline, err)
 	}
 
 	url, err := a.getTaskURL(taskID)
 	if err != nil {
-		return nil, fmt.Errorf("create visual baseline: %w", err)
+		return nil, fmt.Errorf(errCreateVisualBaseline, err)
 	}
 
 	baseline := models.VisualBaseline{
@@ -137,7 +141,7 @@ func (a *App) CreateVisualBaseline(name, taskID, screenshotPath string) (*models
 	}
 
 	if err := a.db.CreateVisualBaseline(a.ctx, baseline); err != nil {
-		return nil, fmt.Errorf("create visual baseline: %w", err)
+		return nil, fmt.Errorf(errCreateVisualBaseline, err)
 	}
 
 	return &baseline, nil

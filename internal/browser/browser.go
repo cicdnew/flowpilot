@@ -235,7 +235,6 @@ func (r *Runner) resolveLoggingPolicy(task models.Task) resolvedLoggingPolicy {
 	return resolved
 }
 
-// RunTask executes a single task with its own browser context and proxy.
 // acquireBrowserContext resolves a browser context either from a pool or by
 // creating a new allocator. The caller must call the returned cancel func.
 func (r *Runner) acquireBrowserContext(ctx context.Context, effectiveProxy models.ProxyConfig, headless bool, basePool *BrowserPool, result *models.TaskResult, start time.Time) (context.Context, context.CancelFunc, error) {
@@ -266,6 +265,33 @@ func (r *Runner) acquireBrowserContext(ctx context.Context, effectiveProxy model
 	return browserCtx, func() { browserCancel(); allocCancel() }, nil
 }
 
+// setupNetworkLogging configures network logging if enabled (S3776)
+func (r *Runner) setupNetworkLogging(ctx context.Context, taskID string, policy *taskLoggingPolicy, result *models.TaskResult) *logs.NetworkLogger {
+	if !policy.captureNetworkLogs {
+		return nil
+	}
+
+	netLogger := logs.NewNetworkLogger(taskID)
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		switch e := ev.(type) {
+		case *network.EventRequestWillBeSent:
+			netLogger.HandleRequestWillBeSent(e)
+		case *network.EventResponseReceived:
+			netLogger.HandleResponseReceived(e)
+		case *network.EventLoadingFinished:
+			netLogger.HandleLoadingFinished(e, nil)
+		case *network.EventLoadingFailed:
+			netLogger.HandleLoadingFailed(e.RequestID)
+		}
+	})
+
+	if err := chromedp.Run(ctx, network.Enable()); err != nil {
+		r.addLog(result, "warn", fmt.Sprintf("enable network logging: %v", err))
+	}
+	return netLogger
+}
+
+// RunTask executes a single task with its own browser context and proxy.
 func (r *Runner) RunTask(ctx context.Context, task models.Task) (result *models.TaskResult, err error) {
 	start := time.Now()
 	policy := r.resolveLoggingPolicy(task)
@@ -275,11 +301,7 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (result *models.
 		LogLimit:      policy.maxExecutionLogs,
 	}
 
-	// Recover from chromedp double close panic — known upstream bug.
-	// For the "close of closed channel" case we swallow silently.
-	// For all other panics we convert to a deterministic error via named
-	// returns so the queue records a failure instead of leaving the task
-	// permanently stuck in "running" state.
+	// Setup inline panic recovery to protect entire function execution (S3776)
 	defer func() {
 		if p := recover(); p != nil {
 			pErr, ok := p.(error)
@@ -287,8 +309,6 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (result *models.
 				r.addLog(result, "warn", "chromedp upstream panic recovered: close of closed channel")
 				return
 			}
-			// Unknown panic → fill named return values so the caller always
-			// receives a populated result and a non-nil error.
 			panicMsg := fmt.Sprintf("unexpected browser panic: %v", p)
 			result.Error = panicMsg
 			result.Duration = time.Since(start)
@@ -320,26 +340,7 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (result *models.
 	}
 	defer browserCancel()
 
-	var netLogger *logs.NetworkLogger
-	if policy.captureNetworkLogs {
-		netLogger = logs.NewNetworkLogger(task.ID)
-		chromedp.ListenTarget(browserCtx, func(ev interface{}) {
-			switch e := ev.(type) {
-			case *network.EventRequestWillBeSent:
-				netLogger.HandleRequestWillBeSent(e)
-			case *network.EventResponseReceived:
-				netLogger.HandleResponseReceived(e)
-			case *network.EventLoadingFinished:
-				netLogger.HandleLoadingFinished(e, nil)
-			case *network.EventLoadingFailed:
-				netLogger.HandleLoadingFailed(e.RequestID)
-			}
-		})
-
-		if err := chromedp.Run(browserCtx, network.Enable()); err != nil {
-			r.addLog(result, "warn", fmt.Sprintf("enable network logging: %v", err))
-		}
-	}
+	netLogger := r.setupNetworkLogging(browserCtx, task.ID, policy, result)
 
 	if err := ClearCookies(browserCtx); err != nil {
 		r.addLog(result, "warn", fmt.Sprintf("clear cookies: %v", err))

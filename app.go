@@ -176,46 +176,85 @@ func (a *App) initDatabase() error {
 	return nil
 }
 
-func (a *App) startup(ctx context.Context) {
-	a.ctx = ctx
-
-	if err := a.initDataDir(); err != nil {
-		a.startupFail(ctx, err)
-		return
+// initCaptchaAndProxies sets up captcha solver and proxy manager (S3776)
+func (a *App) initCaptchaAndProxies(ctx context.Context) error {
+	captchaConfig, err := a.db.GetActiveCaptchaConfig(a.ctx)
+	if err == nil && captchaConfig != nil {
+		solver, solverErr := captcha.NewSolver(*captchaConfig)
+		if solverErr == nil {
+			a.runner.SetCaptchaSolver(solver)
+		}
 	}
 
+	a.proxyManager = proxy.NewManager(a.db, models.ProxyPoolConfig{
+		Strategy:            models.RotationRoundRobin,
+		HealthCheckInterval: a.config.HealthCheckInterval,
+		MaxFailures:         a.config.MaxProxyFailures,
+		HealthCheckURL:      a.config.HealthCheckURL,
+	})
+	go a.proxyManager.StartHealthChecks(ctx)
+	return nil
+}
+
+// initQueueAndBatch sets up task queue and batch engine (S3776)
+func (a *App) initQueueAndBatch(ctx context.Context) error {
+	a.queue = queue.New(a.db, a.runner, a.config.QueueConcurrency, func(event models.TaskEvent) {
+		safeWailsEmit(ctx, "task:event", event)
+	})
+	a.queue.SetProxyManager(a.proxyManager)
+	a.queue.SetProxyConcurrencyLimit(a.config.ProxyConcurrency)
+	a.queue.SetRetryBackoffBaseMs(a.config.RetryBackoffBaseMs)
+
+	if err := a.queue.RecoverStaleTasks(ctx); err != nil {
+		logWarningf(ctx, "recover stale tasks: %v", err)
+	}
+
+	a.batchEngine = batch.New(a.db)
+	return nil
+}
+
+// initLogsAndScheduler sets up logging and scheduling (S3776)
+func (a *App) initLogsAndScheduler(ctx context.Context) error {
+	logsDir := filepath.Join(a.dataDir, "logs")
+	logExporter, err := logs.NewExporter(a.db, logsDir)
+	if err != nil {
+		return fmt.Errorf("init log exporter: %w", err)
+	}
+	a.logExporter = logExporter
+
+	a.scheduler = scheduler.New(a.db, a, 30*time.Second)
+	a.scheduler.Start(ctx)
+	a.startMetricsServer(ctx)
+
+	go a.runRetentionCleanup(ctx)
+	return nil
+}
+
+// startupFinal completes startup and starts watching for config changes (S3776)
+func (a *App) startupFinal(ctx context.Context) {
 	a.configMu.Lock()
-	a.configPath = filepath.Join(a.dataDir, "config.json")
+	if info, err := os.Stat(a.configPath); err == nil {
+		a.configModTime = info.ModTime()
+	} else {
+		a.configModTime = time.Time{}
+	}
 	a.configMu.Unlock()
-	if err := a.loadConfigFromDisk(); err != nil {
-		a.startupFail(ctx, fmt.Errorf("load config: %w", err))
-		return
-	}
-	wailsRuntimeLoggingEnabled.Store(true)
-	a.configMu.Lock()
-	logLevel := a.config.LogSlogLevel
-	a.configMu.Unlock()
-	logs.Init(logLevel)
+	go a.watchConfig(ctx)
 
-	if err := crypto.InitKey(a.dataDir); err != nil {
-		a.startupFail(ctx, fmt.Errorf("init encryption: %w", err))
-		return
-	}
+	logInfof(ctx, "Application started successfully")
+}
 
-	if err := a.initDatabase(); err != nil {
-		a.startupFail(ctx, err)
-		return
-	}
-
+// initBrowserAndPool sets up browser runner and connection pool (S3776)
+func (a *App) initBrowserAndPool(ctx context.Context) error {
 	screenshotDir := filepath.Join(a.dataDir, "screenshots")
 	runner, err := browser.NewRunner(screenshotDir)
 	if err != nil {
-		a.startupFail(ctx, fmt.Errorf("init browser runner: %w", err))
-		return
+		return fmt.Errorf("init browser runner: %w", err)
 	}
 	a.runner = runner
 	a.localProxyManager = localproxy.NewManager(5 * time.Minute)
 	a.runner.SetLocalProxyManager(a.localProxyManager)
+	
 	stepLogs := a.config.CaptureStepLogs
 	networkLogs := a.config.CaptureNetworkLogs
 	screenshots := a.config.CaptureScreenshots
@@ -232,62 +271,64 @@ func (a *App) startup(ctx context.Context) {
 	}, chromedp.DefaultExecAllocatorOptions[:])
 	a.pool = pool
 	a.runner.SetPool(pool)
+	return nil
+}
 
-	captchaConfig, err := a.db.GetActiveCaptchaConfig(a.ctx)
-	if err == nil && captchaConfig != nil {
-		solver, solverErr := captcha.NewSolver(*captchaConfig)
-		if solverErr == nil {
-			a.runner.SetCaptchaSolver(solver)
-		}
+// initStartupPhase1 performs initial setup (dirs, config, crypto, db) (S3776)
+func (a *App) initStartupPhase1(ctx context.Context) error {
+	if err := a.initDataDir(); err != nil {
+		return err
 	}
 
-	a.proxyManager = proxy.NewManager(a.db, models.ProxyPoolConfig{
-		Strategy:            models.RotationRoundRobin,
-		HealthCheckInterval: a.config.HealthCheckInterval,
-		MaxFailures:         a.config.MaxProxyFailures,
-		HealthCheckURL:      a.config.HealthCheckURL,
-	})
-	go a.proxyManager.StartHealthChecks(ctx)
+	a.configMu.Lock()
+	a.configPath = filepath.Join(a.dataDir, "config.json")
+	a.configMu.Unlock()
+	if err := a.loadConfigFromDisk(); err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	wailsRuntimeLoggingEnabled.Store(true)
+	a.configMu.Lock()
+	logLevel := a.config.LogSlogLevel
+	a.configMu.Unlock()
+	logs.Init(logLevel)
 
-	a.queue = queue.New(a.db, runner, a.config.QueueConcurrency, func(event models.TaskEvent) {
-		safeWailsEmit(ctx, "task:event", event)
-	})
-	a.queue.SetProxyManager(a.proxyManager)
-	a.queue.SetProxyConcurrencyLimit(a.config.ProxyConcurrency)
-	a.queue.SetRetryBackoffBaseMs(a.config.RetryBackoffBaseMs)
-
-	// Recover tasks stuck in running/queued from a previous crash.
-	if err := a.queue.RecoverStaleTasks(ctx); err != nil {
-		logWarningf(ctx, "recover stale tasks: %v", err)
+	if err := crypto.InitKey(a.dataDir); err != nil {
+		return fmt.Errorf("init encryption: %w", err)
 	}
 
-	a.batchEngine = batch.New(a.db)
+	return a.initDatabase()
+}
 
-	logsDir := filepath.Join(a.dataDir, "logs")
-	logExporter, err := logs.NewExporter(a.db, logsDir)
-	if err != nil {
-		a.initErr = fmt.Errorf("init log exporter: %w", err)
+func (a *App) startup(ctx context.Context) {
+	a.ctx = ctx
+
+	if err := a.initStartupPhase1(ctx); err != nil {
+		a.startupFail(ctx, err)
+		return
+	}
+
+	if err := a.initBrowserAndPool(ctx); err != nil {
+		a.startupFail(ctx, err)
+		return
+	}
+
+	if err := a.initCaptchaAndProxies(ctx); err != nil {
+		a.startupFail(ctx, err)
+		return
+	}
+
+	if err := a.initQueueAndBatch(ctx); err != nil {
+		a.startupFail(ctx, err)
+		return
+	}
+
+	if err := a.initLogsAndScheduler(ctx); err != nil {
+		a.initErr = err
 		logErrorf(ctx, errStartupFailed, a.initErr)
 		return
 	}
-	a.logExporter = logExporter
 
-	a.scheduler = scheduler.New(a.db, a, 30*time.Second)
-	a.scheduler.Start(ctx)
-	a.startMetricsServer(ctx)
-
-	go a.runRetentionCleanup(ctx)
-
-	a.configMu.Lock()
-	if info, err := os.Stat(a.configPath); err == nil {
-		a.configModTime = info.ModTime()
-	} else {
-		a.configModTime = time.Time{}
-	}
-	a.configMu.Unlock()
-	go a.watchConfig(ctx)
-
-	logInfof(ctx, "Application started successfully")
+	a.startupFinal(ctx)
 }
 
 func (a *App) runRetentionCleanup(ctx context.Context) {

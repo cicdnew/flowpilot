@@ -14,6 +14,10 @@ import (
 	"flowpilot/internal/vision"
 )
 
+const (
+	errCreateVisualBaseline = "create visual baseline: %w"
+)
+
 func pathWithinBase(basePath, targetPath string) bool {
 	rel, err := filepath.Rel(basePath, targetPath)
 	if err != nil {
@@ -71,6 +75,34 @@ func resolveNewPathWithinBase(baseDir, targetPath string) (string, error) {
 	return targetAbs, nil
 }
 
+// loadImageDimensions loads an image and returns its dimensions (S3776)
+func (a *App) loadImageDimensions(filePath string) (int, int, error) {
+	f, err := os.Open(filePath)
+	if err != nil {
+		return 0, 0, fmt.Errorf("open screenshot: %w", err)
+	}
+	defer f.Close()
+
+	img, err := png.Decode(f)
+	if err != nil {
+		return 0, 0, fmt.Errorf("decode screenshot: %w", err)
+	}
+	bounds := img.Bounds()
+	return bounds.Dx(), bounds.Dy(), nil
+}
+
+// getTaskURL retrieves task URL by ID (S3776)
+func (a *App) getTaskURL(taskID string) (string, error) {
+	if taskID == "" {
+		return "", nil
+	}
+	task, err := a.db.GetTask(a.ctx, taskID)
+	if err != nil {
+		return "", fmt.Errorf("get task: %w", err)
+	}
+	return task.URL, nil
+}
+
 func (a *App) CreateVisualBaseline(name, taskID, screenshotPath string) (*models.VisualBaseline, error) {
 	if err := a.ready(); err != nil {
 		return nil, err
@@ -84,28 +116,17 @@ func (a *App) CreateVisualBaseline(name, taskID, screenshotPath string) (*models
 
 	resolvedPath, err := resolveExistingPathWithinBase(a.dataDir, screenshotPath)
 	if err != nil {
-		return nil, fmt.Errorf("create visual baseline: %w", err)
+		return nil, fmt.Errorf(errCreateVisualBaseline, err)
 	}
-	f, err := os.Open(resolvedPath)
-	if err != nil {
-		return nil, fmt.Errorf("create visual baseline: open screenshot: %w", err)
-	}
-	defer f.Close()
 
-	img, err := png.Decode(f)
+	width, height, err := a.loadImageDimensions(resolvedPath)
 	if err != nil {
-		return nil, fmt.Errorf("create visual baseline: decode screenshot: %w", err)
+		return nil, fmt.Errorf(errCreateVisualBaseline, err)
 	}
-	bounds := img.Bounds()
-	width, height := bounds.Dx(), bounds.Dy()
 
-	url := ""
-	if taskID != "" {
-		task, err := a.db.GetTask(a.ctx, taskID)
-		if err != nil {
-			return nil, fmt.Errorf("create visual baseline: get task: %w", err)
-		}
-		url = task.URL
+	url, err := a.getTaskURL(taskID)
+	if err != nil {
+		return nil, fmt.Errorf(errCreateVisualBaseline, err)
 	}
 
 	baseline := models.VisualBaseline{
@@ -120,7 +141,7 @@ func (a *App) CreateVisualBaseline(name, taskID, screenshotPath string) (*models
 	}
 
 	if err := a.db.CreateVisualBaseline(a.ctx, baseline); err != nil {
-		return nil, fmt.Errorf("create visual baseline: %w", err)
+		return nil, fmt.Errorf(errCreateVisualBaseline, err)
 	}
 
 	return &baseline, nil

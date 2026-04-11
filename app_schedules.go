@@ -14,8 +14,11 @@ import (
 )
 
 const (
-	errCreateSchedule = "create schedule: %w"
-	errUpdateSchedule = "update schedule: %w"
+	errCreateSchedule     = "create schedule: %w"
+	errUpdateSchedule     = "update schedule: %w"
+	errCronExprRequired   = "cron expression is required"
+	errInvalidCronExpr    = "invalid cron expression: %w"
+	errInvalidCronExprNil = "invalid cron expression: parser returned nil"
 )
 
 // ScheduleParams holds parameters for creating or updating a schedule.
@@ -30,34 +33,59 @@ type ScheduleParams struct {
 	Tags        []string
 }
 
+// validateAndParseCronExpr validates and parses cron expression (S3776)
+func (a *App) validateAndParseCronExpr(cronExpr string) (scheduler.Schedule, error) {
+	if strings.TrimSpace(cronExpr) == "" {
+		return nil, fmt.Errorf(errCronExprRequired)
+	}
+	sched, err := scheduler.ParseCron(cronExpr)
+	if err != nil {
+		return nil, fmt.Errorf(errInvalidCronExpr, err)
+	}
+	if sched == nil {
+		return nil, fmt.Errorf(errInvalidCronExprNil)
+	}
+	return sched, nil
+}
+
+// validateCreateScheduleParams validates all create schedule parameters (S3776)
+func (a *App) validateCreateScheduleParams(p ScheduleParams, cronSched scheduler.Schedule) error {
+	checks := []struct {
+		name string
+		err  error
+	}{
+		{"name", validation.ValidateTaskName(p.Name)},
+		{"flowId", nil}, // Check flowId manually
+		{"url", validation.ValidateTaskURL(p.URL)},
+		{"priority", validation.ValidatePriority(models.TaskPriority(p.Priority))},
+		{"tags", validation.ValidateTags(p.Tags)},
+		{"proxy", validation.ValidateProxyConfig(p.ProxyConfig)},
+	}
+	
+	if strings.TrimSpace(p.FlowID) == "" {
+		return fmt.Errorf("create schedule: flowId is required")
+	}
+	
+	for _, check := range checks {
+		if check.err != nil {
+			return fmt.Errorf(errCreateSchedule, check.err)
+		}
+	}
+	return nil
+}
+
 func (a *App) CreateSchedule(p ScheduleParams) (*models.Schedule, error) {
 	if err := a.ready(); err != nil {
 		return nil, err
 	}
-	if err := validation.ValidateTaskName(p.Name); err != nil {
-		return nil, fmt.Errorf(errCreateSchedule, err)
-	}
-	if strings.TrimSpace(p.CronExpr) == "" {
-		return nil, fmt.Errorf("create schedule: cron expression is required")
-	}
-	cronSched, err := scheduler.ParseCron(p.CronExpr)
+	
+	cronSched, err := a.validateAndParseCronExpr(p.CronExpr)
 	if err != nil {
 		return nil, fmt.Errorf(errCreateSchedule, err)
 	}
-	if strings.TrimSpace(p.FlowID) == "" {
-		return nil, fmt.Errorf("create schedule: flowId is required")
-	}
-	if err := validation.ValidateTaskURL(p.URL); err != nil {
-		return nil, fmt.Errorf(errCreateSchedule, err)
-	}
-	if err := validation.ValidatePriority(models.TaskPriority(p.Priority)); err != nil {
-		return nil, fmt.Errorf(errCreateSchedule, err)
-	}
-	if err := validation.ValidateTags(p.Tags); err != nil {
-		return nil, fmt.Errorf(errCreateSchedule, err)
-	}
-	if err := validation.ValidateProxyConfig(p.ProxyConfig); err != nil {
-		return nil, fmt.Errorf(errCreateSchedule, err)
+	
+	if err := a.validateCreateScheduleParams(p, cronSched); err != nil {
+		return nil, err
 	}
 
 	now := time.Now()
@@ -102,6 +130,32 @@ func (a *App) ListSchedules() ([]models.Schedule, error) {
 	return a.db.ListSchedules(a.ctx)
 }
 
+// validateUpdateScheduleParams validates all update schedule parameters (S3776)
+func (a *App) validateUpdateScheduleParams(p ScheduleParams, cronSched scheduler.Schedule) error {
+	checks := []struct {
+		name string
+		err  error
+	}{
+		{"name", validation.ValidateTaskName(p.Name)},
+		{"flowId", nil}, // Check flowId manually
+		{"url", validation.ValidateTaskURL(p.URL)},
+		{"priority", validation.ValidatePriority(models.TaskPriority(p.Priority))},
+		{"tags", validation.ValidateTags(p.Tags)},
+		{"proxy", validation.ValidateProxyConfig(p.ProxyConfig)},
+	}
+	
+	if strings.TrimSpace(p.FlowID) == "" {
+		return fmt.Errorf("update schedule: flowId is required")
+	}
+	
+	for _, check := range checks {
+		if check.err != nil {
+			return fmt.Errorf(errUpdateSchedule, check.err)
+		}
+	}
+	return nil
+}
+
 func (a *App) UpdateSchedule(id string, p ScheduleParams, enabled bool) error {
 	if err := a.ready(); err != nil {
 		return err
@@ -109,30 +163,14 @@ func (a *App) UpdateSchedule(id string, p ScheduleParams, enabled bool) error {
 	if id == "" {
 		return fmt.Errorf("update schedule: id is required")
 	}
-	if err := validation.ValidateTaskName(p.Name); err != nil {
-		return fmt.Errorf(errUpdateSchedule, err)
-	}
-	if strings.TrimSpace(p.CronExpr) == "" {
-		return fmt.Errorf("update schedule: cron expression is required")
-	}
-	cronSched, err := scheduler.ParseCron(p.CronExpr)
+	
+	cronSched, err := a.validateAndParseCronExpr(p.CronExpr)
 	if err != nil {
 		return fmt.Errorf(errUpdateSchedule, err)
 	}
-	if strings.TrimSpace(p.FlowID) == "" {
-		return fmt.Errorf("update schedule: flowId is required")
-	}
-	if err := validation.ValidateTaskURL(p.URL); err != nil {
-		return fmt.Errorf(errUpdateSchedule, err)
-	}
-	if err := validation.ValidatePriority(models.TaskPriority(p.Priority)); err != nil {
-		return fmt.Errorf(errUpdateSchedule, err)
-	}
-	if err := validation.ValidateTags(p.Tags); err != nil {
-		return fmt.Errorf(errUpdateSchedule, err)
-	}
-	if err := validation.ValidateProxyConfig(p.ProxyConfig); err != nil {
-		return fmt.Errorf(errUpdateSchedule, err)
+	
+	if err := a.validateUpdateScheduleParams(p, cronSched); err != nil {
+		return err
 	}
 
 	now := time.Now()

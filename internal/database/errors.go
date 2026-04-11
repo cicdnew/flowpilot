@@ -44,3 +44,8 @@ const (
 const (
 	newMetricFmt = "New: %v"
 )
+
+// Flow-related constants
+const (
+	errFlowNotFound = "flow %s not found"
+)

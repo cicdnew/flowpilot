@@ -39,6 +39,7 @@ This document outlines the patterns and techniques used to resolve 33 SonarQube 
 **Pattern**: Extract string constants to a centralized location
 
 #### Problem
+
 ```go
 // Before: Multiple occurrences of same string
 if err != nil {
@@ -51,6 +52,7 @@ if err != nil {
 ```
 
 #### Solution
+
 ```go
 // errors.go - Centralized constants
 const errTaskNotFound = "task %s not found"
@@ -81,6 +83,7 @@ return fmt.Errorf(errTaskNotFound, id)
 #### Pattern 2A: Validation Extraction
 
 ##### Problem
+
 ```go
 func (a *App) CreateTask(name, url string, priority int) (*Task, error) {
     if name == "" {
@@ -103,6 +106,7 @@ func (a *App) CreateTask(name, url string, priority int) (*Task, error) {
 ```
 
 ##### Solution
+
 ```go
 // validateCreateTaskParams validates all task parameters (S3776)
 func (a *App) validateCreateTaskParams(name, url string, priority int) error {
@@ -275,6 +279,7 @@ func (db *DB) FinalizeTaskSuccess(ctx context.Context, taskID string, result mod
 **Pattern**: Document and Justify Context Storage
 
 #### Problem
+
 ```go
 type heapItem struct {
     task    models.Task
@@ -286,6 +291,7 @@ type heapItem struct {
 ```
 
 #### Solution
+
 ```go
 type heapItem struct {
     task    models.Task
@@ -314,6 +320,7 @@ type heapItem struct {
 **Pattern**: Parameter Struct Pattern
 
 #### Problem
+
 ```go
 func (l *Logger) EndStep(
     stepIndex int,
@@ -331,6 +338,7 @@ l.EndStep(pc, step.Action, step.Selector, step.Value, "", startedAt, err, code)
 ```
 
 #### Solution
+
 ```go
 // Create a parameter struct
 type EndStepParams struct {

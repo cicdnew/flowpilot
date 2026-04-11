@@ -210,7 +210,7 @@ func (q *Queue) Submit(ctx context.Context, task models.Task) error {
 		return err
 	}
 
-	item, cancel := q.addTaskToHeap(task, ctx)
+	_, cancel := q.addTaskToHeap(task, ctx)
 	q.mu.Unlock()
 
 	if err := q.enqueueTaskStateChange(database.TaskStateChange{TaskID: task.ID, Status: models.TaskStatusQueued}); err != nil {
@@ -228,11 +228,18 @@ func (q *Queue) Submit(ctx context.Context, task models.Task) error {
 }
 
 // validateBatchSubmit checks if a batch of tasks can be submitted (S3776)
-func (q *Queue) validateBatchSubmit(taskCount int) error {
+func (q *Queue) validateBatchSubmit(tasks []models.Task) error {
 	if q.stopped {
 		return fmt.Errorf("queue is stopped")
 	}
-	if q.maxPending > 0 && q.pq.Len()+q.pausedPQ.Len()+taskCount > q.maxPending {
+	// Count unique tasks (excluding duplicates already in queue)
+	uniqueCount := 0
+	for _, task := range tasks {
+		if !q.isTaskEnqueued(task.ID) && !q.isTaskInHeap(task.ID) {
+			uniqueCount++
+		}
+	}
+	if q.maxPending > 0 && q.pq.Len()+q.pausedPQ.Len()+uniqueCount > q.maxPending {
 		return ErrQueueFull
 	}
 	return nil
@@ -267,7 +274,7 @@ func (q *Queue) SubmitBatch(ctx context.Context, tasks []models.Task) error {
 	}
 
 	q.mu.Lock()
-	if err := q.validateBatchSubmit(len(tasks)); err != nil {
+	if err := q.validateBatchSubmit(tasks); err != nil {
 		q.mu.Unlock()
 		return err
 	}

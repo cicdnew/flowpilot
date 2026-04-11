@@ -49,8 +49,3 @@ const (
 const (
 	errFlowNotFound = "flow %s not found"
 )
-
-// Browser step-related constants
-const (
-	errElementNotFoundForSelector = "click_ad: element not found for selector %q"
-)

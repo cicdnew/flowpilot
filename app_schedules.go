@@ -14,8 +14,11 @@ import (
 )
 
 const (
-	errCreateSchedule = "create schedule: %w"
-	errUpdateSchedule = "update schedule: %w"
+	errCreateSchedule     = "create schedule: %w"
+	errUpdateSchedule     = "update schedule: %w"
+	errCronExprRequired   = "cron expression is required"
+	errInvalidCronExpr    = "invalid cron expression: %w"
+	errInvalidCronExprNil = "invalid cron expression: parser returned nil"
 )
 
 // ScheduleParams holds parameters for creating or updating a schedule.
@@ -33,14 +36,14 @@ type ScheduleParams struct {
 // validateAndParseCronExpr validates and parses cron expression (S3776)
 func (a *App) validateAndParseCronExpr(cronExpr string) (scheduler.Schedule, error) {
 	if strings.TrimSpace(cronExpr) == "" {
-		return nil, fmt.Errorf("create schedule: cron expression is required")
+		return nil, fmt.Errorf(errCronExprRequired)
 	}
 	sched, err := scheduler.ParseCron(cronExpr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid cron expression: %w", err)
+		return nil, fmt.Errorf(errInvalidCronExpr, err)
 	}
 	if sched == nil {
-		return nil, fmt.Errorf("invalid cron expression: parser returned nil")
+		return nil, fmt.Errorf(errInvalidCronExprNil)
 	}
 	return sched, nil
 }

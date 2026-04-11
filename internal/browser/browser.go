@@ -235,7 +235,6 @@ func (r *Runner) resolveLoggingPolicy(task models.Task) resolvedLoggingPolicy {
 	return resolved
 }
 
-// RunTask executes a single task with its own browser context and proxy.
 // acquireBrowserContext resolves a browser context either from a pool or by
 // creating a new allocator. The caller must call the returned cancel func.
 func (r *Runner) acquireBrowserContext(ctx context.Context, effectiveProxy models.ProxyConfig, headless bool, basePool *BrowserPool, result *models.TaskResult, start time.Time) (context.Context, context.CancelFunc, error) {
@@ -266,24 +265,6 @@ func (r *Runner) acquireBrowserContext(ctx context.Context, effectiveProxy model
 	return browserCtx, func() { browserCancel(); allocCancel() }, nil
 }
 
-// setupPanicRecovery sets up panic recovery for browser execution (S3776)
-func (r *Runner) setupPanicRecovery(result *models.TaskResult, start time.Time, err *error) {
-	defer func() {
-		if p := recover(); p != nil {
-			pErr, ok := p.(error)
-			if ok && strings.Contains(pErr.Error(), "close of closed channel") {
-				r.addLog(result, "warn", "chromedp upstream panic recovered: close of closed channel")
-				return
-			}
-			panicMsg := fmt.Sprintf("unexpected browser panic: %v", p)
-			result.Error = panicMsg
-			result.Duration = time.Since(start)
-			r.addLog(result, "error", panicMsg)
-			*err = fmt.Errorf("browser panic: %v", p)
-		}
-	}()
-}
-
 // setupNetworkLogging configures network logging if enabled (S3776)
 func (r *Runner) setupNetworkLogging(ctx context.Context, taskID string, policy *taskLoggingPolicy, result *models.TaskResult) *logs.NetworkLogger {
 	if !policy.captureNetworkLogs {
@@ -310,6 +291,7 @@ func (r *Runner) setupNetworkLogging(ctx context.Context, taskID string, policy 
 	return netLogger
 }
 
+// RunTask executes a single task with its own browser context and proxy.
 func (r *Runner) RunTask(ctx context.Context, task models.Task) (result *models.TaskResult, err error) {
 	start := time.Now()
 	policy := r.resolveLoggingPolicy(task)
@@ -319,8 +301,21 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (result *models.
 		LogLimit:      policy.maxExecutionLogs,
 	}
 
-	// Setup panic recovery defer (S3776)
-	r.setupPanicRecovery(result, start, &err)
+	// Setup inline panic recovery to protect entire function execution (S3776)
+	defer func() {
+		if p := recover(); p != nil {
+			pErr, ok := p.(error)
+			if ok && strings.Contains(pErr.Error(), "close of closed channel") {
+				r.addLog(result, "warn", "chromedp upstream panic recovered: close of closed channel")
+				return
+			}
+			panicMsg := fmt.Sprintf("unexpected browser panic: %v", p)
+			result.Error = panicMsg
+			result.Duration = time.Since(start)
+			r.addLog(result, "error", panicMsg)
+			err = fmt.Errorf("browser panic: %v", p)
+		}
+	}()
 
 	var browserCtx context.Context
 	var browserCancel context.CancelFunc

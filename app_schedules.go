@@ -35,7 +35,14 @@ func (a *App) validateAndParseCronExpr(cronExpr string) (scheduler.Schedule, err
 	if strings.TrimSpace(cronExpr) == "" {
 		return nil, fmt.Errorf("create schedule: cron expression is required")
 	}
-	return scheduler.ParseCron(cronExpr)
+	sched, err := scheduler.ParseCron(cronExpr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid cron expression: %w", err)
+	}
+	if sched == nil {
+		return nil, fmt.Errorf("invalid cron expression: parser returned nil")
+	}
+	return sched, nil
 }
 
 // validateCreateScheduleParams validates all create schedule parameters (S3776)

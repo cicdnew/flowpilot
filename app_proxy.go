@@ -94,11 +94,23 @@ func (a *App) validateProxyRoutingPreset(preset *models.ProxyRoutingPreset) erro
 	}
 	if preset.Fallback == "" {
 		preset.Fallback = models.ProxyFallbackStrict
+	} else if !isValidProxyFallback(preset.Fallback) {
+		return fmt.Errorf("invalid fallback value %q; must be one of: strict, any_healthy, direct", preset.Fallback)
 	}
 	if preset.RandomByCountry && preset.Country == "" {
 		return fmt.Errorf("country is required for random-by-country presets")
 	}
 	return nil
+}
+
+// isValidProxyFallback checks if a fallback value is valid (S1192)
+func isValidProxyFallback(fallback models.ProxyRoutingFallback) bool {
+	switch fallback {
+	case models.ProxyFallbackStrict, models.ProxyFallbackAny, models.ProxyFallbackDirect:
+		return true
+	default:
+		return false
+	}
 }
 
 func (a *App) CreateProxyRoutingPreset(name, country, fallback string, randomByCountry bool) (*models.ProxyRoutingPreset, error) {

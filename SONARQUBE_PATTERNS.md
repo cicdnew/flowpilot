@@ -14,7 +14,7 @@
 3. [Code Quality Patterns](#code-quality-patterns)
 4. [Implementation Examples](#implementation-examples)
 5. [Best Practices](#best-practices)
-6. [Remaining Issues](#remaining-issues)
+6. [Remaining Issues](#remaining-issues-1750)
 
 ---
 

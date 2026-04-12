@@ -8,6 +8,7 @@ import (
 var (
 	colorPrimary   = lipgloss.Color("#7C3AED") // purple
 	colorSecondary = lipgloss.Color("#06B6D4") // cyan
+	colorWhite     = lipgloss.Color("#FFFFFF")
 	colorSuccess   = lipgloss.Color("#10B981") // green
 	colorMuted     = lipgloss.Color("#6B7280") // gray
 )
@@ -16,7 +17,7 @@ var (
 var (
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#FFFFFF")).
+			Foreground(lipgloss.Color(colorWhite)).
 			Background(colorPrimary).
 			Padding(0, 1).
 			MarginRight(1)
@@ -66,7 +67,7 @@ var (
 				Foreground(colorPrimary)
 
 	inputStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF"))
+			Foreground(lipgloss.Color(colorWhite))
 
 	cursorStyle = lipgloss.NewStyle().
 			Foreground(colorPrimary).
@@ -105,7 +106,7 @@ var (
 				Padding(0, 1)
 
 	commandSelectedStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FFFFFF")).
+				Foreground(lipgloss.Color(colorWhite)).
 				Background(colorPrimary).
 				Bold(true).
 				Padding(0, 1)

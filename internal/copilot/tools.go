@@ -8,6 +8,8 @@ import (
 	"flowpilot/internal/models"
 )
 
+const errTaskIDRequired = "task_id must be a non-empty string"
+
 // ── v2 tool handlers ───────────────────────────────────────────────────────
 
 // toolGetTask retrieves full details for a single task by ID.
@@ -15,7 +17,7 @@ import (
 func (c *CopilotFlow) toolGetTask(ctx context.Context, args map[string]any) (any, error) {
 	taskID, ok := args["task_id"].(string)
 	if !ok || taskID == "" {
-		return nil, fmt.Errorf("task_id must be a non-empty string")
+		return nil, fmt.Errorf(errTaskIDRequired)
 	}
 
 	task, err := c.db.GetTask(ctx, taskID)
@@ -45,7 +47,7 @@ func (c *CopilotFlow) toolGetTask(ctx context.Context, args map[string]any) (any
 func (c *CopilotFlow) toolCancelTask(ctx context.Context, args map[string]any) (any, error) {
 	taskID, ok := args["task_id"].(string)
 	if !ok || taskID == "" {
-		return nil, fmt.Errorf("task_id must be a non-empty string")
+		return nil, fmt.Errorf(errTaskIDRequired)
 	}
 
 	if err := c.queue.Cancel(taskID); err != nil {
@@ -63,7 +65,7 @@ func (c *CopilotFlow) toolCancelTask(ctx context.Context, args map[string]any) (
 func (c *CopilotFlow) toolRetryTask(ctx context.Context, args map[string]any) (any, error) {
 	taskID, ok := args["task_id"].(string)
 	if !ok || taskID == "" {
-		return nil, fmt.Errorf("task_id must be a non-empty string")
+		return nil, fmt.Errorf(errTaskIDRequired)
 	}
 
 	// Verify the task exists before attempting any mutation.
@@ -158,7 +160,7 @@ func (c *CopilotFlow) toolCancelBatch(ctx context.Context, args map[string]any) 
 func (c *CopilotFlow) toolGetTaskLogs(ctx context.Context, args map[string]any) (any, error) {
 	taskID, ok := args["task_id"].(string)
 	if !ok || taskID == "" {
-		return nil, fmt.Errorf("task_id must be a non-empty string")
+		return nil, fmt.Errorf(errTaskIDRequired)
 	}
 
 	limit := 50

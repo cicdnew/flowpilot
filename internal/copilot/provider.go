@@ -11,7 +11,12 @@ import (
 	"strings"
 )
 
-const errCreateRequest = "create request: %w"
+const (
+	errCreateRequest = "create request: %w"
+	errSendRequest   = "send request: %w"
+	errAPIError      = "API error %d: %s"
+	authBearerPrefix = "Bearer "
+)
 
 // NewProvider creates a new LLM provider based on the provider name.
 func NewProvider(provider, apiKey, baseURL, modelName string) (LLMProvider, error) {
@@ -86,17 +91,17 @@ func (p *OpenAICompatibleProvider) ChatCompletion(ctx context.Context, messages 
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	req.Header.Set("Authorization", authBearerPrefix+p.apiKey)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return ChatResponse{}, fmt.Errorf("send request: %w", err)
+		return ChatResponse{}, fmt.Errorf(errSendRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body) // best-effort: used only for error message
-		return ChatResponse{}, fmt.Errorf("API error %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return ChatResponse{}, fmt.Errorf(errAPIError, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var result struct {
@@ -142,17 +147,17 @@ func (p *OpenAICompatibleProvider) ListModels(ctx context.Context) ([]Model, err
 		return nil, fmt.Errorf(errCreateRequest, err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	req.Header.Set("Authorization", authBearerPrefix+p.apiKey)
 
 	resp, err := p.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("send request: %w", err)
+		return nil, fmt.Errorf(errSendRequest, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body) // best-effort: used only for error message
-		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf(errAPIError, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var result ModelListResponse
@@ -298,19 +303,19 @@ func (p *OpenAICompatibleProvider) StreamChatCompletion(ctx context.Context, mes
 		}
 
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+p.apiKey)
+		req.Header.Set("Authorization", authBearerPrefix+p.apiKey)
 		req.Header.Set("Accept", "text/event-stream")
 
 		resp, err := p.client.Do(req)
 		if err != nil {
-			out <- StreamChunk{Error: fmt.Errorf("send request: %w", err)}
+			out <- StreamChunk{Error: fmt.Errorf(errSendRequest, err)}
 			return
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			b, _ := io.ReadAll(resp.Body)
-			out <- StreamChunk{Error: fmt.Errorf("API error %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))}
+			out <- StreamChunk{Error: fmt.Errorf(errAPIError, resp.StatusCode, strings.TrimSpace(string(b)))}
 			return
 		}
 

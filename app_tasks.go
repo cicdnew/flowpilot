@@ -12,10 +12,10 @@ import (
 )
 
 const (
-	errCreateTask   = "create task: %w"
-	errUpdateTask   = "update task: %w"
-	errTaskNotFound = "task %s not found"
-	errTaskID       = "task_id must be a non-empty string"
+	errCreateTask    = "create task: %w"
+	errUpdateTaskApp = "update task: %w"
+	errTaskNotFoundApp = "task %s not found"
+	errTaskIDApp       = "task_id must be a non-empty string"
 )
 
 // CreateTaskParams holds parameters for creating a task.
@@ -175,7 +175,7 @@ func (a *App) validateUpdateTaskParams(p database.TaskUpdateParams, priority int
 	
 	for _, check := range checks {
 		if check.err != nil {
-			return fmt.Errorf(errUpdateTask, check.err)
+			return fmt.Errorf(errUpdateTaskApp, check.err)
 		}
 	}
 	return nil

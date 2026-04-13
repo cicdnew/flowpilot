@@ -84,17 +84,28 @@ func (a *App) ListDOMSnapshots(flowID string) ([]models.DOMSnapshot, error) {
 	return a.db.ListDOMSnapshots(a.ctx, flowID)
 }
 
-func (a *App) CreateTaskFromFlow(flowID, name, url string, proxyConfig models.ProxyConfig, priority int, autoStart bool, tags []string) (*models.Task, error) {
+// CreateTaskFromFlowParams holds parameters for creating a task from a recorded flow.
+type CreateTaskFromFlowParams struct {
+	FlowID      string
+	Name        string
+	URL         string
+	ProxyConfig models.ProxyConfig
+	Priority    int
+	AutoStart   bool
+	Tags        []string
+}
+
+func (a *App) CreateTaskFromFlow(p CreateTaskFromFlowParams) (*models.Task, error) {
 	if err := a.ready(); err != nil {
 		return nil, err
 	}
-	flow, err := a.db.GetRecordedFlow(a.ctx, flowID)
+	flow, err := a.db.GetRecordedFlow(a.ctx, p.FlowID)
 	if err != nil {
 		return nil, fmt.Errorf("create task from flow: %w", err)
 	}
 	steps := models.FlowToTaskSteps(*flow)
 	if len(steps) > 0 && steps[0].Action == models.ActionNavigate && steps[0].Value == "" {
-		steps[0].Value = url
+		steps[0].Value = p.URL
 	}
-	return a.CreateTask(CreateTaskParams{Name: name, URL: url, Steps: steps, ProxyConfig: proxyConfig, Priority: priority, AutoStart: autoStart, Tags: tags, Timeout: flow.Timeout, LoggingPolicy: flow.LoggingPolicy})
+	return a.CreateTask(CreateTaskParams{Name: p.Name, URL: p.URL, Steps: steps, ProxyConfig: p.ProxyConfig, Priority: p.Priority, AutoStart: p.AutoStart, Tags: p.Tags, Timeout: flow.Timeout, LoggingPolicy: flow.LoggingPolicy})
 }

@@ -57,14 +57,12 @@ describe('step-actions', () => {
     expect(getStepActionOptions('click', ['navigate', 'click'])).toEqual(['navigate', 'click']);
   });
 
+  function setMockGetSupportedStepActions(fn: () => Promise<string[]>) {
+    window.go = { main: { App: { GetSupportedStepActions: fn } } };
+  }
+
   it('falls back when GetSupportedStepActions returns empty array', async () => {
-    window.go = {
-      main: {
-        App: {
-          GetSupportedStepActions: async () => [],
-        },
-      },
-    };
+    setMockGetSupportedStepActions(async () => []);
 
     const state = await ensureStepActionStateLoaded();
     expect(state.usingFallback).toBe(true);
@@ -73,15 +71,9 @@ describe('step-actions', () => {
   });
 
   it('falls back when GetSupportedStepActions throws an error', async () => {
-    window.go = {
-      main: {
-        App: {
-          GetSupportedStepActions: async () => {
-            throw new Error('API failure');
-          },
-        },
-      },
-    };
+    setMockGetSupportedStepActions(async () => {
+      throw new Error('API failure');
+    });
 
     const state = await ensureStepActionStateLoaded();
     expect(state.usingFallback).toBe(true);

@@ -266,7 +266,7 @@ func (r *Runner) acquireBrowserContext(ctx context.Context, effectiveProxy model
 }
 
 // setupNetworkLogging configures network logging if enabled (S3776)
-func (r *Runner) setupNetworkLogging(ctx context.Context, taskID string, policy *taskLoggingPolicy, result *models.TaskResult) *logs.NetworkLogger {
+func (r *Runner) setupNetworkLogging(ctx context.Context, taskID string, policy resolvedLoggingPolicy, result *models.TaskResult) *logs.NetworkLogger {
 	if !policy.captureNetworkLogs {
 		return nil
 	}

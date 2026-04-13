@@ -38,8 +38,8 @@ export function CreateTask(params) {
   return window['go']['main']['App']['CreateTask'](params);
 }
 
-export function CreateTaskFromFlow(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
-  return window['go']['main']['App']['CreateTaskFromFlow'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+export function CreateTaskFromFlow(arg1) {
+  return window['go']['main']['App']['CreateTaskFromFlow'](arg1);
 }
 
 export function CreateVisualBaseline(arg1, arg2, arg3) {

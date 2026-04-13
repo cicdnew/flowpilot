@@ -82,8 +82,8 @@ func (r *Runner) executeStep(ctx context.Context, step models.TaskStep, result *
 type stepHandlerWithResult func(context.Context, models.TaskStep, *models.TaskResult) error
 
 // getStepHandlerWithResult returns the handler for a step action (S1479 - reduce switch complexity)
-func (r *Runner) getStepHandlerWithResult(action models.TaskAction) stepHandlerWithResult {
-	handlers := map[models.TaskAction]stepHandlerWithResult{
+func (r *Runner) getStepHandlerWithResult(action models.StepAction) stepHandlerWithResult {
+	handlers := map[models.StepAction]stepHandlerWithResult{
 		models.ActionExtract:        r.execExtract,
 		models.ActionSolveCaptcha:   r.execSolveCaptcha,
 		models.ActionGetTitle:       r.execGetTitle,

@@ -57,7 +57,7 @@ const (
 
 	// Test error format strings.
 	errCreateTask      = "CreateTask: %v"
-	errUpdateStatus    = "UpdateTaskStatus: %v"
+	errUpdateStatusMsg = "UpdateTaskStatus: %v"
 	errNameMismatch    = "Name: got %q, want %q"
 	errGetTask         = "GetTask: %v"
 	errCreateProxy     = "CreateProxy: %v"
@@ -80,7 +80,7 @@ const (
 	errCreateVisualBL  = "CreateVisualBaseline: %v"
 	errGetStats        = "GetTaskStats: %v"
 	errListPaginated   = "ListTasksPaginated: %v"
-	errUpdateTask      = "UpdateTask: %v"
+	errUpdateTaskMsg   = "UpdateTask: %v"
 	errRawQuery        = "raw query: %v"
 	errProxyNotFound   = "proxy not found"
 	errCorruptSteps    = "corrupt steps: %v"
@@ -698,7 +698,7 @@ func TestProxyCredentialsEncryptedAtRest(t *testing.T) {
 	db := setupTestDB(t)
 	p := makeProxy("enc-1", "proxy.example.com:8080", "US")
 	p.Username = "cleartext_user"
-	p.Password = "cleartext_pass"
+	p.Password = testPassword
 
 	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
@@ -713,7 +713,7 @@ func TestProxyCredentialsEncryptedAtRest(t *testing.T) {
 	if rawUsername == "cleartext_user" {
 		t.Error("username stored in plaintext — expected ciphertext")
 	}
-	if rawPassword == "cleartext_pass" {
+	if rawPassword == testPassword {
 		t.Error("password stored in plaintext — expected ciphertext")
 	}
 
@@ -734,8 +734,8 @@ func TestProxyCredentialsEncryptedAtRest(t *testing.T) {
 	if found.Username != "cleartext_user" {
 		t.Errorf("decrypted username: got %q, want %q", found.Username, "cleartext_user")
 	}
-	if found.Password != "cleartext_pass" {
-		t.Errorf("decrypted password: got %q, want %q", found.Password, "cleartext_pass")
+	if found.Password != testPassword {
+		t.Errorf("decrypted password: got %q, want %q", found.Password, testPassword)
 	}
 }
 
@@ -743,7 +743,7 @@ func TestTaskProxyCredentialsEncryptedAtRest(t *testing.T) {
 	db := setupTestDB(t)
 	task := makeTask("enc-task-1", "Encrypted Task")
 	task.Proxy.Username = "task_user"
-	task.Proxy.Password = "task_pass"
+	task.Proxy.Password = testPassword
 
 	if err := db.CreateTask(context.Background(), task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
@@ -758,7 +758,7 @@ func TestTaskProxyCredentialsEncryptedAtRest(t *testing.T) {
 	if rawUsername == "task_user" {
 		t.Error("proxy_username stored in plaintext — expected ciphertext")
 	}
-	if rawPassword == "task_pass" {
+	if rawPassword == testPassword {
 		t.Error("proxy_password stored in plaintext — expected ciphertext")
 	}
 
@@ -769,8 +769,8 @@ func TestTaskProxyCredentialsEncryptedAtRest(t *testing.T) {
 	if got.Proxy.Username != "task_user" {
 		t.Errorf("decrypted proxy username: got %q, want %q", got.Proxy.Username, "task_user")
 	}
-	if got.Proxy.Password != "task_pass" {
-		t.Errorf("decrypted proxy password: got %q, want %q", got.Proxy.Password, "task_pass")
+	if got.Proxy.Password != testPassword {
+		t.Errorf("decrypted proxy password: got %q, want %q", got.Proxy.Password, testPassword)
 	}
 }
 
@@ -4005,7 +4005,7 @@ func TestListProxiesBestEffortWithCreds(t *testing.T) {
 	ctx := context.Background()
 	p := makeProxy("enc-p1", "proxy.example.com:8080", "US")
 	p.Username = "user"
-	p.Password = "pass"
+	p.Password = testPassword
 	if err := db.CreateProxy(ctx, p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}

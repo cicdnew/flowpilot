@@ -72,6 +72,30 @@ export namespace models {
 	    }
 	
 	}
+	export class CreateTaskFromFlowParams {
+	    flowId: string;
+	    name: string;
+	    url: string;
+	    proxyConfig: ProxyConfig;
+	    priority: number;
+	    autoStart: boolean;
+	    tags?: string[];
+
+	    static createFrom(source: any = {}) {
+	        return new CreateTaskFromFlowParams(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.flowId = source["flowId"];
+	        this.name = source["name"];
+	        this.url = source["url"];
+	        this.proxyConfig = convertValues(source["proxyConfig"], ProxyConfig);
+	        this.priority = source["priority"];
+	        this.autoStart = source["autoStart"];
+	        this.tags = source["tags"];
+	    }
+	}
 	export class BatchGroup {
 	    id: string;
 	    flowId: string;

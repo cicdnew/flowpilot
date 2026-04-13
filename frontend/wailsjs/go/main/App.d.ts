@@ -21,7 +21,7 @@ export function CreateSchedule(params:{Name:string,CronExpr:string,FlowID:string
 
 export function CreateTask(params:{Name:string,URL:string,Steps:Array<models.TaskStep>,ProxyConfig:models.ProxyConfig,Priority:number,AutoStart:boolean,Tags:Array<string>,Timeout:number,LoggingPolicy:models.TaskLoggingPolicy}):Promise<models.Task>;
 
-export function CreateTaskFromFlow(arg1:string,arg2:string,arg3:string,arg4:models.ProxyConfig,arg5:number,arg6:boolean,arg7:Array<string>):Promise<models.Task>;
+export function CreateTaskFromFlow(arg1:models.CreateTaskFromFlowParams):Promise<models.Task>;
 
 export function CreateVisualBaseline(arg1:string,arg2:string,arg3:string):Promise<models.VisualBaseline>;
 

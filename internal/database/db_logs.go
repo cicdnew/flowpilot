@@ -160,7 +160,7 @@ func (db *DB) FinalizeTaskSuccess(ctx context.Context, taskID string, result mod
 		BatchID:   batchID,
 		FromState: fromStatus,
 		ToState:   models.TaskStatusCompleted,
-		Timestamp: now,
+		Timestamp: time.Now(),
 	}
 	if err := insertTaskEventTx(ctx, tx, event); err != nil {
 		return fmt.Errorf("insert task event for %s: %w", taskID, err)
@@ -219,7 +219,7 @@ func (db *DB) FinalizeTaskFailure(ctx context.Context, taskID string, errMsg str
 		FromState: fromStatus,
 		ToState:   models.TaskStatusFailed,
 		Error:     errMsg,
-		Timestamp: now,
+		Timestamp: time.Now(),
 	}
 	if err := insertTaskEventTx(ctx, tx, event); err != nil {
 		return fmt.Errorf("insert task event for %s: %w", taskID, err)

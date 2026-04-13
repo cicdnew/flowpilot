@@ -88,9 +88,9 @@ export function getStepActionOptions(currentAction: string, actions: string[]): 
   return [...actions, currentAction];
 }
 
-export function ensureStepActionStateLoaded(): Promise<StepActionState> {
+export async function ensureStepActionStateLoaded(): Promise<StepActionState> {
   if (get(stepActionState).loaded) {
-    return Promise.resolve(get(stepActionState));
+    return get(stepActionState);
   }
   if (loadPromise !== null) {
     return loadPromise;

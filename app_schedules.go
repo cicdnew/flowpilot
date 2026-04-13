@@ -34,7 +34,7 @@ type ScheduleParams struct {
 }
 
 // validateAndParseCronExpr validates and parses cron expression (S3776)
-func (a *App) validateAndParseCronExpr(cronExpr string) (scheduler.Schedule, error) {
+func (a *App) validateAndParseCronExpr(cronExpr string) (*scheduler.CronSchedule, error) {
 	if strings.TrimSpace(cronExpr) == "" {
 		return nil, fmt.Errorf(errCronExprRequired)
 	}
@@ -49,7 +49,7 @@ func (a *App) validateAndParseCronExpr(cronExpr string) (scheduler.Schedule, err
 }
 
 // validateCreateScheduleParams validates all create schedule parameters (S3776)
-func (a *App) validateCreateScheduleParams(p ScheduleParams, cronSched scheduler.Schedule) error {
+func (a *App) validateCreateScheduleParams(p ScheduleParams, cronSched *scheduler.CronSchedule) error {
 	checks := []struct {
 		name string
 		err  error
@@ -131,7 +131,7 @@ func (a *App) ListSchedules() ([]models.Schedule, error) {
 }
 
 // validateUpdateScheduleParams validates all update schedule parameters (S3776)
-func (a *App) validateUpdateScheduleParams(p ScheduleParams, cronSched scheduler.Schedule) error {
+func (a *App) validateUpdateScheduleParams(p ScheduleParams, cronSched *scheduler.CronSchedule) error {
 	checks := []struct {
 		name string
 		err  error

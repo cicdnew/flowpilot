@@ -951,7 +951,10 @@ func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execE
 
 func (q *Queue) prepareRetry(parentCtx context.Context, task models.Task, execErr error, result *models.TaskResult) retryInfo {
 	q.persistRetryLogs(parentCtx, task.ID, result)
-	if err := q.enqueueTaskStateChange(database.TaskStateChange{TaskID: task.ID, Status: models.TaskStatusRetrying, Error: execErr.Error(), IncrementRetry: true}); err != nil {
+	dbCtx, cancel := q.dbWriteContext(parentCtx)
+	err := q.db.BatchApplyTaskStateChanges(dbCtx, []database.TaskStateChange{{TaskID: task.ID, Status: models.TaskStatusRetrying, Error: execErr.Error(), IncrementRetry: true}})
+	cancel()
+	if err != nil {
 		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("increment retry: %v", err))
 		return retryInfo{}
 	}

@@ -43,6 +43,9 @@ func (a *App) CreateRepeatedTask(input models.RepeatTaskInput) (models.BatchGrou
 		return models.BatchGroup{}, err
 	}
 
+	// Log and record metrics
+	a.logRepeatTaskCreation(group.ID, len(tasks), string(input.Repeat.Mode))
+
 	if input.AutoStart {
 		if err := a.queue.SubmitBatch(a.ctx, tasks); err != nil {
 			return group, fmt.Errorf("submit repeated tasks: %w", err)

@@ -20,6 +20,7 @@ import (
 	"flowpilot/internal/localproxy"
 	"flowpilot/internal/logs"
 	"flowpilot/internal/models"
+	"flowpilot/internal/monitoring"
 	"flowpilot/internal/proxy"
 	"flowpilot/internal/queue"
 	"flowpilot/internal/recorder"
@@ -79,6 +80,8 @@ type App struct {
 	dataDir           string
 	batchEngine       *batch.Engine
 	repeatEngine      *repeat.Engine
+	monitor           *monitoring.Monitor
+	logger            *monitoring.StructuredLogger
 	logExporter       *logs.Exporter
 	config            AppConfig
 	initErr           error
@@ -213,6 +216,15 @@ func (a *App) initQueueAndBatch(ctx context.Context) error {
 
 	a.batchEngine = batch.New(a.db)
 	a.repeatEngine = repeat.New(a.db)
+	
+	// Initialize monitoring
+	a.monitor = monitoring.New()
+	a.logger = monitoring.NewStructuredLogger(monitoring.LogLevelInfo, 10000)
+	a.setupDefaultAlerts()
+	
+	// Start monitoring loop
+	go a.startMonitoringLoop(ctx)
+	
 	return nil
 }
 

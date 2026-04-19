@@ -1,0 +1,64 @@
+{
+  "name": "Chhotu.com Page Test {{counter}}",
+  "url": "https://chhotu.com/page/{{counter}}",
+  "steps": [
+    {
+      "action": "navigate",
+      "selector": "",
+      "value": "https://chhotu.com/page/{{counter}}",
+      "timeout": 30
+    },
+    {
+      "action": "wait",
+      "selector": "",
+      "value": "2",
+      "timeout": 0
+    },
+    {
+      "action": "screenshot",
+      "selector": "",
+      "value": "chhotu_page_{{counter}}",
+      "timeout": 0
+    },
+    {
+      "action": "extract",
+      "selector": "h1, .page-title, .title",
+      "value": "page_{{counter}}_title",
+      "timeout": 0
+    },
+    {
+      "action": "extract",
+      "selector": "meta[name='description']",
+      "value": "page_{{counter}}_description",
+      "timeout": 0
+    }
+  ],
+  "repeat": {
+    "mode": "range",
+    "varName": "counter",
+    "startVal": 100,
+    "endVal": 200,
+    "step": 1,
+    "values": [],
+    "batchSize": 0
+  },
+  "proxy": {
+    "server": "",
+    "protocol": "http",
+    "username": "",
+    "password": "",
+    "geo": "",
+    "fallback": "strict"
+  },
+  "priority": 5,
+  "autoStart": true,
+  "tags": ["chhotu", "domain-test", "automated"],
+  "timeout": 60,
+  "loggingPolicy": {
+    "networkLogs": true,
+    "screenshots": true,
+    "stepLogs": true,
+    "consoleLogs": false
+  },
+  "headless": true
+}

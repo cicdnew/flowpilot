@@ -23,6 +23,7 @@ import (
 	"flowpilot/internal/proxy"
 	"flowpilot/internal/queue"
 	"flowpilot/internal/recorder"
+	"flowpilot/internal/repeat"
 	"flowpilot/internal/scheduler"
 
 	"github.com/chromedp/chromedp"
@@ -77,6 +78,7 @@ type App struct {
 	scheduler         *scheduler.Scheduler
 	dataDir           string
 	batchEngine       *batch.Engine
+	repeatEngine      *repeat.Engine
 	logExporter       *logs.Exporter
 	config            AppConfig
 	initErr           error
@@ -210,6 +212,7 @@ func (a *App) initQueueAndBatch(ctx context.Context) error {
 	}
 
 	a.batchEngine = batch.New(a.db)
+	a.repeatEngine = repeat.New(a.db)
 	return nil
 }
 

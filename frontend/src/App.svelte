@@ -5,6 +5,7 @@
   import TaskTable from './components/TaskTable.svelte';
   import TaskDetail from './components/TaskDetail.svelte';
   import CreateTaskModal from './components/CreateTaskModal.svelte';
+  import RepeatTaskModal from './components/RepeatTaskModal.svelte';
   import BatchCreateModal from './components/BatchCreateModal.svelte';
   import ProxyPanel from './components/ProxyPanel.svelte';
   import RecorderPanel from './components/RecorderPanel.svelte';
@@ -42,6 +43,7 @@
   ];
 
   let showCreateModal = false;
+  let showRepeatModal = false;
   let showBatchModal = false;
   let loadError = '';
   let loading = false;
@@ -207,7 +209,7 @@
 
     <section class="workspace-surface">
       {#if $activeTab === 'tasks'}
-        <TaskToolbar on:create={() => showCreateModal = true} on:batchCreate={() => showBatchModal = true} />
+        <TaskToolbar on:create={() => showCreateModal = true} on:repeatCreate={() => showRepeatModal = true} on:batchCreate={() => showBatchModal = true} />
         <div class="main-content main-content--tasks">
           <div class="task-list-area">
             <TaskTable on:refresh={refreshTasks} />
@@ -273,6 +275,14 @@
   <CreateTaskModal
     on:close={() => showCreateModal = false}
     on:created={refreshTasks}
+  />
+{/if}
+
+{#if showRepeatModal}
+  <RepeatTaskModal
+    visible={showRepeatModal}
+    on:close={() => showRepeatModal = false}
+    on:success={() => { showRepeatModal = false; refreshTasks(); }}
   />
 {/if}
 

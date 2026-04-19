@@ -66,6 +66,9 @@
       <button type="button" class="btn-primary" on:click={() => dispatch('create')}>
         + New Task
       </button>
+      <button type="button" class="btn-secondary" on:click={() => dispatch('repeatCreate')}>
+        + Repeat Task
+      </button>
       <button type="button" class="btn-secondary" on:click={() => dispatch('batchCreate')}>
         + Batch Create
       </button>

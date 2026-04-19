@@ -1,0 +1,121 @@
+{
+  "templates": [
+    {
+      "name": "Basic Page Crawler",
+      "description": "Simple page-by-page crawling with screenshots",
+      "config": {
+        "name": "Crawl Page {{counter}}",
+        "url": "https://example.com/page/{{counter}}",
+        "repeat": {
+          "mode": "range",
+          "varName": "counter",
+          "startVal": 1,
+          "endVal": 100,
+          "step": 1
+        },
+        "steps": [
+          {"action": "navigate", "value": "https://example.com/page/{{counter}}"},
+          {"action": "wait", "value": "2"},
+          {"action": "screenshot", "value": "page_{{counter}}"},
+          {"action": "extract", "selector": "h1", "value": "title_{{counter}}"}
+        ],
+        "priority": 5,
+        "tags": ["crawl", "basic"]
+      }
+    },
+    {
+      "name": "Product Catalog Scraper",
+      "description": "Extract product details from catalog pages",
+      "config": {
+        "name": "Product {{product_id}}",
+        "url": "https://example.com/product/{{product_id}}",
+        "repeat": {
+          "mode": "range",
+          "varName": "product_id",
+          "startVal": 1000,
+          "endVal": 2000,
+          "step": 1
+        },
+        "steps": [
+          {"action": "navigate", "value": "https://example.com/product/{{product_id}}"},
+          {"action": "wait", "value": "2"},
+          {"action": "extract", "selector": ".product-name", "value": "name_{{product_id}}"},
+          {"action": "extract", "selector": ".price", "value": "price_{{product_id}}"},
+          {"action": "extract", "selector": ".description", "value": "desc_{{product_id}}"},
+          {"action": "screenshot", "value": "product_{{product_id}}"}
+        ],
+        "priority": 7,
+        "tags": ["products", "scraping"]
+      }
+    },
+    {
+      "name": "Form Submission Test",
+      "description": "Test form submissions with varying inputs",
+      "config": {
+        "name": "Form Test {{user_id}}",
+        "url": "https://example.com/form",
+        "repeat": {
+          "mode": "counter",
+          "varName": "user_id",
+          "startVal": 1,
+          "endVal": 50,
+          "step": 1
+        },
+        "steps": [
+          {"action": "navigate", "value": "https://example.com/form"},
+          {"action": "type", "selector": "#name", "value": "User {{user_id}}"},
+          {"action": "type", "selector": "#email", "value": "user{{user_id}}@test.com"},
+          {"action": "click", "selector": "#submit"},
+          {"action": "wait", "value": "2"},
+          {"action": "extract", "selector": ".confirmation", "value": "result_{{user_id}}"}
+        ],
+        "priority": 6,
+        "tags": ["forms", "testing"]
+      }
+    },
+    {
+      "name": "Category Validator",
+      "description": "Validate different category pages",
+      "config": {
+        "name": "Category {{category}}",
+        "url": "https://example.com/category/{{category}}",
+        "repeat": {
+          "mode": "list",
+          "varName": "category",
+          "values": ["electronics", "clothing", "home", "sports", "books"]
+        },
+        "steps": [
+          {"action": "navigate", "value": "https://example.com/category/{{category}}"},
+          {"action": "wait", "value": "2"},
+          {"action": "extract", "selector": ".item-count", "value": "{{category}}_count"},
+          {"action": "screenshot", "value": "category_{{category}}"}
+        ],
+        "priority": 5,
+        "tags": ["categories", "validation"]
+      }
+    },
+    {
+      "name": "API Endpoint Tester",
+      "description": "Test REST API endpoints",
+      "config": {
+        "name": "API Test {{endpoint_id}}",
+        "url": "https://api.example.com/v1/items/{{endpoint_id}}",
+        "repeat": {
+          "mode": "range",
+          "varName": "endpoint_id",
+          "startVal": 1,
+          "endVal": 100,
+          "step": 1
+        },
+        "steps": [
+          {"action": "navigate", "value": "https://api.example.com/v1/items/{{endpoint_id}}"},
+          {"action": "wait", "value": "1"},
+          {"action": "extract", "selector": "body", "value": "response_{{endpoint_id}}"}
+        ],
+        "priority": 8,
+        "tags": ["api", "testing"],
+        "headless": true
+      }
+    }
+  ]
+}

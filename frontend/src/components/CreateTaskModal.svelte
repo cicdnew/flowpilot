@@ -110,7 +110,7 @@
 
     try {
       errorMessage = '';
-      await CreateTask(name, url, taskSteps, proxyConfig, priority, autoStart, tags, taskTimeout, loggingPolicy as any);
+      await CreateTask({ Name: name, URL: url, Steps: taskSteps, ProxyConfig: proxyConfig, Priority: priority, AutoStart: autoStart, Tags: tags, Timeout: taskTimeout, LoggingPolicy: loggingPolicy });
       dispatch('created');
       dispatch('close');
     } catch (err: any) {

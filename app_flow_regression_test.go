@@ -65,7 +65,7 @@ func TestCreateTaskFromFlowPropagatesTimeoutAndLoggingPolicy(t *testing.T) {
 		t.Fatalf("UpdateRecordedFlow: %v", err)
 	}
 
-	task, err := app.CreateTaskFromFlow(createdFlow.ID, "Task", "https://target.example.com", models.ProxyConfig{}, 5, false, []string{"tag"})
+	task, err := app.CreateTaskFromFlow(CreateTaskFromFlowParams{FlowID: createdFlow.ID, Name: "Task", URL: "https://target.example.com", ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: []string{"tag"}})
 	if err != nil {
 		t.Fatalf("CreateTaskFromFlow: %v", err)
 	}

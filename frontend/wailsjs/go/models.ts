@@ -1,24 +1,241 @@
-export namespace models {
-
-	export function convertValues(a: any, classs: any, asMap: boolean = false): any {
-	    if (!a) {
-	        return a;
+export namespace database {
+	
+	export class TaskUpdateParams {
+	    Name: string;
+	    URL: string;
+	    Steps: models.TaskStep[];
+	    ProxyConfig: models.ProxyConfig;
+	    Priority: number;
+	    Tags: string[];
+	    Timeout: number;
+	    LoggingPolicy?: models.TaskLoggingPolicy;
+	
+	    static createFrom(source: any = {}) {
+	        return new TaskUpdateParams(source);
 	    }
-	    if (a.slice && a.map) {
-	        return (a as any[]).map(elem => convertValues(elem, classs));
-	    } else if ("object" === typeof a) {
-	        if (asMap) {
-	            for (const key of Object.keys(a)) {
-	                a[key] = new classs(a[key]);
-	            }
-	            return a;
-	        }
-	        return new classs(a);
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Name = source["Name"];
+	        this.URL = source["URL"];
+	        this.Steps = this.convertValues(source["Steps"], models.TaskStep);
+	        this.ProxyConfig = this.convertValues(source["ProxyConfig"], models.ProxyConfig);
+	        this.Priority = source["Priority"];
+	        this.Tags = source["Tags"];
+	        this.Timeout = source["Timeout"];
+	        this.LoggingPolicy = this.convertValues(source["LoggingPolicy"], models.TaskLoggingPolicy);
 	    }
-	    return a;
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
+}
+
+export namespace main {
 	
+	export class CreateTaskFromFlowParams {
+	    FlowID: string;
+	    Name: string;
+	    URL: string;
+	    ProxyConfig: models.ProxyConfig;
+	    Priority: number;
+	    AutoStart: boolean;
+	    Tags: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CreateTaskFromFlowParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.FlowID = source["FlowID"];
+	        this.Name = source["Name"];
+	        this.URL = source["URL"];
+	        this.ProxyConfig = this.convertValues(source["ProxyConfig"], models.ProxyConfig);
+	        this.Priority = source["Priority"];
+	        this.AutoStart = source["AutoStart"];
+	        this.Tags = source["Tags"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CreateTaskParams {
+	    Name: string;
+	    URL: string;
+	    Steps: models.TaskStep[];
+	    ProxyConfig: models.ProxyConfig;
+	    Priority: number;
+	    AutoStart: boolean;
+	    Tags: string[];
+	    Timeout: number;
+	    LoggingPolicy?: models.TaskLoggingPolicy;
+	
+	    static createFrom(source: any = {}) {
+	        return new CreateTaskParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Name = source["Name"];
+	        this.URL = source["URL"];
+	        this.Steps = this.convertValues(source["Steps"], models.TaskStep);
+	        this.ProxyConfig = this.convertValues(source["ProxyConfig"], models.ProxyConfig);
+	        this.Priority = source["Priority"];
+	        this.AutoStart = source["AutoStart"];
+	        this.Tags = source["Tags"];
+	        this.Timeout = source["Timeout"];
+	        this.LoggingPolicy = this.convertValues(source["LoggingPolicy"], models.TaskLoggingPolicy);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class FlowImportResult {
+	    tasks: models.Task[];
+	    warnings: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new FlowImportResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tasks = this.convertValues(source["tasks"], models.Task);
+	        this.warnings = source["warnings"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ScheduleParams {
+	    Name: string;
+	    CronExpr: string;
+	    FlowID: string;
+	    URL: string;
+	    ProxyConfig: models.ProxyConfig;
+	    Priority: number;
+	    Headless: boolean;
+	    Tags: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ScheduleParams(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Name = source["Name"];
+	        this.CronExpr = source["CronExpr"];
+	        this.FlowID = source["FlowID"];
+	        this.URL = source["URL"];
+	        this.ProxyConfig = this.convertValues(source["ProxyConfig"], models.ProxyConfig);
+	        this.Priority = source["Priority"];
+	        this.Headless = source["Headless"];
+	        this.Tags = source["Tags"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace models {
+	
+	export class TaskLoggingPolicy {
+	    captureStepLogs?: boolean;
+	    captureNetworkLogs?: boolean;
+	    captureScreenshots?: boolean;
+	    maxExecutionLogs?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new TaskLoggingPolicy(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.captureStepLogs = source["captureStepLogs"];
+	        this.captureNetworkLogs = source["captureNetworkLogs"];
+	        this.captureScreenshots = source["captureScreenshots"];
+	        this.maxExecutionLogs = source["maxExecutionLogs"];
+	    }
+	}
 	export class ProxyConfig {
 	    server: string;
 	    protocol?: string;
@@ -52,6 +269,8 @@ export namespace models {
 	    proxyFallback?: string;
 	    autoStart: boolean;
 	    headless?: boolean;
+	    timeout?: number;
+	    loggingPolicy?: TaskLoggingPolicy;
 	
 	    static createFrom(source: any = {}) {
 	        return new AdvancedBatchInput(source);
@@ -63,38 +282,33 @@ export namespace models {
 	        this.urls = source["urls"];
 	        this.namingTemplate = source["namingTemplate"];
 	        this.priority = source["priority"];
-	        this.proxy = convertValues(source["proxy"], ProxyConfig);
+	        this.proxy = this.convertValues(source["proxy"], ProxyConfig);
 	        this.tags = source["tags"];
 	        this.proxyCountry = source["proxyCountry"];
 	        this.proxyFallback = source["proxyFallback"];
 	        this.autoStart = source["autoStart"];
 	        this.headless = source["headless"];
+	        this.timeout = source["timeout"];
+	        this.loggingPolicy = this.convertValues(source["loggingPolicy"], TaskLoggingPolicy);
 	    }
 	
-	}
-	export class CreateTaskFromFlowParams {
-	    flowId: string;
-	    name: string;
-	    url: string;
-	    proxyConfig: ProxyConfig;
-	    priority: number;
-	    autoStart: boolean;
-	    tags?: string[];
-
-	    static createFrom(source: any = {}) {
-	        return new CreateTaskFromFlowParams(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.flowId = source["flowId"];
-	        this.name = source["name"];
-	        this.url = source["url"];
-	        this.proxyConfig = convertValues(source["proxyConfig"], ProxyConfig);
-	        this.priority = source["priority"];
-	        this.autoStart = source["autoStart"];
-	        this.tags = source["tags"];
-	    }
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class BatchGroup {
 	    id: string;
@@ -102,7 +316,8 @@ export namespace models {
 	    taskIds: string[];
 	    total: number;
 	    name: string;
-	    createdAt: string;
+	    // Go type: time
+	    createdAt: any;
 	
 	    static createFrom(source: any = {}) {
 	        return new BatchGroup(source);
@@ -115,8 +330,26 @@ export namespace models {
 	        this.taskIds = source["taskIds"];
 	        this.total = source["total"];
 	        this.name = source["name"];
-	        this.createdAt = source["createdAt"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class BatchProgress {
 	    batchId: string;
@@ -198,6 +431,10 @@ export namespace models {
 	    steps: TaskStep[];
 	    proxy: ProxyConfig;
 	    priority: number;
+	    timeout?: number;
+	    tags?: string[];
+	    loggingPolicy?: TaskLoggingPolicy;
+	    headless: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new BatchTaskInput(source);
@@ -207,11 +444,32 @@ export namespace models {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.url = source["url"];
-	        this.steps = convertValues(source["steps"], TaskStep);
-	        this.proxy = convertValues(source["proxy"], ProxyConfig);
+	        this.steps = this.convertValues(source["steps"], TaskStep);
+	        this.proxy = this.convertValues(source["proxy"], ProxyConfig);
 	        this.priority = source["priority"];
+	        this.timeout = source["timeout"];
+	        this.tags = source["tags"];
+	        this.loggingPolicy = this.convertValues(source["loggingPolicy"], TaskLoggingPolicy);
+	        this.headless = source["headless"];
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class CaptchaConfig {
 	    id: string;
@@ -235,10 +493,27 @@ export namespace models {
 	        this.apiKey = source["apiKey"];
 	        this.enabled = source["enabled"];
 	        this.balance = source["balance"];
-	        this.createdAt = convertValues(source["createdAt"], null);
-	        this.updatedAt = convertValues(source["updatedAt"], null);
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class DOMSnapshot {
 	    id: string;
@@ -262,9 +537,26 @@ export namespace models {
 	        this.html = source["html"];
 	        this.screenshotPath = source["screenshotPath"];
 	        this.url = source["url"];
-	        this.capturedAt = convertValues(source["capturedAt"], null);
+	        this.capturedAt = this.convertValues(source["capturedAt"], null);
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class DiffRequest {
 	    baselineId: string;
@@ -316,11 +608,28 @@ export namespace models {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.timestamp = convertValues(source["timestamp"], null);
+	        this.timestamp = this.convertValues(source["timestamp"], null);
 	        this.level = source["level"];
 	        this.message = source["message"];
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class NetworkLog {
 	    taskId: string;
@@ -356,27 +665,26 @@ export namespace models {
 	        this.responseSize = source["responseSize"];
 	        this.durationMs = source["durationMs"];
 	        this.error = source["error"];
-	        this.timestamp = convertValues(source["timestamp"], null);
+	        this.timestamp = this.convertValues(source["timestamp"], null);
 	    }
 	
-	}
-	export class TaskLoggingPolicy {
-	    captureStepLogs?: boolean;
-	    captureNetworkLogs?: boolean;
-	    captureScreenshots?: boolean;
-	    maxExecutionLogs?: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new TaskLoggingPolicy(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.captureStepLogs = source["captureStepLogs"];
-	        this.captureNetworkLogs = source["captureNetworkLogs"];
-	        this.captureScreenshots = source["captureScreenshots"];
-	        this.maxExecutionLogs = source["maxExecutionLogs"];
-	    }
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class StepLog {
 	    taskId: string;
@@ -406,9 +714,26 @@ export namespace models {
 	        this.errorCode = source["errorCode"];
 	        this.errorMsg = source["errorMsg"];
 	        this.durationMs = source["durationMs"];
-	        this.startedAt = convertValues(source["startedAt"], null);
+	        this.startedAt = this.convertValues(source["startedAt"], null);
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class TaskResult {
 	    taskId: string;
@@ -431,13 +756,30 @@ export namespace models {
 	        this.success = source["success"];
 	        this.extractedData = source["extractedData"];
 	        this.screenshots = source["screenshots"];
-	        this.logs = convertValues(source["logs"], LogEntry);
-	        this.stepLogs = convertValues(source["stepLogs"], StepLog);
-	        this.networkLogs = convertValues(source["networkLogs"], NetworkLog);
+	        this.logs = this.convertValues(source["logs"], LogEntry);
+	        this.stepLogs = this.convertValues(source["stepLogs"], StepLog);
+	        this.networkLogs = this.convertValues(source["networkLogs"], NetworkLog);
 	        this.duration = source["duration"];
 	        this.error = source["error"];
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class Task {
 	    id: string;
@@ -463,6 +805,8 @@ export namespace models {
 	    flowId?: string;
 	    headless: boolean;
 	    loggingPolicy?: TaskLoggingPolicy;
+	    webhookUrl?: string;
+	    webhookEvents?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Task(source);
@@ -473,25 +817,44 @@ export namespace models {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.url = source["url"];
-	        this.steps = convertValues(source["steps"], TaskStep);
-	        this.proxy = convertValues(source["proxy"], ProxyConfig);
+	        this.steps = this.convertValues(source["steps"], TaskStep);
+	        this.proxy = this.convertValues(source["proxy"], ProxyConfig);
 	        this.priority = source["priority"];
 	        this.status = source["status"];
 	        this.retryCount = source["retryCount"];
 	        this.maxRetries = source["maxRetries"];
 	        this.timeout = source["timeout"];
 	        this.error = source["error"];
-	        this.result = convertValues(source["result"], TaskResult);
-	        this.createdAt = convertValues(source["createdAt"], null);
-	        this.startedAt = convertValues(source["startedAt"], null);
-	        this.completedAt = convertValues(source["completedAt"], null);
+	        this.result = this.convertValues(source["result"], TaskResult);
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.startedAt = this.convertValues(source["startedAt"], null);
+	        this.completedAt = this.convertValues(source["completedAt"], null);
 	        this.tags = source["tags"];
 	        this.batchId = source["batchId"];
 	        this.flowId = source["flowId"];
 	        this.headless = source["headless"];
-	        this.loggingPolicy = convertValues(source["loggingPolicy"], TaskLoggingPolicy);
+	        this.loggingPolicy = this.convertValues(source["loggingPolicy"], TaskLoggingPolicy);
+	        this.webhookUrl = source["webhookUrl"];
+	        this.webhookEvents = source["webhookEvents"];
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class PaginatedTasks {
 	    tasks: Task[];
@@ -506,13 +869,30 @@ export namespace models {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.tasks = convertValues(source["tasks"], Task);
+	        this.tasks = this.convertValues(source["tasks"], Task);
 	        this.total = source["total"];
 	        this.page = source["page"];
 	        this.pageSize = source["pageSize"];
 	        this.totalPages = source["totalPages"];
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class Proxy {
 	    id: string;
@@ -525,6 +905,7 @@ export namespace models {
 	    latency: number;
 	    successRate: number;
 	    totalUsed: number;
+	    maxRequestsPerMinute?: number;
 	    // Go type: time
 	    lastChecked?: any;
 	    // Go type: time
@@ -550,14 +931,32 @@ export namespace models {
 	        this.latency = source["latency"];
 	        this.successRate = source["successRate"];
 	        this.totalUsed = source["totalUsed"];
-	        this.lastChecked = convertValues(source["lastChecked"], null);
-	        this.createdAt = convertValues(source["createdAt"], null);
+	        this.maxRequestsPerMinute = source["maxRequestsPerMinute"];
+	        this.lastChecked = this.convertValues(source["lastChecked"], null);
+	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.localEndpoint = source["localEndpoint"];
 	        this.localEndpointOn = source["localEndpointOn"];
 	        this.localAuthEnabled = source["localAuthEnabled"];
 	        this.activeLocalUsers = source["activeLocalUsers"];
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	
 	export class ProxyCountryStats {
@@ -604,9 +1003,26 @@ export namespace models {
 	        this.randomByCountry = source["randomByCountry"];
 	        this.country = source["country"];
 	        this.fallback = source["fallback"];
-	        this.createdAt = convertValues(source["createdAt"], null);
+	        this.createdAt = this.convertValues(source["createdAt"], null);
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class QueueMetrics {
 	    running: number;
@@ -679,10 +1095,27 @@ export namespace models {
 	        this.value = source["value"];
 	        this.timeout = source["timeout"];
 	        this.snapshotId = source["snapshotId"];
-	        this.selectorCandidates = convertValues(source["selectorCandidates"], SelectorCandidate);
-	        this.timestamp = convertValues(source["timestamp"], null);
+	        this.selectorCandidates = this.convertValues(source["selectorCandidates"], SelectorCandidate);
+	        this.timestamp = this.convertValues(source["timestamp"], null);
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class RecordedFlow {
 	    id: string;
@@ -690,6 +1123,8 @@ export namespace models {
 	    description?: string;
 	    steps: RecordedStep[];
 	    originUrl: string;
+	    timeout?: number;
+	    loggingPolicy?: TaskLoggingPolicy;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -704,12 +1139,31 @@ export namespace models {
 	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.description = source["description"];
-	        this.steps = convertValues(source["steps"], RecordedStep);
+	        this.steps = this.convertValues(source["steps"], RecordedStep);
 	        this.originUrl = source["originUrl"];
-	        this.createdAt = convertValues(source["createdAt"], null);
-	        this.updatedAt = convertValues(source["updatedAt"], null);
+	        this.timeout = source["timeout"];
+	        this.loggingPolicy = this.convertValues(source["loggingPolicy"], TaskLoggingPolicy);
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	
 	export class Schedule {
@@ -743,17 +1197,34 @@ export namespace models {
 	        this.cronExpr = source["cronExpr"];
 	        this.flowId = source["flowId"];
 	        this.url = source["url"];
-	        this.proxy = convertValues(source["proxy"], ProxyConfig);
+	        this.proxy = this.convertValues(source["proxy"], ProxyConfig);
 	        this.priority = source["priority"];
 	        this.headless = source["headless"];
 	        this.tags = source["tags"];
 	        this.enabled = source["enabled"];
-	        this.lastRunAt = convertValues(source["lastRunAt"], null);
-	        this.nextRunAt = convertValues(source["nextRunAt"], null);
-	        this.createdAt = convertValues(source["createdAt"], null);
-	        this.updatedAt = convertValues(source["updatedAt"], null);
+	        this.lastRunAt = this.convertValues(source["lastRunAt"], null);
+	        this.nextRunAt = this.convertValues(source["nextRunAt"], null);
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	
 	
@@ -780,9 +1251,26 @@ export namespace models {
 	        this.fromState = source["fromState"];
 	        this.toState = source["toState"];
 	        this.error = source["error"];
-	        this.timestamp = convertValues(source["timestamp"], null);
+	        this.timestamp = this.convertValues(source["timestamp"], null);
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	
 	
@@ -811,9 +1299,26 @@ export namespace models {
 	        this.screenshotPath = source["screenshotPath"];
 	        this.width = source["width"];
 	        this.height = source["height"];
-	        this.createdAt = convertValues(source["createdAt"], null);
+	        this.createdAt = this.convertValues(source["createdAt"], null);
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class VisualDiff {
 	    id: string;
@@ -847,9 +1352,26 @@ export namespace models {
 	        this.passed = source["passed"];
 	        this.width = source["width"];
 	        this.height = source["height"];
-	        this.createdAt = convertValues(source["createdAt"], null);
+	        this.createdAt = this.convertValues(source["createdAt"], null);
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class WebSocketLog {
 	    flowId: string;
@@ -885,9 +1407,26 @@ export namespace models {
 	        this.closeCode = source["closeCode"];
 	        this.closeReason = source["closeReason"];
 	        this.errorMessage = source["errorMessage"];
-	        this.timestamp = convertValues(source["timestamp"], null);
+	        this.timestamp = this.convertValues(source["timestamp"], null);
 	    }
 	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }

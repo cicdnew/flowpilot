@@ -29,11 +29,12 @@ func main() {
 	}()
 
 	err := wails.Run(&options.App{
-		Title:     "FlowPilot",
-		Width:     1400,
-		Height:    900,
-		MinWidth:  1024,
-		MinHeight: 768,
+		Title:            "FlowPilot",
+		Width:            1400,
+		Height:           900,
+		MinWidth:         1024,
+		MinHeight:        768,
+		WindowStartState: options.Maximised,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

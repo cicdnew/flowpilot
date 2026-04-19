@@ -2133,7 +2133,7 @@ func TestAppUpdateRecordedFlow(t *testing.T) {
 
 func TestAppCreateProxyRoutingPreset(t *testing.T) {
 	app := setupTestApp(t)
-	preset, err := app.CreateProxyRoutingPreset("My Preset", "US", "any", false)
+	preset, err := app.CreateProxyRoutingPreset("My Preset", "US", "any_healthy", false)
 	if err != nil {
 		t.Fatalf("CreateProxyRoutingPreset: %v", err)
 	}

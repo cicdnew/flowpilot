@@ -6,6 +6,10 @@ export function AddProxy(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['AddProxy'](arg1, arg2, arg3, arg4, arg5);
 }
 
+export function AddProxyWithRateLimit(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['AddProxyWithRateLimit'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
 export function CancelTask(arg1) {
   return window['go']['main']['App']['CancelTask'](arg1);
 }
@@ -30,12 +34,12 @@ export function CreateRecordedFlow(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['CreateRecordedFlow'](arg1, arg2, arg3, arg4);
 }
 
-export function CreateSchedule(params) {
-  return window['go']['main']['App']['CreateSchedule'](params);
+export function CreateSchedule(arg1) {
+  return window['go']['main']['App']['CreateSchedule'](arg1);
 }
 
-export function CreateTask(params) {
-  return window['go']['main']['App']['CreateTask'](params);
+export function CreateTask(arg1) {
+  return window['go']['main']['App']['CreateTask'](arg1);
 }
 
 export function CreateTaskFromFlow(arg1) {
@@ -114,6 +118,10 @@ export function GetLocalProxyGatewayStats() {
   return window['go']['main']['App']['GetLocalProxyGatewayStats']();
 }
 
+export function GetPrometheusMetrics() {
+  return window['go']['main']['App']['GetPrometheusMetrics']();
+}
+
 export function GetQueueMetrics() {
   return window['go']['main']['App']['GetQueueMetrics']();
 }
@@ -130,6 +138,10 @@ export function GetSchedule(arg1) {
   return window['go']['main']['App']['GetSchedule'](arg1);
 }
 
+export function GetSupportedStepActions() {
+  return window['go']['main']['App']['GetSupportedStepActions']();
+}
+
 export function GetTask(arg1) {
   return window['go']['main']['App']['GetTask'](arg1);
 }
@@ -144,6 +156,10 @@ export function GetVisualDiff(arg1) {
 
 export function ImportFlow(arg1) {
   return window['go']['main']['App']['ImportFlow'](arg1);
+}
+
+export function ImportFlowWithWarnings(arg1) {
+  return window['go']['main']['App']['ImportFlowWithWarnings'](arg1);
 }
 
 export function ImportTask(arg1) {
@@ -230,8 +246,8 @@ export function PauseBatch(arg1) {
   return window['go']['main']['App']['PauseBatch'](arg1);
 }
 
-export function PlayRecordedFlow(arg1, arg2, arg3) {
-  return window['go']['main']['App']['PlayRecordedFlow'](arg1, arg2, arg3);
+export function PlayRecordedFlow(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['PlayRecordedFlow'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function PurgeOldData(arg1) {
@@ -286,10 +302,10 @@ export function UpdateRecordedFlow(arg1) {
   return window['go']['main']['App']['UpdateRecordedFlow'](arg1);
 }
 
-export function UpdateSchedule(arg1, params, arg3) {
-  return window['go']['main']['App']['UpdateSchedule'](arg1, params, arg3);
+export function UpdateSchedule(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UpdateSchedule'](arg1, arg2, arg3);
 }
 
-export function UpdateTask(arg1, params) {
-  return window['go']['main']['App']['UpdateTask'](arg1, params);
+export function UpdateTask(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UpdateTask'](arg1, arg2, arg3);
 }

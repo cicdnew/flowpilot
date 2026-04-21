@@ -20,6 +20,7 @@ import (
 	"flowpilot/internal/database"
 	"flowpilot/internal/logs"
 	"flowpilot/internal/models"
+	"flowpilot/internal/monitoring"
 	"flowpilot/internal/proxy"
 )
 
@@ -61,6 +62,8 @@ type Queue struct {
 	persistenceWg         sync.WaitGroup
 
 	taskMetrics atomic.Value // stores models.TaskMetrics
+
+	monitor *monitoring.Monitor
 
 	mu             sync.Mutex
 	cond           *sync.Cond
@@ -154,6 +157,13 @@ func (q *Queue) SetRetryBackoffBaseMs(ms int) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.retryBackoffBaseMs = ms
+}
+
+// SetMonitor attaches a monitoring instance for metrics collection.
+func (q *Queue) SetMonitor(m *monitoring.Monitor) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.monitor = m
 }
 
 // SetDrainTimeout configures how long Stop() will wait for running tasks to
@@ -575,6 +585,19 @@ func (q *Queue) Metrics() models.QueueMetrics {
 	metrics.PersistenceQueueDepth = len(q.persistenceCh)
 	metrics.PersistenceQueueCapacity = cap(q.persistenceCh)
 	metrics.PersistenceBatchSize = q.persistenceBatchSize
+
+	// Step duration average from monitor
+	if q.monitor != nil {
+		metrics.AvgStepDurationMs = q.monitor.GetAvgStepDuration()
+	}
+	// Worker utilization percentage
+	if q.workerCount > 0 {
+		metrics.WorkerUtilizationPercent = float64(len(q.running)) / float64(q.workerCount) * 100
+	} else {
+		metrics.WorkerUtilizationPercent = 0
+	}
+	metrics.LastUpdated = time.Now()
+
 	return metrics
 }
 
@@ -959,6 +982,11 @@ func (q *Queue) prepareRetry(parentCtx context.Context, task models.Task, execEr
 		return retryInfo{}
 	}
 	q.emitEvent(task.ID, models.TaskStatusRetrying, execErr.Error())
+
+	// Increment total retried counter
+	q.mu.Lock()
+	q.metrics.TotalRetried++
+	q.mu.Unlock()
 
 	backoff := q.retryBackoff(task.RetryCount)
 	logs.Logger.Info("task retrying",

@@ -241,11 +241,15 @@ export interface QueueMetrics {
   totalSubmitted: number;
   totalCompleted: number;
   totalFailed: number;
+  totalRetried: number;
   runningProxied: number;
   proxyConcurrencyLimit: number;
   persistenceQueueDepth: number;
   persistenceQueueCapacity: number;
   persistenceBatchSize: number;
+  avgStepDurationMs: number;
+  workerUtilizationPercent: number;
+  lastUpdated: string;
 }
 
 export interface StepLog {
@@ -312,5 +316,46 @@ export interface VisualDiff {
   width: number;
   height: number;
   createdAt: string;
+}
+
+export type AlertSeverity = 'info' | 'warning' | 'critical';
+
+export interface AlertRule {
+  id: string;
+  name: string;
+  description: string;
+  metric: string;
+  condition: string;
+  threshold: number;
+  window_secs: number;
+  cooldown_secs: number;
+  severity: AlertSeverity;
+  enabled: boolean;
+  webhook_url?: string;
+  createdAt: string;
+}
+
+export interface AlertFiring {
+  id: string;
+  rule_id: string;
+  rule_name: string;
+  severity: AlertSeverity;
+  value: number;
+  threshold: number;
+  fired_at: string;
+  resolved_at?: string;
+  notified: boolean;
+}
+
+export interface Alert {
+  ruleId: string;
+  ruleName: string;
+  description: string;
+  severity: AlertSeverity;
+  timestamp: string;
+  metric: string;
+  condition: string;
+  threshold: number;
+  value: number;
 }
 

@@ -13,10 +13,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"encoding/json"
+	"log/slog"
+
 	"flowpilot/internal/captcha"
 	"flowpilot/internal/localproxy"
 	"flowpilot/internal/logs"
 	"flowpilot/internal/models"
+	"flowpilot/internal/monitoring"
 
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/fetch"
@@ -143,6 +147,9 @@ type Runner struct {
 	proxyPools           map[string]*BrowserPool
 	localProxyManager    *localproxy.Manager
 	defaultLoggingPolicy models.TaskLoggingPolicy
+
+	monitor *monitoring.Monitor
+	logger  *monitoring.StructuredLogger
 }
 
 // NewRunner creates a new browser runner. Eval steps are blocked by default.
@@ -194,6 +201,20 @@ func (r *Runner) SetDefaultLoggingPolicy(policy models.TaskLoggingPolicy) {
 	r.mu.Lock()
 	r.defaultLoggingPolicy = policy
 	r.mu.Unlock()
+}
+
+// SetMonitor attaches a monitoring instance for collecting step durations and errors.
+func (r *Runner) SetMonitor(m *monitoring.Monitor) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.monitor = m
+}
+
+// SetLogger attaches a structured logger for in-memory log aggregation.
+func (r *Runner) SetLogger(l *monitoring.StructuredLogger) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.logger = l
 }
 
 func (r *Runner) resolveLoggingPolicy(task models.Task) resolvedLoggingPolicy {
@@ -355,7 +376,7 @@ func (r *Runner) RunTask(ctx context.Context, task models.Task) (result *models.
 		}
 	}
 
-	if err := r.runSteps(browserCtx, task.Steps, result, netLogger, policy); err != nil {
+	if err := r.runSteps(browserCtx, task, task.Steps, result, netLogger, policy); err != nil {
 		if netLogger != nil {
 			result.NetworkLogs = netLogger.Logs()
 		}
@@ -415,7 +436,7 @@ func (r *Runner) createAllocator(ctx context.Context, proxyConfig models.ProxyCo
 
 // runSteps executes task steps using a program-counter (PC) based approach
 // to support conditional logic, loops, and goto jumps.
-func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, result *models.TaskResult, netLogger *logs.NetworkLogger, policy resolvedLoggingPolicy) error {
+func (r *Runner) runSteps(browserCtx context.Context, task models.Task, steps []models.TaskStep, result *models.TaskResult, netLogger *logs.NetworkLogger, policy resolvedLoggingPolicy) error {
 	var stepLogger *logs.StepLogger
 	if policy.captureStepLogs {
 		stepLogger = logs.NewStepLogger(result.TaskID)
@@ -579,8 +600,15 @@ func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, r
 			startedAt = stepLogger.StartStep(pc, step.Action, step.Selector, step.Value, "")
 		}
 		stepCtx, stepCancel := context.WithTimeout(browserCtx, timeout)
+		stepStart := time.Now()
 		err := r.executeStep(stepCtx, step, result)
+		durationMs := time.Since(stepStart).Milliseconds()
 		stepCancel()
+
+		// Record step duration to monitor
+		if r.monitor != nil {
+			r.monitor.RecordStepDuration(durationMs)
+		}
 
 		if stepLogger != nil {
 			var code models.ErrorCode
@@ -602,6 +630,43 @@ func (r *Runner) runSteps(browserCtx context.Context, steps []models.TaskStep, r
 		if err != nil {
 			r.addLog(result, "error", fmt.Sprintf("step %d failed: %v", pc+1, err))
 			result.Error = fmt.Sprintf("step %d (%s) failed: %v", pc+1, step.Action, err)
+
+			// Classify error with context and record
+			errCode, errCtx := models.ClassifyErrorWithContext(
+				err,
+				result.TaskID,
+				pc,
+				string(step.Action),
+				step.Selector,
+				task.Proxy.Server,
+				task.URL,
+				durationMs,
+				task.RetryCount,
+			)
+			if r.monitor != nil && errCtx != nil {
+				ctxJSON, _ := json.Marshal(errCtx)
+				r.monitor.RecordErrorContext(string(ctxJSON))
+			}
+			if r.logger != nil {
+				attrs := []slog.Attr{
+					slog.String("taskId", result.TaskID),
+					slog.Int("stepIndex", pc),
+					slog.String("action", string(step.Action)),
+					slog.String("errorCode", string(errCode)),
+					slog.Int64("durationMs", durationMs),
+				}
+				if step.Selector != "" {
+					attrs = append(attrs, slog.String("selector", step.Selector))
+				}
+				if task.Proxy.Server != "" {
+					attrs = append(attrs, slog.String("proxyServer", task.Proxy.Server))
+				}
+				if task.URL != "" {
+					attrs = append(attrs, slog.String("url", task.URL))
+				}
+				r.logger.Error(context.Background(), "step failed", err, attrs...)
+			}
+
 			logs.Logger.Error("step failed",
 				"task_id", result.TaskID,
 				"step_index", pc,

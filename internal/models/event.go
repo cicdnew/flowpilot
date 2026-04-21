@@ -27,9 +27,30 @@ type QueueMetrics struct {
 	TotalSubmitted           int64 `json:"totalSubmitted"`
 	TotalCompleted           int64 `json:"totalCompleted"`
 	TotalFailed              int64 `json:"totalFailed"`
+	TotalRetried             int64 `json:"totalRetried"`
 	RunningProxied           int   `json:"runningProxied"`
 	ProxyConcurrencyLimit    int   `json:"proxyConcurrencyLimit"`
 	PersistenceQueueDepth    int   `json:"persistenceQueueDepth"`
 	PersistenceQueueCapacity int   `json:"persistenceQueueCapacity"`
 	PersistenceBatchSize     int   `json:"persistenceBatchSize"`
+	WorkerUtilizationPercent float64 `json:"workerUtilizationPercent"`
+	AvgStepDurationMs        float64 `json:"avgStepDurationMs"`
+	LastUpdated              time.Time `json:"lastUpdated"`
+}
+
+// ErrorContext captures detailed information about an error during task execution.
+type ErrorContext struct {
+	TaskID        string        `json:"taskId"`
+	StepIndex     int           `json:"stepIndex,omitempty"`
+	Action        string        `json:"action,omitempty"`
+	Selector      string        `json:"selector,omitempty"`
+	ProxyServer   string        `json:"proxyServer,omitempty"`
+	URL           string        `json:"url,omitempty"`
+	DurationMs    int64         `json:"durationMs"`
+	Timestamp     time.Time     `json:"timestamp"`
+	ErrorCode     string        `json:"errorCode"`
+	ErrorMessage  string        `json:"errorMessage"`
+	StackTrace    string        `json:"stackTrace,omitempty"`
+	Retryable     bool          `json:"retryable"`
+	RetryAttempt  int           `json:"retryAttempt,omitempty"`
 }

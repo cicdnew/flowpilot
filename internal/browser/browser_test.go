@@ -266,12 +266,12 @@ func TestRunStepsEmptySteps(t *testing.T) {
 	}
 
 	nl := logs.NewNetworkLogger(result.TaskID)
-	err := runner.runSteps(context.Background(), nil, result, nl, runner.resolveLoggingPolicy(models.Task{}))
+	err := runner.runSteps(context.Background(), models.Task{}, nil, result, nl, runner.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("runSteps with nil steps: %v", err)
 	}
 
-	err = runner.runSteps(context.Background(), []models.TaskStep{}, result, nl, runner.resolveLoggingPolicy(models.Task{}))
+	err = runner.runSteps(context.Background(), models.Task{}, []models.TaskStep{}, result, nl, runner.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("runSteps with empty steps: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestRunStepsStopsOnError(t *testing.T) {
 		{Action: "invalid_action_2"},
 	}
 
-	err := runner.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID), runner.resolveLoggingPolicy(models.Task{}))
+	err := runner.runSteps(context.Background(), models.Task{}, steps, result, logs.NewNetworkLogger(result.TaskID), runner.resolveLoggingPolicy(models.Task{}))
 	if err == nil {
 		t.Fatal("expected error from invalid steps")
 	}
@@ -988,7 +988,7 @@ func TestRunStepsWithMockSuccess(t *testing.T) {
 		{Action: models.ActionType, Selector: "#input", Value: "hello"},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID), r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, logs.NewNetworkLogger(result.TaskID), r.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1011,7 +1011,7 @@ func TestRunStepsWithMockStopsOnError(t *testing.T) {
 		{Action: models.ActionClick, Selector: "#btn"},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID), r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, logs.NewNetworkLogger(result.TaskID), r.resolveLoggingPolicy(models.Task{}))
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -1029,7 +1029,7 @@ func TestRunStepsCustomTimeout(t *testing.T) {
 		{Action: models.ActionNavigate, Value: "https://example.com", Timeout: 5000},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, logs.NewNetworkLogger(result.TaskID), r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, logs.NewNetworkLogger(result.TaskID), r.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1058,7 +1058,7 @@ func TestRunStepsSkipsScreenshotWhenDisabled(t *testing.T) {
 	captureScreenshots := false
 	policy := r.resolveLoggingPolicy(models.Task{LoggingPolicy: &models.TaskLoggingPolicy{CaptureScreenshots: &captureScreenshots}})
 
-	err := r.runSteps(context.Background(), []models.TaskStep{{Action: models.ActionScreenshot}}, result, logs.NewNetworkLogger(result.TaskID), policy)
+	err := r.runSteps(context.Background(), models.Task{}, []models.TaskStep{{Action: models.ActionScreenshot}}, result, logs.NewNetworkLogger(result.TaskID), policy)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1545,7 +1545,7 @@ func TestRunStepsWithLoop(t *testing.T) {
 		{Action: models.ActionEndLoop},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("loop execution failed: %v", err)
 	}
@@ -1569,7 +1569,7 @@ func TestRunStepsWithBreakLoop(t *testing.T) {
 		{Action: models.ActionEndLoop},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("break loop execution failed: %v", err)
 	}
@@ -1593,7 +1593,7 @@ func TestRunStepsWithGoto(t *testing.T) {
 		{Action: models.ActionNavigate, Value: "https://example.com", Label: "skipme"},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("goto execution failed: %v", err)
 	}
@@ -1613,7 +1613,7 @@ func TestRunStepsGotoLabelNotFound(t *testing.T) {
 		{Action: models.ActionGoto, JumpTo: "nonexistent"},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Errorf("expected label not found error, got: %v", err)
 	}
@@ -1630,7 +1630,7 @@ func TestRunStepsEndLoopWithoutLoop(t *testing.T) {
 		{Action: models.ActionEndLoop},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
 	if err == nil || !strings.Contains(err.Error(), "without matching loop") {
 		t.Errorf("expected mismatch error, got: %v", err)
 	}
@@ -1647,7 +1647,7 @@ func TestRunStepsBreakLoopWithoutLoop(t *testing.T) {
 		{Action: models.ActionBreakLoop},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
 	if err == nil || !strings.Contains(err.Error(), "without matching loop") {
 		t.Errorf("expected mismatch error, got: %v", err)
 	}
@@ -1667,7 +1667,7 @@ func TestRunStepsWithWhile(t *testing.T) {
 		{Action: models.ActionEndWhile},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("while execution failed: %v", err)
 	}
@@ -1684,7 +1684,7 @@ func TestRunStepsEndWhileWithoutWhile(t *testing.T) {
 		{Action: models.ActionEndWhile},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
 	if err == nil || !strings.Contains(err.Error(), "without matching while_condition") {
 		t.Errorf("expected mismatch error, got: %v", err)
 	}
@@ -1703,7 +1703,7 @@ func TestRunStepsIfElement(t *testing.T) {
 		{Action: models.ActionWait, Value: "1"},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("if_element execution failed: %v", err)
 	}
@@ -1723,7 +1723,7 @@ func TestRunStepsIfElementWithJumpTo(t *testing.T) {
 		{Action: models.ActionWait, Value: "1", Label: "target"},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("if_element jump execution failed: %v", err)
 	}
@@ -1742,7 +1742,7 @@ func TestRunStepsIfText(t *testing.T) {
 		{Action: models.ActionWait, Value: "1"},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("if_text execution failed: %v", err)
 	}
@@ -1761,7 +1761,7 @@ func TestRunStepsIfURL(t *testing.T) {
 		{Action: models.ActionWait, Value: "1"},
 	}
 
-	err := r.runSteps(context.Background(), steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
+	err := r.runSteps(context.Background(), models.Task{}, steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
 	if err != nil {
 		t.Fatalf("if_url execution failed: %v", err)
 	}
@@ -2317,7 +2317,7 @@ func TestRunStepsLoopAndEndLoop(t *testing.T) {
 		{Action: models.ActionEndLoop},
 	}
 	policy := resolvedLoggingPolicy{}
-	if err := runner.runSteps(context.Background(), steps, result, nil, policy); err != nil {
+	if err := runner.runSteps(context.Background(), models.Task{}, steps, result, nil, policy); err != nil {
 		t.Fatalf("runSteps loop: %v", err)
 	}
 }
@@ -2332,7 +2332,7 @@ func TestRunStepsGoto(t *testing.T) {
 		{Action: models.ActionGoto, Value: "end"},
 	}
 	policy := resolvedLoggingPolicy{}
-	err := runner.runSteps(context.Background(), steps, result, nil, policy)
+	err := runner.runSteps(context.Background(), models.Task{}, steps, result, nil, policy)
 	_ = err // goto to unknown label returns error; that's ok
 }
 
@@ -2342,7 +2342,7 @@ func TestRunStepsEndLoopNoMatchNew(t *testing.T) {
 	result := &models.TaskResult{ExtractedData: map[string]string{}, TaskID: "bad-el"}
 	steps := []models.TaskStep{{Action: models.ActionEndLoop}}
 	policy := resolvedLoggingPolicy{}
-	err := runner.runSteps(context.Background(), steps, result, nil, policy)
+	err := runner.runSteps(context.Background(), models.Task{}, steps, result, nil, policy)
 	if err == nil {
 		t.Fatal("expected error for end_loop without loop")
 	}
@@ -2358,7 +2358,7 @@ func TestRunStepsWhileCondNoCondition(t *testing.T) {
 		{Action: models.ActionEndWhile},
 	}
 	policy := resolvedLoggingPolicy{}
-	_ = runner.runSteps(context.Background(), steps, result, nil, policy)
+	_ = runner.runSteps(context.Background(), models.Task{}, steps, result, nil, policy)
 }
 
 func TestEvaluateConditionIfURL(t *testing.T) {
@@ -2444,7 +2444,7 @@ func TestRunStepsLoopZeroIterations(t *testing.T) {
 		{Action: models.ActionEndLoop},
 	}
 	policy := resolvedLoggingPolicy{}
-	if err := runner.runSteps(context.Background(), steps, result, nil, policy); err != nil {
+	if err := runner.runSteps(context.Background(), models.Task{}, steps, result, nil, policy); err != nil {
 		t.Fatalf("runSteps loop 0: %v", err)
 	}
 }
@@ -2459,7 +2459,7 @@ func TestRunStepsWhileLoop(t *testing.T) {
 		{Action: models.ActionEndWhile},
 	}
 	policy := resolvedLoggingPolicy{}
-	if err := runner.runSteps(context.Background(), steps, result, nil, policy); err != nil {
+	if err := runner.runSteps(context.Background(), models.Task{}, steps, result, nil, policy); err != nil {
 		t.Fatalf("runSteps while: %v", err)
 	}
 }
@@ -2475,7 +2475,7 @@ func TestRunStepsGotoKnownLabel(t *testing.T) {
 		{Action: models.ActionNavigate, Value: "https://end.com", Label: "end"},
 	}
 	policy := resolvedLoggingPolicy{}
-	_ = runner.runSteps(context.Background(), steps, result, nil, policy)
+	_ = runner.runSteps(context.Background(), models.Task{}, steps, result, nil, policy)
 }
 
 func TestRunStepsPauseAndResume(t *testing.T) {
@@ -2489,7 +2489,7 @@ func TestRunStepsPauseAndResume(t *testing.T) {
 	policy := resolvedLoggingPolicy{}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	_ = runner.runSteps(ctx, steps, result, nil, policy)
+	_ = runner.runSteps(ctx, models.Task{}, steps, result, nil, policy)
 }
 
 func TestExecGetCookiesDefaultVarName(t *testing.T) {

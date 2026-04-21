@@ -216,15 +216,20 @@ func (a *App) initQueueAndBatch(ctx context.Context) error {
 
 	a.batchEngine = batch.New(a.db)
 	a.repeatEngine = repeat.New(a.db)
-	
+
 	// Initialize monitoring
 	a.monitor = monitoring.New()
 	a.logger = monitoring.NewStructuredLogger(monitoring.LogLevelInfo, 10000)
 	a.setupDefaultAlerts()
-	
+
+	// Wire monitor and logger to queue and runner
+	a.queue.SetMonitor(a.monitor)
+	a.runner.SetMonitor(a.monitor)
+	a.runner.SetLogger(a.logger)
+
 	// Start monitoring loop
 	go a.startMonitoringLoop(ctx)
-	
+
 	return nil
 }
 
@@ -269,7 +274,7 @@ func (a *App) initBrowserAndPool(ctx context.Context) error {
 	a.runner = runner
 	a.localProxyManager = localproxy.NewManager(5 * time.Minute)
 	a.runner.SetLocalProxyManager(a.localProxyManager)
-	
+
 	stepLogs := a.config.CaptureStepLogs
 	networkLogs := a.config.CaptureNetworkLogs
 	screenshots := a.config.CaptureScreenshots

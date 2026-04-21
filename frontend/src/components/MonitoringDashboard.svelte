@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { 
-    GetMonitoringMetrics, 
-    GetSystemHealth, 
-    GetRecentLogs, 
-    GetLogStats 
+  import {
+    GetMonitoringMetrics,
+    GetSystemHealth,
+    GetRecentLogs,
+    GetLogStats,
+    GetQueueMetrics
   } from '../../wailsjs/go/main/App';
+  import type { QueueMetrics } from '../lib/types';
 
   interface RepeatTaskMetrics {
     totalRepeatedBatches: number;
@@ -54,25 +56,29 @@
 
   let repeatMetrics: RepeatTaskMetrics | null = null;
   let health: HealthStatus | null = null;
+  let queueMetrics: QueueMetrics | null = null;
   let recentLogs: LogEntry[] = [];
   let logStats: LogStats | null = null;
+  let activeAlerts: any[] = []; // TODO: define proper AlertFiring type
   let refreshInterval: number;
   let loading = true;
   let error = '';
 
   async function loadData() {
     try {
-      const [metrics, healthData, logs, stats] = await Promise.all([
+      const [metrics, healthData, logs, stats, qMetrics] = await Promise.all([
         GetMonitoringMetrics(),
         GetSystemHealth(),
         GetRecentLogs(50),
-        GetLogStats()
+        GetLogStats(),
+        GetQueueMetrics()
       ]);
       
       repeatMetrics = metrics;
       health = healthData;
       recentLogs = logs;
       logStats = stats;
+      queueMetrics = qMetrics;
       error = '';
     } catch (err: any) {
       error = err?.message || String(err);
@@ -248,9 +254,47 @@
           </div>
         </div>
       </div>
-    {/if}
+     {/if}
 
-    <!-- Recent Logs -->
+     <!-- Queue Performance -->
+     {#if health}
+       <div class="section">
+         <h2>Queue Performance</h2>
+         <div class="metrics-grid">
+           <div class="metric-card">
+             <div class="metric-value">{health.systemMetrics?.avgStepDurationMs ? health.systemMetrics.avgStepDurationMs.toFixed(1) + ' ms' : 'N/A'}</div>
+             <div class="metric-label">Avg Step Duration</div>
+           </div>
+           <div class="metric-card">
+             <div class="metric-value">{health.systemMetrics?.workerUtilizationPercent ? health.systemMetrics.workerUtilizationPercent.toFixed(1) + '%' : 'N/A'}</div>
+             <div class="metric-label">Worker Utilization</div>
+           </div>
+         </div>
+       </div>
+     {/if}
+
+     <!-- Active Alerts -->
+     {#if activeAlerts?.length}
+       <div class="section">
+         <h2>Active Alerts ({activeAlerts.length})</h2>
+         <div class="alerts-list">
+           {#each activeAlerts as alert}
+             <div class="alert-item alert--{alert.severity}">
+               <div class="alert-header">
+                 <span class="alert-severity">{alert.severity.toUpperCase()}</span>
+                 <span class="alert-rule">{alert.ruleName}</span>
+               </div>
+               <div class="alert-body">
+                 <div>Value: <strong>{alert.value.toFixed(2)}</strong> / Threshold: {alert.threshold}</div>
+                 <div class="alert-time">Fired at: {new Date(alert.fired_at).toLocaleString()}</div>
+               </div>
+             </div>
+           {/each}
+         </div>
+       </div>
+     {/if}
+
+     <!-- Recent Logs -->
     <div class="section">
       <h2>Recent Logs</h2>
       {#if logStats}

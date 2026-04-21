@@ -387,9 +387,40 @@ func (db *DB) migrate() error {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
+	CREATE TABLE IF NOT EXISTS alert_rules (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		description TEXT NOT NULL,
+		metric TEXT NOT NULL,
+		condition TEXT NOT NULL,
+		threshold REAL NOT NULL,
+		window_secs INTEGER DEFAULT 60,
+		cooldown_secs INTEGER DEFAULT 300,
+		severity TEXT NOT NULL,
+		enabled INTEGER DEFAULT 1,
+		webhook_url TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS alert_firings (
+		id TEXT PRIMARY KEY,
+		rule_id TEXT NOT NULL,
+		rule_name TEXT NOT NULL,
+		severity TEXT NOT NULL,
+		value REAL NOT NULL,
+		threshold REAL NOT NULL,
+		fired_at DATETIME NOT NULL,
+		resolved_at DATETIME,
+		notified INTEGER DEFAULT 0,
+		FOREIGN KEY (rule_id) REFERENCES alert_rules(id)
+	);
+
 	CREATE INDEX IF NOT EXISTS idx_visual_baselines_url ON visual_baselines(url);
 	CREATE INDEX IF NOT EXISTS idx_visual_diffs_baseline ON visual_diffs(baseline_id);
 	CREATE INDEX IF NOT EXISTS idx_visual_diffs_task ON visual_diffs(task_id);
+	CREATE INDEX IF NOT EXISTS idx_alert_firings_rule ON alert_firings(rule_id);
+	CREATE INDEX IF NOT EXISTS idx_alert_firings_fired_at ON alert_firings(fired_at);
+	CREATE INDEX IF NOT EXISTS idx_alert_firings_active ON alert_firings(resolved_at);
 
 	CREATE INDEX IF NOT EXISTS idx_tasks_status_priority ON tasks(status, priority DESC, created_at ASC);
 	CREATE INDEX IF NOT EXISTS idx_tasks_batch_status ON tasks(batch_id, status);

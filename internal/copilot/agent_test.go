@@ -828,7 +828,7 @@ func TestToolGetTask_ReturnsTaskFields(t *testing.T) {
 	task := models.Task{
 		ID:          "tgt-1",
 		Name:        "sample task",
-		URL:         "https://example.com",
+		URL:         "http://chhotu-bin.infy.uk",
 		Status:      models.TaskStatusCompleted,
 		Steps:       []models.TaskStep{{Action: models.ActionNavigate}, {Action: models.ActionClick}},
 		CreatedAt:   now,
@@ -854,8 +854,8 @@ func TestToolGetTask_ReturnsTaskFields(t *testing.T) {
 	if m["name"] != "sample task" {
 		t.Errorf("name = %v; want %q", m["name"], "sample task")
 	}
-	if m["url"] != "https://example.com" {
-		t.Errorf("url = %v; want %q", m["url"], "https://example.com")
+	if m["url"] != "http://chhotu-bin.infy.uk" {
+		t.Errorf("url = %v; want %q", m["url"], "http://chhotu-bin.infy.uk")
 	}
 	if got, _ := m["steps_count"].(int); got != 2 {
 		t.Errorf("steps_count = %v; want 2", m["steps_count"])
@@ -891,7 +891,7 @@ func TestToolCancelTask_CancelsSuccessfully(t *testing.T) {
 	task := models.Task{
 		ID:        "tct-1",
 		Name:      "cancellable task",
-		URL:       "https://example.com",
+		URL:       "http://chhotu-bin.infy.uk",
 		Status:    models.TaskStatusPending,
 		Steps:     []models.TaskStep{{Action: models.ActionNavigate}},
 		CreatedAt: time.Now(),
@@ -939,7 +939,7 @@ func TestToolRetryTask_ResetsPendingStatus(t *testing.T) {
 	task := models.Task{
 		ID:         "trt-1",
 		Name:       "failed task",
-		URL:        "https://example.com",
+		URL:        "http://chhotu-bin.infy.uk",
 		Status:     models.TaskStatusFailed,
 		Error:      "network error",
 		RetryCount: 2,
@@ -999,7 +999,7 @@ func TestToolGetBatchProgress_CountsByStatus(t *testing.T) {
 		task := models.Task{
 			ID:        fmt.Sprintf("tbp-%d", i),
 			Name:      fmt.Sprintf("batch task %d", i),
-			URL:       "https://example.com",
+			URL:       "http://chhotu-bin.infy.uk",
 			Status:    s,
 			BatchID:   batchID,
 			Steps:     []models.TaskStep{{Action: models.ActionNavigate}},
@@ -1057,7 +1057,7 @@ func TestToolCancelBatch_CancelsActiveTasks(t *testing.T) {
 		task := models.Task{
 			ID:        s.id,
 			Name:      "batch cancel task",
-			URL:       "https://example.com",
+			URL:       "http://chhotu-bin.infy.uk",
 			Status:    s.status,
 			BatchID:   batchID,
 			Steps:     []models.TaskStep{{Action: models.ActionNavigate}},
@@ -1096,7 +1096,7 @@ func TestToolGetTaskLogs_ReturnsStepLogs(t *testing.T) {
 	task := models.Task{
 		ID:        "tgl-1",
 		Name:      "log task",
-		URL:       "https://example.com",
+		URL:       "http://chhotu-bin.infy.uk",
 		Status:    models.TaskStatusCompleted,
 		Steps:     []models.TaskStep{{Action: models.ActionNavigate}},
 		CreatedAt: time.Now(),
@@ -1140,7 +1140,7 @@ func TestToolGetTaskLogs_LimitApplied(t *testing.T) {
 	task := models.Task{
 		ID:        "tgl-lim-1",
 		Name:      "log limit task",
-		URL:       "https://example.com",
+		URL:       "http://chhotu-bin.infy.uk",
 		Status:    models.TaskStatusCompleted,
 		Steps:     []models.TaskStep{{Action: models.ActionNavigate}},
 		CreatedAt: time.Now(),
@@ -1182,7 +1182,7 @@ func TestToolAddProxy_CreatesProxy(t *testing.T) {
 	ctx := context.Background()
 
 	result, err := flow.tools["add_proxy"].Handler(ctx, map[string]any{
-		"server":   "proxy.example.com:8080",
+		"server":   "proxy.chhotu-bin.infy.uk:8080",
 		"protocol": "http",
 		"username": "user1",
 		"password": "pass1",
@@ -1196,8 +1196,8 @@ func TestToolAddProxy_CreatesProxy(t *testing.T) {
 	if !ok {
 		t.Fatalf("result type = %T; want map[string]any", result)
 	}
-	if m["server"] != "proxy.example.com:8080" {
-		t.Errorf("server = %v; want %q", m["server"], "proxy.example.com:8080")
+	if m["server"] != "proxy.chhotu-bin.infy.uk:8080" {
+		t.Errorf("server = %v; want %q", m["server"], "proxy.chhotu-bin.infy.uk:8080")
 	}
 	proxyID, _ := m["proxy_id"].(string)
 	if proxyID == "" {
@@ -1234,7 +1234,7 @@ func TestToolDeleteProxy_RemovesProxy(t *testing.T) {
 	ctx := context.Background()
 
 	addResult, err := flow.tools["add_proxy"].Handler(ctx, map[string]any{
-		"server":   "todelete.example.com:3128",
+		"server":   "todelete.chhotu-bin.infy.uk:3128",
 		"protocol": "http",
 	})
 	if err != nil {

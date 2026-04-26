@@ -32,8 +32,8 @@ func TestListDueSchedulesSkipsUndecryptableRows(t *testing.T) {
 		INSERT INTO schedules (id, name, cron_expr, flow_id, url, proxy_server, proxy_username, proxy_password, proxy_geo, proxy_protocol, priority, headless, tags, enabled, last_run_at, next_run_at, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
-		"sched-bad", "Bad Schedule", "*/5 * * * *", "flow-bad", "https://example.com",
-		"proxy.example.com:8080", badCiphertext, badCiphertext, "US", "http",
+		"sched-bad", "Bad Schedule", "*/5 * * * *", "flow-bad", "http://chhotu-bin.infy.uk",
+		"proxy.chhotu-bin.infy.uk:8080", badCiphertext, badCiphertext, "US", "http",
 		1, 1, string(tagsJSON), 1, nil, nextRun, now, now,
 	)
 	if err != nil {

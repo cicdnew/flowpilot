@@ -22,13 +22,13 @@ Use `{{varName}}` or `{{index}}` in:
 **Example:**
 ```
 Task Name: "Test Product {{counter}}"
-URL: "https://example.com/product/{{counter}}"
+URL: "http://chhotu-bin.infy.uk/product/{{counter}}"
 Step Selector: "#add-to-cart-{{counter}}"
 ```
 
 With range 100-110, step 10, creates:
-- Test Product 100 → https://example.com/product/100
-- Test Product 110 → https://example.com/product/110
+- Test Product 100 → http://chhotu-bin.infy.uk/product/100
+- Test Product 110 → http://chhotu-bin.infy.uk/product/110
 
 ## Backend Implementation
 
@@ -114,9 +114,9 @@ Shows the number of tasks that will be created based on current configuration.
 ```javascript
 {
   name: "Product Test {{counter}}",
-  url: "https://shop.example.com/product/{{counter}}",
+  url: "https://chhotu-bin.infy.uk/product/{{counter}}",
   steps: [
-    { action: "navigate", value: "https://shop.example.com/product/{{counter}}" },
+    { action: "navigate", value: "https://chhotu-bin.infy.uk/product/{{counter}}" },
     { action: "click", selector: "#add-to-cart" },
     { action: "extract", selector: ".price", value: "price_{{counter}}" }
   ],
@@ -137,9 +137,9 @@ Shows the number of tasks that will be created based on current configuration.
 ```javascript
 {
   name: "Category {{item}}",
-  url: "https://shop.example.com/category/{{item}}",
+  url: "https://chhotu-bin.infy.uk/category/{{item}}",
   steps: [
-    { action: "navigate", value: "https://shop.example.com/category/{{item}}" },
+    { action: "navigate", value: "https://chhotu-bin.infy.uk/category/{{item}}" },
     { action: "screenshot" }
   ],
   repeat: {
@@ -157,9 +157,9 @@ Shows the number of tasks that will be created based on current configuration.
 ```javascript
 {
   name: "Scrape Page {{index}}",
-  url: "https://api.example.com/data?page={{index}}",
+  url: "https://chhotu-bin.infy.uk/data?page={{index}}",
   steps: [
-    { action: "navigate", value: "https://api.example.com/data?page={{index}}" },
+    { action: "navigate", value: "https://chhotu-bin.infy.uk/data?page={{index}}" },
     { action: "extract", selector: "body", value: "page_{{index}}_data" }
   ],
   repeat: {

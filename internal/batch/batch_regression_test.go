@@ -24,7 +24,7 @@ func TestCreateBatchFromFlow_PropagatesTimeoutAndLoggingPolicy(t *testing.T) {
 	flow := makeFlow()
 	group, tasks, err := engine.CreateBatchFromFlow(context.Background(), flow, models.AdvancedBatchInput{
 		FlowID:        flow.ID,
-		URLs:          []string{"https://one.example.com"},
+		URLs:          []string{"https://one.chhotu-bin.infy.uk"},
 		Priority:      int(models.PriorityNormal),
 		Timeout:       90,
 		LoggingPolicy: loggingPolicy,

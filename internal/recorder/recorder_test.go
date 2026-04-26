@@ -34,7 +34,7 @@ func TestRecordStep(t *testing.T) {
 
 	r.RecordStep(models.ActionClick, "#btn", "")
 	r.RecordStep(models.ActionType, "#input", "hello")
-	r.RecordStep(models.ActionNavigate, "", "https://example.com")
+	r.RecordStep(models.ActionNavigate, "", "http://chhotu-bin.infy.uk")
 
 	if len(captured) != 3 {
 		t.Fatalf("expected 3 captured steps, got %d", len(captured))
@@ -63,7 +63,7 @@ func TestRecordStep(t *testing.T) {
 	if captured[2].Action != models.ActionNavigate {
 		t.Errorf("step[2].Action: got %q, want %q", captured[2].Action, models.ActionNavigate)
 	}
-	if captured[2].Value != "https://example.com" {
+	if captured[2].Value != "http://chhotu-bin.infy.uk" {
 		t.Errorf("step[2].Value: got %q", captured[2].Value)
 	}
 
@@ -688,7 +688,7 @@ func TestHandleEventFrameNavigated(t *testing.T) {
 
 	r.handleEvent(&page.EventFrameNavigated{
 		Frame: &cdp.Frame{
-			URL: "https://example.com",
+			URL: "http://chhotu-bin.infy.uk",
 		},
 	})
 
@@ -698,7 +698,7 @@ func TestHandleEventFrameNavigated(t *testing.T) {
 	if captured[0].Action != models.ActionNavigate {
 		t.Errorf("expected navigate action, got %q", captured[0].Action)
 	}
-	if captured[0].Value != "https://example.com" {
+	if captured[0].Value != "http://chhotu-bin.infy.uk" {
 		t.Errorf("expected URL in value, got %q", captured[0].Value)
 	}
 }
@@ -716,7 +716,7 @@ func TestHandleEventFrameNavigatedSubframe(t *testing.T) {
 	r.handleEvent(&page.EventFrameNavigated{
 		Frame: &cdp.Frame{
 			ParentID: "parent-frame",
-			URL:      "https://example.com/iframe",
+			URL:      "http://chhotu-bin.infy.uk/iframe",
 		},
 	})
 
@@ -784,7 +784,7 @@ func TestHandleEventTargetInfoChangedSameTab(t *testing.T) {
 		TargetInfo: &target.Info{
 			TargetID: target.ID("tab-1"),
 			Type:     "page",
-			URL:      "https://example.com",
+			URL:      "http://chhotu-bin.infy.uk",
 		},
 	})
 
@@ -804,7 +804,7 @@ func TestHandleEventTargetInfoChangedInitialTab(t *testing.T) {
 		TargetInfo: &target.Info{
 			TargetID: target.ID("tab-1"),
 			Type:     "page",
-			URL:      "https://example.com",
+			URL:      "http://chhotu-bin.infy.uk",
 		},
 	})
 
@@ -838,7 +838,7 @@ func TestHandleEventTargetInfoChangedNonPage(t *testing.T) {
 		TargetInfo: &target.Info{
 			TargetID: target.ID("sw-1"),
 			Type:     "service_worker",
-			URL:      "https://example.com/sw.js",
+			URL:      "http://chhotu-bin.infy.uk/sw.js",
 		},
 	})
 
@@ -856,12 +856,12 @@ func TestHandleEventNetworkRequest(t *testing.T) {
 
 	r.handleEvent(&network.EventRequestWillBeSent{
 		RequestID: "req-1",
-		Request:   &network.Request{URL: "https://example.com/api"},
+		Request:   &network.Request{URL: "http://chhotu-bin.infy.uk/api"},
 	})
 
 	r.handleEvent(&network.EventResponseReceived{
 		RequestID: "req-1",
-		Response:  &network.Response{URL: "https://example.com/api", Status: 200},
+		Response:  &network.Response{URL: "http://chhotu-bin.infy.uk/api", Status: 200},
 	})
 
 	r.handleEvent(&network.EventLoadingFinished{
@@ -883,12 +883,12 @@ func TestHandleEventNetworkResponse(t *testing.T) {
 
 	r.handleEvent(&network.EventRequestWillBeSent{
 		RequestID: "req-1",
-		Request:   &network.Request{URL: "https://example.com/api"},
+		Request:   &network.Request{URL: "http://chhotu-bin.infy.uk/api"},
 	})
 
 	r.handleEvent(&network.EventResponseReceived{
 		RequestID: "req-1",
-		Response:  &network.Response{URL: "https://example.com/api", Status: 200},
+		Response:  &network.Response{URL: "http://chhotu-bin.infy.uk/api", Status: 200},
 	})
 }
 
@@ -913,7 +913,7 @@ func TestHandleEventWebSocket(t *testing.T) {
 
 	r.handleEvent(&network.EventWebSocketCreated{
 		RequestID: "ws-1",
-		URL:       "wss://example.com/ws",
+		URL:       "wss://chhotu-bin.infy.uk/ws",
 	})
 	r.handleEvent(&network.EventWebSocketHandshakeResponseReceived{
 		RequestID: "ws-1",
@@ -948,7 +948,7 @@ func TestHandleEventNilLoggers(t *testing.T) {
 
 	r.handleEvent(&network.EventRequestWillBeSent{
 		RequestID: "req-1",
-		Request:   &network.Request{URL: "https://example.com"},
+		Request:   &network.Request{URL: "http://chhotu-bin.infy.uk"},
 	})
 	r.handleEvent(&network.EventResponseReceived{
 		RequestID: "req-1",

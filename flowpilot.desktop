@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=FlowPilot
+Comment=Electron-based web testing & authorized data extraction tool
+Exec=/root/flowpilot/build/bin/flowpilot
+Icon=/root/flowpilot/frontend/src/assets/logo-universal.png
+Terminal=false
+Categories=Development;Testing;
+StartupNotify=true

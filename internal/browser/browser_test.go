@@ -332,7 +332,7 @@ func TestCreateAllocatorWithProxy(t *testing.T) {
 	runner := &Runner{screenshotDir: t.TempDir(), exec: chromeExecutor{}}
 
 	proxy := models.ProxyConfig{
-		Server:   "proxy.example.com:8080",
+		Server:   "proxy.chhotu-bin.infy.uk:8080",
 		Username: "user",
 		Password: "pass",
 	}
@@ -354,7 +354,7 @@ func TestCreateAllocatorDoesNotMutateDefaults(t *testing.T) {
 	ctx := context.Background()
 	for i := 0; i < 10; i++ {
 		_, cancel := runner.createAllocator(ctx, models.ProxyConfig{
-			Server: "proxy.example.com:8080",
+			Server: "proxy.chhotu-bin.infy.uk:8080",
 		}, true)
 		cancel()
 	}
@@ -688,7 +688,7 @@ func TestExecNavigateWithMock(t *testing.T) {
 	mock := &mockExecutor{}
 	r := newMockRunner(t, mock)
 
-	err := r.execNavigate(context.Background(), models.TaskStep{Action: models.ActionNavigate, Value: "https://example.com"})
+	err := r.execNavigate(context.Background(), models.TaskStep{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -701,7 +701,7 @@ func TestExecNavigateError(t *testing.T) {
 	mock := &mockExecutor{runErr: errors.New("nav failed")}
 	r := newMockRunner(t, mock)
 
-	err := r.execNavigate(context.Background(), models.TaskStep{Value: "https://example.com"})
+	err := r.execNavigate(context.Background(), models.TaskStep{Value: "http://chhotu-bin.infy.uk"})
 	if err == nil || err.Error() != "nav failed" {
 		t.Fatalf("expected 'nav failed', got: %v", err)
 	}
@@ -917,7 +917,7 @@ func TestExecExtractError(t *testing.T) {
 func TestExecTabSwitchFound(t *testing.T) {
 	mock := &mockExecutor{
 		targets: []*target.Info{
-			{Type: "page", URL: "https://example.com"},
+			{Type: "page", URL: "http://chhotu-bin.infy.uk"},
 			{Type: "page", URL: "https://other.com"},
 		},
 	}
@@ -935,7 +935,7 @@ func TestExecTabSwitchFound(t *testing.T) {
 func TestExecTabSwitchNotFound(t *testing.T) {
 	mock := &mockExecutor{
 		targets: []*target.Info{
-			{Type: "page", URL: "https://example.com"},
+			{Type: "page", URL: "http://chhotu-bin.infy.uk"},
 		},
 	}
 	r := newMockRunner(t, mock)
@@ -953,7 +953,7 @@ func TestExecTabSwitchTargetsError(t *testing.T) {
 	mock := &mockExecutor{targErr: errors.New("targets failed")}
 	r := newMockRunner(t, mock)
 
-	err := r.execTabSwitch(context.Background(), models.TaskStep{Value: "https://example.com"})
+	err := r.execTabSwitch(context.Background(), models.TaskStep{Value: "http://chhotu-bin.infy.uk"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -965,13 +965,13 @@ func TestExecTabSwitchTargetsError(t *testing.T) {
 func TestExecTabSwitchSkipsNonPage(t *testing.T) {
 	mock := &mockExecutor{
 		targets: []*target.Info{
-			{Type: "background_page", URL: "https://example.com"},
-			{Type: "service_worker", URL: "https://example.com"},
+			{Type: "background_page", URL: "http://chhotu-bin.infy.uk"},
+			{Type: "service_worker", URL: "http://chhotu-bin.infy.uk"},
 		},
 	}
 	r := newMockRunner(t, mock)
 
-	err := r.execTabSwitch(context.Background(), models.TaskStep{Value: "https://example.com"})
+	err := r.execTabSwitch(context.Background(), models.TaskStep{Value: "http://chhotu-bin.infy.uk"})
 	if err == nil {
 		t.Fatal("expected not-found error when only non-page targets exist")
 	}
@@ -983,7 +983,7 @@ func TestRunStepsWithMockSuccess(t *testing.T) {
 	result := &models.TaskResult{TaskID: "steps-ok", ExtractedData: make(map[string]string)}
 
 	steps := []models.TaskStep{
-		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		{Action: models.ActionClick, Selector: "#btn"},
 		{Action: models.ActionType, Selector: "#input", Value: "hello"},
 	}
@@ -1006,7 +1006,7 @@ func TestRunStepsWithMockStopsOnError(t *testing.T) {
 	result := &models.TaskResult{TaskID: "steps-err", ExtractedData: make(map[string]string)}
 
 	steps := []models.TaskStep{
-		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		{Action: "bad_action"},
 		{Action: models.ActionClick, Selector: "#btn"},
 	}
@@ -1026,7 +1026,7 @@ func TestRunStepsCustomTimeout(t *testing.T) {
 	result := &models.TaskResult{TaskID: "steps-timeout", ExtractedData: make(map[string]string)}
 
 	steps := []models.TaskStep{
-		{Action: models.ActionNavigate, Value: "https://example.com", Timeout: 5000},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk", Timeout: 5000},
 	}
 
 	err := r.runSteps(context.Background(), models.Task{}, steps, result, logs.NewNetworkLogger(result.TaskID), r.resolveLoggingPolicy(models.Task{}))
@@ -1149,7 +1149,7 @@ func TestRunTaskWithSteps(t *testing.T) {
 		ID:       "task-2",
 		Headless: true,
 		Steps: []models.TaskStep{
-			{Action: models.ActionNavigate, Value: "https://example.com"},
+			{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 			{Action: models.ActionClick, Selector: "#btn"},
 		},
 	}
@@ -1179,7 +1179,7 @@ func TestRunTaskWithProxy(t *testing.T) {
 			Password: "pass",
 		},
 		Steps: []models.TaskStep{
-			{Action: models.ActionNavigate, Value: "https://example.com"},
+			{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		},
 	}
 
@@ -1208,7 +1208,7 @@ func TestRunTaskProxyAuthFails(t *testing.T) {
 			Password: "pass",
 		},
 		Steps: []models.TaskStep{
-			{Action: models.ActionNavigate, Value: "https://example.com"},
+			{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		},
 	}
 
@@ -1245,7 +1245,7 @@ func TestRunTaskStepFails(t *testing.T) {
 		ID:       "task-step-fail",
 		Headless: true,
 		Steps: []models.TaskStep{
-			{Action: models.ActionNavigate, Value: "https://example.com"},
+			{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 			{Action: models.ActionClick, Selector: "#btn"},
 		},
 	}
@@ -1293,7 +1293,7 @@ func TestCreateAllocatorWithProtocol(t *testing.T) {
 	r := &Runner{screenshotDir: t.TempDir(), exec: chromeExecutor{}}
 
 	proxy := models.ProxyConfig{
-		Server:   "proxy.example.com:1080",
+		Server:   "proxy.chhotu-bin.infy.uk:1080",
 		Protocol: models.ProxySOCKS5,
 	}
 
@@ -1334,7 +1334,7 @@ func TestExecuteStepAllActionsWithMock(t *testing.T) {
 		selector string
 		value    string
 	}{
-		{models.ActionNavigate, "", "https://example.com"},
+		{models.ActionNavigate, "", "http://chhotu-bin.infy.uk"},
 		{models.ActionClick, "#btn", ""},
 		{models.ActionType, "#input", "text"},
 		{models.ActionWait, "#elem", ""},
@@ -1364,12 +1364,12 @@ func TestExecuteStepAllActionsWithMock(t *testing.T) {
 
 func TestExecuteStepTabSwitchWithMock(t *testing.T) {
 	mock := &mockExecutor{
-		targets: []*target.Info{{Type: "page", URL: "https://example.com"}},
+		targets: []*target.Info{{Type: "page", URL: "http://chhotu-bin.infy.uk"}},
 	}
 	r := newMockRunner(t, mock)
 	result := &models.TaskResult{TaskID: "tab", ExtractedData: make(map[string]string)}
 
-	step := models.TaskStep{Action: models.ActionTabSwitch, Value: "https://example.com"}
+	step := models.TaskStep{Action: models.ActionTabSwitch, Value: "http://chhotu-bin.infy.uk"}
 	err := r.executeStep(context.Background(), step, result)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1395,7 +1395,7 @@ func TestExecNavigateHTTPStatus404(t *testing.T) {
 	}
 	r := newMockRunner(t, mock)
 
-	err := r.execNavigate(context.Background(), models.TaskStep{Value: "https://example.com/missing"})
+	err := r.execNavigate(context.Background(), models.TaskStep{Value: "http://chhotu-bin.infy.uk/missing"})
 	if err == nil {
 		t.Fatal("expected error for HTTP 404")
 	}
@@ -1410,7 +1410,7 @@ func TestExecNavigateHTTPStatus200(t *testing.T) {
 	}
 	r := newMockRunner(t, mock)
 
-	err := r.execNavigate(context.Background(), models.TaskStep{Value: "https://example.com"})
+	err := r.execNavigate(context.Background(), models.TaskStep{Value: "http://chhotu-bin.infy.uk"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1420,7 +1420,7 @@ func TestExecNavigateNilResponse(t *testing.T) {
 	mock := &mockExecutor{}
 	r := newMockRunner(t, mock)
 
-	err := r.execNavigate(context.Background(), models.TaskStep{Value: "https://example.com"})
+	err := r.execNavigate(context.Background(), models.TaskStep{Value: "http://chhotu-bin.infy.uk"})
 	if err != nil {
 		t.Fatalf("unexpected error for nil response: %v", err)
 	}
@@ -1430,7 +1430,7 @@ func TestExecNavigateRunResponseError(t *testing.T) {
 	mock := &mockExecutor{runRespErr: errors.New("connection refused")}
 	r := newMockRunner(t, mock)
 
-	err := r.execNavigate(context.Background(), models.TaskStep{Value: "https://example.com"})
+	err := r.execNavigate(context.Background(), models.TaskStep{Value: "http://chhotu-bin.infy.uk"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -1541,7 +1541,7 @@ func TestRunStepsWithLoop(t *testing.T) {
 
 	steps := []models.TaskStep{
 		{Action: models.ActionLoop, Value: "2"},
-		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		{Action: models.ActionEndLoop},
 	}
 
@@ -1564,7 +1564,7 @@ func TestRunStepsWithBreakLoop(t *testing.T) {
 
 	steps := []models.TaskStep{
 		{Action: models.ActionLoop, Value: "10"},
-		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		{Action: models.ActionBreakLoop},
 		{Action: models.ActionEndLoop},
 	}
@@ -1587,10 +1587,10 @@ func TestRunStepsWithGoto(t *testing.T) {
 	}
 
 	steps := []models.TaskStep{
-		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		{Action: models.ActionGoto, JumpTo: "skipme"},
-		{Action: models.ActionNavigate, Value: "https://example.com"},
-		{Action: models.ActionNavigate, Value: "https://example.com", Label: "skipme"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk", Label: "skipme"},
 	}
 
 	err := r.runSteps(context.Background(), models.Task{}, steps, result, nil, r.resolveLoggingPolicy(models.Task{}))
@@ -2313,7 +2313,7 @@ func TestRunStepsLoopAndEndLoop(t *testing.T) {
 	result := &models.TaskResult{ExtractedData: map[string]string{}, TaskID: "loop-test"}
 	steps := []models.TaskStep{
 		{Action: models.ActionLoop, Value: "2"},
-		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		{Action: models.ActionEndLoop},
 	}
 	policy := resolvedLoggingPolicy{}
@@ -2354,7 +2354,7 @@ func TestRunStepsWhileCondNoCondition(t *testing.T) {
 	result := &models.TaskResult{ExtractedData: map[string]string{}, TaskID: "while-cond"}
 	steps := []models.TaskStep{
 		{Action: models.ActionWhile, Condition: "", Selector: "", MaxLoops: 1},
-		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		{Action: models.ActionEndWhile},
 	}
 	policy := resolvedLoggingPolicy{}
@@ -2440,7 +2440,7 @@ func TestRunStepsLoopZeroIterations(t *testing.T) {
 	result := &models.TaskResult{ExtractedData: map[string]string{}, TaskID: "loop-zero"}
 	steps := []models.TaskStep{
 		{Action: models.ActionLoop, Value: "0"},
-		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		{Action: models.ActionEndLoop},
 	}
 	policy := resolvedLoggingPolicy{}
@@ -2455,7 +2455,7 @@ func TestRunStepsWhileLoop(t *testing.T) {
 	result := &models.TaskResult{ExtractedData: map[string]string{}, TaskID: "while-loop"}
 	steps := []models.TaskStep{
 		{Action: models.ActionWhile, Condition: "exists", Selector: "#btn", MaxLoops: 1},
-		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		{Action: models.ActionEndWhile},
 	}
 	policy := resolvedLoggingPolicy{}
@@ -2469,7 +2469,7 @@ func TestRunStepsGotoKnownLabel(t *testing.T) {
 	runner := newMockRunner(t, exec)
 	result := &models.TaskResult{ExtractedData: map[string]string{}, TaskID: "goto-known"}
 	steps := []models.TaskStep{
-		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		{Action: models.ActionGoto, Value: "end"},
 		{Action: models.ActionClick, Selector: "#skipped"},
 		{Action: models.ActionNavigate, Value: "https://end.com", Label: "end"},
@@ -2484,7 +2484,7 @@ func TestRunStepsPauseAndResume(t *testing.T) {
 	runner.SetForceHeadless(false)
 	result := &models.TaskResult{ExtractedData: map[string]string{}, TaskID: "pause-res"}
 	steps := []models.TaskStep{
-		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 	}
 	policy := resolvedLoggingPolicy{}
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)

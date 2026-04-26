@@ -183,9 +183,9 @@ func TestCreateRepeatedTasks(t *testing.T) {
 
 	input := models.RepeatTaskInput{
 		Name: "Test Task {{counter}}",
-		URL:  "https://example.com/page/{{counter}}",
+		URL:  "http://chhotu-bin.infy.uk/page/{{counter}}",
 		Steps: []models.TaskStep{
-			{Action: models.ActionNavigate, Value: "https://example.com/page/{{counter}}"},
+			{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk/page/{{counter}}"},
 			{Action: models.ActionClick, Selector: "#item-{{counter}}"},
 		},
 		Repeat: models.RepeatConfig{
@@ -214,9 +214,9 @@ func TestCreateRepeatedTasks(t *testing.T) {
 	// Verify task substitutions
 	expectedNames := []string{"Test Task 1", "Test Task 2", "Test Task 3"}
 	expectedURLs := []string{
-		"https://example.com/page/1",
-		"https://example.com/page/2",
-		"https://example.com/page/3",
+		"http://chhotu-bin.infy.uk/page/1",
+		"http://chhotu-bin.infy.uk/page/2",
+		"http://chhotu-bin.infy.uk/page/3",
 	}
 
 	for i, task := range tasks {
@@ -243,9 +243,9 @@ func TestCreateRepeatedTasksWithIndexVar(t *testing.T) {
 
 	input := models.RepeatTaskInput{
 		Name: "Task #{{index}}",
-		URL:  "https://example.com",
+		URL:  "http://chhotu-bin.infy.uk",
 		Steps: []models.TaskStep{
-			{Action: models.ActionNavigate, Value: "https://example.com"},
+			{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 			{Action: models.ActionType, Selector: "#input", Value: "test-{{index}}"},
 		},
 		Repeat: models.RepeatConfig{

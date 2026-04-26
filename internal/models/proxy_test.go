@@ -5,7 +5,7 @@ import "testing"
 func TestProxyToProxyConfig(t *testing.T) {
 	p := &Proxy{
 		ID:       "test-id",
-		Server:   "proxy.example.com:8080",
+		Server:   "proxy.chhotu-bin.infy.uk:8080",
 		Protocol: ProxyHTTP,
 		Username: "user",
 		Password: "pass",

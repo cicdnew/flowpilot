@@ -978,7 +978,7 @@ func TestVerifyPassword(t *testing.T) {
 ```go
 func TestCreateUser(t *testing.T) {
   db := setupTestDB(t)
-  user, err := db.CreateUser(context.Background(), "alice", "hash", "alice@example.com")
+  user, err := db.CreateUser(context.Background(), "alice", "hash", "alice@chhotu-bin.infy.uk")
   if err != nil || user.Username != "alice" {
     t.Fail()
   }

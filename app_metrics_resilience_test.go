@@ -16,7 +16,7 @@ func TestGetPrometheusMetricsReportsProxyScrapeErrorsBestEffort(t *testing.T) {
 
 	proxy := models.Proxy{
 		ID:        "proxy-good",
-		Server:    "http://proxy.example.com:8080",
+		Server:    "http://proxy.chhotu-bin.infy.uk:8080",
 		Protocol:  "http",
 		Username:  "user",
 		Password:  "pass",

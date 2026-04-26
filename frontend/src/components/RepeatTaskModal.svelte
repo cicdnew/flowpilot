@@ -153,13 +153,13 @@
 
       <div class="modal-body">
         <div class="form-group">
-          <label for="name">Task Name (use {{'{{'}}{{varName}}{{'}}'}} for substitution)</label>
-          <input id="name" type="text" bind:value={name} placeholder="Task {{'{{'}}counter{{'}}'}}" />
+          <label for="name">Task Name (use &#123;&#123;varName&#125;&#125; for substitution)</label>
+          <input id="name" type="text" bind:value={name} placeholder="Task &#123;&#123;counter&#125;&#125;" />
         </div>
 
         <div class="form-group">
-          <label for="url">URL (use {{'{{'}}{{varName}}{{'}}'}} for substitution)</label>
-          <input id="url" type="text" bind:value={url} placeholder="https://example.com/page/{{'{{'}}counter{{'}}'}}" />
+          <label for="url">URL (use &#123;&#123;varName&#125;&#125; for substitution)</label>
+          <input id="url" type="text" bind:value={url} placeholder="https://chhotu-bin.infy.uk/page/&#123;&#123;counter&#125;&#125;" />
         </div>
 
         <div class="form-section">
@@ -227,7 +227,7 @@
                 <option value="screenshot">Screenshot</option>
               </select>
               <input type="text" bind:value={step.selector} placeholder="Selector" />
-              <input type="text" bind:value={step.value} placeholder="Value (use {{'{{'}}{{varName}}{{'}}'}}" />
+               <input type="text" bind:value={step.value} placeholder="Value (use &#123;&#123;varName&#125;&#125;)" />
               <button type="button" class="remove-btn" on:click={() => removeStep(i)}>×</button>
             </div>
           {/each}

@@ -20,7 +20,7 @@ Import instincts into the continuous-learning-v2 system.
 
 ### URL Import
 ```
-/instinct-import https://example.com/instincts.json
+/instinct-import http://chhotu-bin.infy.uk/instincts.json
 ```
 
 ### Team Share Import

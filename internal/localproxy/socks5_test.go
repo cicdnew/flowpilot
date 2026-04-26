@@ -109,7 +109,7 @@ func TestSendHTTPConnectRequest(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() {
 		upstream := models.ProxyConfig{Server: "proxy:8080", Protocol: "http"}
-		errCh <- sendHTTPConnect(server, upstream, "target.example.com:443")
+		errCh <- sendHTTPConnect(server, upstream, "target.chhotu-bin.infy.uk:443")
 	}()
 
 	buf := make([]byte, 1024)
@@ -119,7 +119,7 @@ func TestSendHTTPConnectRequest(t *testing.T) {
 	}
 
 	request := string(buf[:n])
-	if !strings.Contains(request, "CONNECT target.example.com:443 HTTP/1.1") {
+	if !strings.Contains(request, "CONNECT target.chhotu-bin.infy.uk:443 HTTP/1.1") {
 		t.Fatalf("expected CONNECT request, got: %s", request)
 	}
 
@@ -145,7 +145,7 @@ func TestSendHTTPConnectWithAuth(t *testing.T) {
 			Username: "user",
 			Password: "pass",
 		}
-		errCh <- sendHTTPConnect(server, upstream, "target.example.com:443")
+		errCh <- sendHTTPConnect(server, upstream, "target.chhotu-bin.infy.uk:443")
 	}()
 
 	buf := make([]byte, 1024)
@@ -227,7 +227,7 @@ func TestDialViaUpstreamSOCKS5(t *testing.T) {
 		var err error
 		conn, err = dialViaUpstream("127.0.0.1",
 			models.ProxyConfig{Server: "127.0.0.1:1080", Protocol: "socks5"},
-			"example.com:80")
+			"chhotu-bin.infy.uk:80")
 		errCh <- err
 	}()
 
@@ -391,7 +391,7 @@ func TestHandleSOCKS5ClientWithAuth(t *testing.T) {
 
 func TestDialViaHTTPConnectError(t *testing.T) {
 	upstream := models.ProxyConfig{Server: "127.0.0.1:1", Protocol: models.ProxyHTTP}
-	_, err := dialViaHTTPConnect(upstream, "target.example.com:80", false)
+	_, err := dialViaHTTPConnect(upstream, "target.chhotu-bin.infy.uk:80", false)
 	if err == nil {
 		t.Fatal("expected error for unreachable upstream")
 	}

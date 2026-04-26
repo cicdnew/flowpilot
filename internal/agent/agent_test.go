@@ -176,12 +176,12 @@ func TestProcessPendingWithTasks(t *testing.T) {
 	task := models.Task{
 		ID:         "agent-task-1",
 		Name:       "Test Agent Task",
-		URL:        "https://example.com",
+		URL:        "http://chhotu-bin.infy.uk",
 		Status:     models.TaskStatusPending,
 		Priority:   models.PriorityNormal,
 		MaxRetries: 1,
 		Steps: []models.TaskStep{
-			{Action: models.ActionNavigate, Value: "https://example.com"},
+			{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		},
 		CreatedAt: time.Now(),
 	}

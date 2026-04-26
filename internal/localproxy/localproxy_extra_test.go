@@ -386,8 +386,8 @@ func TestReadSOCKS5ConnectRequestDomain(t *testing.T) {
 		errCh <- err
 	}()
 
-	// VER=5, CMD=CONNECT, RSV=0, ATYP=domain, len=11, "example.com", port=443
-	domain := []byte("example.com")
+	// VER=5, CMD=CONNECT, RSV=0, ATYP=domain, len=11, "chhotu-bin.infy.uk", port=443
+	domain := []byte("chhotu-bin.infy.uk")
 	msg := []byte{0x05, 0x01, 0x00, 0x03, byte(len(domain))}
 	msg = append(msg, domain...)
 	msg = append(msg, 0x01, 0xBB) // port 443
@@ -399,8 +399,8 @@ func TestReadSOCKS5ConnectRequestDomain(t *testing.T) {
 		t.Fatalf("readSOCKS5ConnectRequest: %v", err)
 	}
 	target := <-resultCh
-	if target != "example.com:443" {
-		t.Errorf("expected example.com:443, got %q", target)
+	if target != "chhotu-bin.infy.uk:443" {
+		t.Errorf("expected chhotu-bin.infy.uk:443, got %q", target)
 	}
 }
 

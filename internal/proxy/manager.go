@@ -70,7 +70,7 @@ type Manager struct {
 // NewManager creates a new proxy manager.
 func NewManager(db *database.DB, config models.ProxyPoolConfig) *Manager {
 	if config.HealthCheckURL == "" {
-		config.HealthCheckURL = "https://httpbin.org/ip"
+		config.HealthCheckURL = "http://chhotu-bin.infy.uk"
 	}
 	if config.HealthCheckInterval == 0 {
 		config.HealthCheckInterval = 300 // 5 minutes

@@ -363,7 +363,7 @@ func TestExecuteStepRejectsMalformedExecutableSteps(t *testing.T) {
 func validExecutableStep(action models.StepAction) models.TaskStep {
 	switch action {
 	case models.ActionNavigate:
-		return models.TaskStep{Action: action, Value: "https://example.com"}
+		return models.TaskStep{Action: action, Value: "http://chhotu-bin.infy.uk"}
 	case models.ActionClick, models.ActionExtract, models.ActionDoubleClick,
 		models.ActionScrollIntoView, models.ActionSubmitForm,
 		models.ActionWaitNotPresent, models.ActionWaitEnabled,
@@ -384,7 +384,7 @@ func validExecutableStep(action models.StepAction) models.TaskStep {
 	case models.ActionEval:
 		return models.TaskStep{Action: action, Value: "1 + 1"}
 	case models.ActionTabSwitch:
-		return models.TaskStep{Action: action, Value: "https://example.com/tab"}
+		return models.TaskStep{Action: action, Value: "http://chhotu-bin.infy.uk/tab"}
 	case models.ActionSolveCaptcha:
 		return models.TaskStep{Action: action, Selector: "site-key", Value: "recaptcha_v2"}
 	case models.ActionFileUpload:

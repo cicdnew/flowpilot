@@ -80,7 +80,7 @@ Comprehensive test coverage:
 2. **Variable Substitution**
    - Works in: Task name, URL, step selectors, step values
    - Supports: `{{varName}}` and `{{index}}`
-   - Example: `https://example.com/product/{{counter}}`
+   - Example: `http://chhotu-bin.infy.uk/product/{{counter}}`
 
 3. **Validation & Safety**
    - Max 10,000 tasks per repeat (MaxBatchSize)
@@ -124,7 +124,7 @@ ok  	flowpilot/internal/repeat	0.038s
 ```javascript
 {
   name: "Product {{counter}}",
-  url: "https://shop.example.com/product/{{counter}}",
+  url: "https://chhotu-bin.infy.uk/product/{{counter}}",
   repeat: {
     mode: "range",
     varName: "counter",
@@ -140,7 +140,7 @@ ok  	flowpilot/internal/repeat	0.038s
 ```javascript
 {
   name: "Category {{item}}",
-  url: "https://shop.example.com/{{item}}",
+  url: "https://chhotu-bin.infy.uk/{{item}}",
   repeat: {
     mode: "list",
     varName: "item",
@@ -154,9 +154,9 @@ ok  	flowpilot/internal/repeat	0.038s
 ```javascript
 {
   name: "Page {{index}}",
-  url: "https://api.example.com/data?page={{index}}",
+  url: "https://chhotu-bin.infy.uk/data?page={{index}}",
   steps: [
-    { action: "navigate", value: "https://api.example.com/data?page={{index}}" },
+    { action: "navigate", value: "https://chhotu-bin.infy.uk/data?page={{index}}" },
     { action: "extract", selector: "body", value: "page_{{index}}" }
   ],
   repeat: {

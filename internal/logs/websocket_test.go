@@ -32,7 +32,7 @@ func TestHandleCreated(t *testing.T) {
 	wl.SetStepIndex(1)
 	wl.HandleCreated(&network.EventWebSocketCreated{
 		RequestID: "req-ws-1",
-		URL:       "wss://example.com/ws",
+		URL:       "wss://chhotu-bin.infy.uk/ws",
 	})
 
 	logs := wl.Logs()
@@ -46,7 +46,7 @@ func TestHandleCreated(t *testing.T) {
 	if log.StepIndex != 1 {
 		t.Errorf("StepIndex: got %d, want 1", log.StepIndex)
 	}
-	if log.URL != "wss://example.com/ws" {
+	if log.URL != "wss://chhotu-bin.infy.uk/ws" {
 		t.Errorf("URL: got %q", log.URL)
 	}
 	if log.EventType != models.WSEventCreated {
@@ -72,7 +72,7 @@ func TestHandleHandshake(t *testing.T) {
 	wl := NewWebSocketLogger("flow-hs")
 	wl.HandleCreated(&network.EventWebSocketCreated{
 		RequestID: "req-hs",
-		URL:       "wss://example.com/hs",
+		URL:       "wss://chhotu-bin.infy.uk/hs",
 	})
 	wl.HandleHandshake(&network.EventWebSocketHandshakeResponseReceived{
 		RequestID: "req-hs",
@@ -85,7 +85,7 @@ func TestHandleHandshake(t *testing.T) {
 	if logs[1].EventType != models.WSEventHandshake {
 		t.Errorf("EventType: got %q, want %q", logs[1].EventType, models.WSEventHandshake)
 	}
-	if logs[1].URL != "wss://example.com/hs" {
+	if logs[1].URL != "wss://chhotu-bin.infy.uk/hs" {
 		t.Errorf("URL: got %q", logs[1].URL)
 	}
 }
@@ -102,7 +102,7 @@ func TestHandleFrameSent(t *testing.T) {
 	wl := NewWebSocketLogger("flow-sent")
 	wl.HandleCreated(&network.EventWebSocketCreated{
 		RequestID: "req-sent",
-		URL:       "wss://example.com/sent",
+		URL:       "wss://chhotu-bin.infy.uk/sent",
 	})
 	wl.HandleFrameSent(&network.EventWebSocketFrameSent{
 		RequestID: "req-sent",
@@ -157,7 +157,7 @@ func TestHandleFrameReceived(t *testing.T) {
 	wl := NewWebSocketLogger("flow-recv")
 	wl.HandleCreated(&network.EventWebSocketCreated{
 		RequestID: "req-recv",
-		URL:       "wss://example.com/recv",
+		URL:       "wss://chhotu-bin.infy.uk/recv",
 	})
 	wl.HandleFrameReceived(&network.EventWebSocketFrameReceived{
 		RequestID: "req-recv",
@@ -199,7 +199,7 @@ func TestHandleClosed(t *testing.T) {
 	wl := NewWebSocketLogger("flow-closed")
 	wl.HandleCreated(&network.EventWebSocketCreated{
 		RequestID: "req-close",
-		URL:       "wss://example.com/close",
+		URL:       "wss://chhotu-bin.infy.uk/close",
 	})
 	wl.HandleClosed(&network.EventWebSocketClosed{
 		RequestID: "req-close",
@@ -233,7 +233,7 @@ func TestHandleFrameError(t *testing.T) {
 	wl := NewWebSocketLogger("flow-err")
 	wl.HandleCreated(&network.EventWebSocketCreated{
 		RequestID: "req-err",
-		URL:       "wss://example.com/err",
+		URL:       "wss://chhotu-bin.infy.uk/err",
 	})
 	wl.HandleFrameError(&network.EventWebSocketFrameError{
 		RequestID:    "req-err",
@@ -268,7 +268,7 @@ func TestMaxLogsLimit(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		wl.HandleCreated(&network.EventWebSocketCreated{
 			RequestID: network.RequestID("req-" + string(rune('a'+i))),
-			URL:       "wss://example.com",
+			URL:       "wss://chhotu-bin.infy.uk",
 		})
 	}
 
@@ -298,7 +298,7 @@ func TestPayloadTruncation(t *testing.T) {
 
 	wl.HandleCreated(&network.EventWebSocketCreated{
 		RequestID: "req-trunc",
-		URL:       "wss://example.com/trunc",
+		URL:       "wss://chhotu-bin.infy.uk/trunc",
 	})
 	wl.HandleFrameReceived(&network.EventWebSocketFrameReceived{
 		RequestID: "req-trunc",
@@ -322,7 +322,7 @@ func TestLogsCopyIsolation(t *testing.T) {
 	wl := NewWebSocketLogger("flow-copy")
 	wl.HandleCreated(&network.EventWebSocketCreated{
 		RequestID: "req-copy",
-		URL:       "wss://example.com",
+		URL:       "wss://chhotu-bin.infy.uk",
 	})
 
 	logs1 := wl.Logs()
@@ -345,7 +345,7 @@ func TestConcurrentAccess(t *testing.T) {
 			reqID := network.RequestID("req-conc-" + string(rune('A'+n%26)))
 			wl.HandleCreated(&network.EventWebSocketCreated{
 				RequestID: reqID,
-				URL:       "wss://example.com",
+				URL:       "wss://chhotu-bin.infy.uk",
 			})
 			wl.SetStepIndex(n)
 			wl.HandleFrameReceived(&network.EventWebSocketFrameReceived{
@@ -371,7 +371,7 @@ func TestFullLifecycle(t *testing.T) {
 
 	wl.HandleCreated(&network.EventWebSocketCreated{
 		RequestID: "req-lc",
-		URL:       "wss://example.com/lc",
+		URL:       "wss://chhotu-bin.infy.uk/lc",
 	})
 	wl.HandleHandshake(&network.EventWebSocketHandshakeResponseReceived{
 		RequestID: "req-lc",
@@ -479,7 +479,7 @@ func TestCallbackNoDeadlock(t *testing.T) {
 			reqID := network.RequestID("req-dl-" + string(rune('A'+n%26)))
 			logger.HandleCreated(&network.EventWebSocketCreated{
 				RequestID: reqID,
-				URL:       "wss://example.com/dl",
+				URL:       "wss://chhotu-bin.infy.uk/dl",
 			})
 			logger.HandleFrameError(&network.EventWebSocketFrameError{
 				RequestID:    reqID,
@@ -509,7 +509,7 @@ func TestHandleFrameErrorCallback(t *testing.T) {
 
 	logger.HandleCreated(&network.EventWebSocketCreated{
 		RequestID: "req-err-cb",
-		URL:       "wss://example.com/err",
+		URL:       "wss://chhotu-bin.infy.uk/err",
 	})
 	logger.HandleFrameError(&network.EventWebSocketFrameError{
 		RequestID:    "req-err-cb",

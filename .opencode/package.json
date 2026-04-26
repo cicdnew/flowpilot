@@ -64,7 +64,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@kilocode/plugin": "7.2.14",
+    "@kilocode/plugin": "7.2.24",
     "@opencode-ai/plugin": "1.14.19"
   }
 }

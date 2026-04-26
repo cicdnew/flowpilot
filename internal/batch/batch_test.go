@@ -40,11 +40,11 @@ func makeFlow() models.RecordedFlow {
 		ID:   "flow-1",
 		Name: "Test Flow",
 		Steps: []models.RecordedStep{
-			{Index: 0, Action: models.ActionNavigate, Value: "https://origin.example.com"},
+			{Index: 0, Action: models.ActionNavigate, Value: "https://origin.chhotu-bin.infy.uk"},
 			{Index: 1, Action: models.ActionClick, Selector: "#btn-{{domain}}"},
 			{Index: 2, Action: models.ActionType, Selector: "#input", Value: "{{url}}"},
 		},
-		OriginURL: "https://origin.example.com",
+		OriginURL: "https://origin.chhotu-bin.infy.uk",
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -68,7 +68,7 @@ func TestCreateBatchFromFlow_Basic(t *testing.T) {
 	engine := New(db)
 	flow := makeFlow()
 	input := makeBatchInput([]string{
-		"https://example.com",
+		"http://chhotu-bin.infy.uk",
 		"https://other.com",
 	})
 
@@ -117,7 +117,7 @@ func TestCreateBatchFromFlow_DefaultNamingTemplate(t *testing.T) {
 	db := setupTestDB(t)
 	engine := New(db)
 	flow := makeFlow()
-	input := makeBatchInput([]string{"https://example.com"})
+	input := makeBatchInput([]string{"http://chhotu-bin.infy.uk"})
 	input.NamingTemplate = "" // blank should use default
 
 	_, tasks, err := engine.CreateBatchFromFlow(context.Background(), flow, input)
@@ -129,8 +129,8 @@ func TestCreateBatchFromFlow_DefaultNamingTemplate(t *testing.T) {
 		t.Fatalf("expected 1 task, got %d", len(tasks))
 	}
 	// Default template is "Task {{index}} - {{domain}}"
-	// For https://example.com with index 1: "Task 1 - example.com"
-	want := "Task 1 - example.com"
+	// For http://chhotu-bin.infy.uk with index 1: "Task 1 - chhotu-bin.infy.uk"
+	want := "Task 1 - chhotu-bin.infy.uk"
 	if tasks[0].Name != want {
 		t.Errorf("Name: got %q, want %q", tasks[0].Name, want)
 	}
@@ -140,7 +140,7 @@ func TestCreateBatchFromFlow_CustomNamingTemplate(t *testing.T) {
 	db := setupTestDB(t)
 	engine := New(db)
 	flow := makeFlow()
-	input := makeBatchInput([]string{"https://example.com", "https://test.org"})
+	input := makeBatchInput([]string{"http://chhotu-bin.infy.uk", "https://test.org"})
 	input.NamingTemplate = "Batch #{{index}} {{domain}}"
 
 	_, tasks, err := engine.CreateBatchFromFlow(context.Background(), flow, input)
@@ -148,8 +148,8 @@ func TestCreateBatchFromFlow_CustomNamingTemplate(t *testing.T) {
 		t.Fatalf("CreateBatchFromFlow: %v", err)
 	}
 
-	if tasks[0].Name != "Batch #1 example.com" {
-		t.Errorf("tasks[0].Name: got %q, want %q", tasks[0].Name, "Batch #1 example.com")
+	if tasks[0].Name != "Batch #1 chhotu-bin.infy.uk" {
+		t.Errorf("tasks[0].Name: got %q, want %q", tasks[0].Name, "Batch #1 chhotu-bin.infy.uk")
 	}
 	if tasks[1].Name != "Batch #2 test.org" {
 		t.Errorf("tasks[1].Name: got %q, want %q", tasks[1].Name, "Batch #2 test.org")
@@ -160,7 +160,7 @@ func TestCreateBatchFromFlow_InvalidNamingTemplate(t *testing.T) {
 	db := setupTestDB(t)
 	engine := New(db)
 	flow := makeFlow()
-	input := makeBatchInput([]string{"https://example.com"})
+	input := makeBatchInput([]string{"http://chhotu-bin.infy.uk"})
 	input.NamingTemplate = "Task {{invalid_var}}"
 
 	_, _, err := engine.CreateBatchFromFlow(context.Background(), flow, input)
@@ -176,7 +176,7 @@ func TestCreateBatchFromFlow_StepTemplateSubstitution(t *testing.T) {
 	db := setupTestDB(t)
 	engine := New(db)
 	flow := makeFlow() // step[1].Selector = "#btn-{{domain}}", step[2].Value = "{{url}}"
-	input := makeBatchInput([]string{"https://example.com"})
+	input := makeBatchInput([]string{"http://chhotu-bin.infy.uk"})
 
 	_, tasks, err := engine.CreateBatchFromFlow(context.Background(), flow, input)
 	if err != nil {
@@ -189,13 +189,13 @@ func TestCreateBatchFromFlow_StepTemplateSubstitution(t *testing.T) {
 	}
 
 	// Step 1 (click): selector should have {{domain}} replaced
-	if task.Steps[1].Selector != "#btn-example.com" {
-		t.Errorf("Step 1 selector: got %q, want %q", task.Steps[1].Selector, "#btn-example.com")
+	if task.Steps[1].Selector != "#btn-chhotu-bin.infy.uk" {
+		t.Errorf("Step 1 selector: got %q, want %q", task.Steps[1].Selector, "#btn-chhotu-bin.infy.uk")
 	}
 
 	// Step 2 (type): value should have {{url}} replaced
-	if task.Steps[2].Value != "https://example.com" {
-		t.Errorf("Step 2 value: got %q, want %q", task.Steps[2].Value, "https://example.com")
+	if task.Steps[2].Value != "http://chhotu-bin.infy.uk" {
+		t.Errorf("Step 2 value: got %q, want %q", task.Steps[2].Value, "http://chhotu-bin.infy.uk")
 	}
 }
 
@@ -211,7 +211,7 @@ func TestCreateBatchFromFlow_NavigateStepURLFallback(t *testing.T) {
 			{Index: 0, Action: models.ActionNavigate, Value: ""},
 			{Index: 1, Action: models.ActionClick, Selector: "#btn"},
 		},
-		OriginURL: "https://origin.example.com",
+		OriginURL: "https://origin.chhotu-bin.infy.uk",
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -239,7 +239,7 @@ func TestCreateBatchFromFlow_NavigateStepPreservesExplicitURL(t *testing.T) {
 		Steps: []models.RecordedStep{
 			{Index: 0, Action: models.ActionNavigate, Value: "https://explicit.com"},
 		},
-		OriginURL: "https://origin.example.com",
+		OriginURL: "https://origin.chhotu-bin.infy.uk",
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -260,7 +260,7 @@ func TestCreateBatchFromFlow_HeadlessDefault(t *testing.T) {
 	db := setupTestDB(t)
 	engine := New(db)
 	flow := makeFlow()
-	input := makeBatchInput([]string{"https://example.com"})
+	input := makeBatchInput([]string{"http://chhotu-bin.infy.uk"})
 
 	_, tasks, err := engine.CreateBatchFromFlow(context.Background(), flow, input)
 	if err != nil {
@@ -276,7 +276,7 @@ func TestCreateBatchFromFlow_ProxyConfigPropagated(t *testing.T) {
 	db := setupTestDB(t)
 	engine := New(db)
 	flow := makeFlow()
-	input := makeBatchInput([]string{"https://example.com"})
+	input := makeBatchInput([]string{"http://chhotu-bin.infy.uk"})
 	input.Proxy = models.ProxyConfig{
 		Server:   "proxy.test:8080",
 		Username: "user",
@@ -297,7 +297,7 @@ func TestCreateBatchFromFlow_TagsPropagated(t *testing.T) {
 	db := setupTestDB(t)
 	engine := New(db)
 	flow := makeFlow()
-	input := makeBatchInput([]string{"https://example.com"})
+	input := makeBatchInput([]string{"http://chhotu-bin.infy.uk"})
 	input.Tags = []string{"production", "nightly"}
 
 	_, tasks, err := engine.CreateBatchFromFlow(context.Background(), flow, input)
@@ -314,7 +314,7 @@ func TestCreateBatchFromFlow_TaskPersistedInDB(t *testing.T) {
 	db := setupTestDB(t)
 	engine := New(db)
 	flow := makeFlow()
-	input := makeBatchInput([]string{"https://example.com"})
+	input := makeBatchInput([]string{"http://chhotu-bin.infy.uk"})
 
 	_, tasks, err := engine.CreateBatchFromFlow(context.Background(), flow, input)
 	if err != nil {
@@ -329,8 +329,8 @@ func TestCreateBatchFromFlow_TaskPersistedInDB(t *testing.T) {
 	if got.Name != tasks[0].Name {
 		t.Errorf("persisted Name: got %q, want %q", got.Name, tasks[0].Name)
 	}
-	if got.URL != "https://example.com" {
-		t.Errorf("persisted URL: got %q, want %q", got.URL, "https://example.com")
+	if got.URL != "http://chhotu-bin.infy.uk" {
+		t.Errorf("persisted URL: got %q, want %q", got.URL, "http://chhotu-bin.infy.uk")
 	}
 }
 
@@ -388,8 +388,8 @@ func TestValidateTemplate(t *testing.T) {
 
 func TestApplyTemplate(t *testing.T) {
 	vars := templateVars{
-		URL:    "https://example.com",
-		Domain: "example.com",
+		URL:    "http://chhotu-bin.infy.uk",
+		Domain: "chhotu-bin.infy.uk",
 		Index:  3,
 		Name:   "Test Task",
 	}
@@ -399,11 +399,11 @@ func TestApplyTemplate(t *testing.T) {
 		template string
 		want     string
 	}{
-		{"index and domain", "Task {{index}} - {{domain}}", "Task 3 - example.com"},
-		{"url", "Visit {{url}}", "Visit https://example.com"},
+		{"index and domain", "Task {{index}} - {{domain}}", "Task 3 - chhotu-bin.infy.uk"},
+		{"url", "Visit {{url}}", "Visit http://chhotu-bin.infy.uk"},
 		{"name", "Name: {{name}}", "Name: Test Task"},
 		{"no variables", "Static", "Static"},
-		{"all variables", "{{index}} {{domain}} {{url}} {{name}}", "3 example.com https://example.com Test Task"},
+		{"all variables", "{{index}} {{domain}} {{url}} {{name}}", "3 chhotu-bin.infy.uk http://chhotu-bin.infy.uk Test Task"},
 		{"repeated variable", "{{index}}-{{index}}", "3-3"},
 	}
 
@@ -423,8 +423,8 @@ func TestExtractDomain(t *testing.T) {
 		url  string
 		want string
 	}{
-		{"standard url", "https://example.com/path", "example.com"},
-		{"with port", "https://example.com:8080/path", "example.com"},
+		{"standard url", "http://chhotu-bin.infy.uk/path", "chhotu-bin.infy.uk"},
+		{"with port", "http://chhotu-bin.infy.uk:8080/path", "chhotu-bin.infy.uk"},
 		{"http", "http://test.org", "test.org"},
 		{"subdomain", "https://sub.domain.com", "sub.domain.com"},
 		{"invalid url", "not-a-url", ""},
@@ -503,7 +503,7 @@ func TestCreateBatchFromFlow_HeadlessExplicitFalse(t *testing.T) {
 	db := setupTestDB(t)
 	engine := New(db)
 	flow := makeFlow()
-	input := makeBatchInput([]string{"https://example.com"})
+	input := makeBatchInput([]string{"http://chhotu-bin.infy.uk"})
 	input.Headless = boolPtr(false)
 
 	_, tasks, err := engine.CreateBatchFromFlow(context.Background(), flow, input)
@@ -520,7 +520,7 @@ func TestCreateBatchFromFlow_HeadlessExplicitTrue(t *testing.T) {
 	db := setupTestDB(t)
 	engine := New(db)
 	flow := makeFlow()
-	input := makeBatchInput([]string{"https://example.com"})
+	input := makeBatchInput([]string{"http://chhotu-bin.infy.uk"})
 	input.Headless = boolPtr(true)
 
 	_, tasks, err := engine.CreateBatchFromFlow(context.Background(), flow, input)
@@ -537,7 +537,7 @@ func TestCreateBatchFromFlow_HeadlessNilDefaultsTrue(t *testing.T) {
 	db := setupTestDB(t)
 	engine := New(db)
 	flow := makeFlow()
-	input := makeBatchInput([]string{"https://example.com"})
+	input := makeBatchInput([]string{"http://chhotu-bin.infy.uk"})
 	input.Headless = nil // explicitly nil
 
 	_, tasks, err := engine.CreateBatchFromFlow(context.Background(), flow, input)
@@ -572,7 +572,7 @@ func TestBatchHeadlessHelper(t *testing.T) {
 
 func TestExtractDomainParseError(t *testing.T) {
 	// url.Parse returns error for URLs with invalid percent-encoding
-	got := extractDomain("https://example.com/%zz")
+	got := extractDomain("http://chhotu-bin.infy.uk/%zz")
 	if got != "" {
 		t.Errorf("expected empty for invalid URL, got %q", got)
 	}

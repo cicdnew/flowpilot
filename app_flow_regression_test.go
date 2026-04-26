@@ -8,7 +8,7 @@ import (
 
 func TestPlayRecordedFlowPropagatesTimeoutAndLoggingPolicy(t *testing.T) {
 	app := setupTestAppWithQueue(t)
-	flow, err := app.CreateRecordedFlow("Flow", "", "https://example.com", []models.RecordedStep{{Action: models.ActionNavigate, Value: "https://example.com"}})
+	flow, err := app.CreateRecordedFlow("Flow", "", "http://chhotu-bin.infy.uk", []models.RecordedStep{{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"}})
 	if err != nil {
 		t.Fatalf("CreateRecordedFlow: %v", err)
 	}
@@ -23,7 +23,7 @@ func TestPlayRecordedFlowPropagatesTimeoutAndLoggingPolicy(t *testing.T) {
 		MaxExecutionLogs:   42,
 	}
 
-	task, err := app.PlayRecordedFlow(flow.ID, "https://override.example.com", true, 45, loggingPolicy)
+	task, err := app.PlayRecordedFlow(flow.ID, "https://override.chhotu-bin.infy.uk", true, 45, loggingPolicy)
 	if err != nil {
 		t.Fatalf("PlayRecordedFlow: %v", err)
 	}
@@ -45,8 +45,8 @@ func TestCreateTaskFromFlowPropagatesTimeoutAndLoggingPolicy(t *testing.T) {
 	captureScreenshots := true
 	flow := models.RecordedFlow{
 		Name:      "Flow",
-		OriginURL: "https://example.com",
-		Steps:     []models.RecordedStep{{Action: models.ActionNavigate, Value: "https://example.com"}},
+		OriginURL: "http://chhotu-bin.infy.uk",
+		Steps:     []models.RecordedStep{{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"}},
 		Timeout:   30,
 		LoggingPolicy: &models.TaskLoggingPolicy{
 			CaptureStepLogs:    &captureStepLogs,
@@ -65,7 +65,7 @@ func TestCreateTaskFromFlowPropagatesTimeoutAndLoggingPolicy(t *testing.T) {
 		t.Fatalf("UpdateRecordedFlow: %v", err)
 	}
 
-	task, err := app.CreateTaskFromFlow(CreateTaskFromFlowParams{FlowID: createdFlow.ID, Name: "Task", URL: "https://target.example.com", ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: []string{"tag"}})
+	task, err := app.CreateTaskFromFlow(CreateTaskFromFlowParams{FlowID: createdFlow.ID, Name: "Task", URL: "https://target.chhotu-bin.infy.uk", ProxyConfig: models.ProxyConfig{}, Priority: 5, AutoStart: false, Tags: []string{"tag"}})
 	if err != nil {
 		t.Fatalf("CreateTaskFromFlow: %v", err)
 	}

@@ -263,7 +263,7 @@ func TestFlowToTaskSteps(t *testing.T) {
 		ID:   "flow-1",
 		Name: "Test Flow",
 		Steps: []RecordedStep{
-			{Index: 0, Action: ActionNavigate, Value: "https://example.com", Timeout: 10000},
+			{Index: 0, Action: ActionNavigate, Value: "http://chhotu-bin.infy.uk", Timeout: 10000},
 			{Index: 1, Action: ActionClick, Selector: "#btn"},
 			{Index: 2, Action: ActionType, Selector: "#input", Value: "hello", Timeout: 3000},
 		},
@@ -278,8 +278,8 @@ func TestFlowToTaskSteps(t *testing.T) {
 	if steps[0].Action != ActionNavigate {
 		t.Errorf("steps[0].Action: got %q, want %q", steps[0].Action, ActionNavigate)
 	}
-	if steps[0].Value != "https://example.com" {
-		t.Errorf("steps[0].Value: got %q, want %q", steps[0].Value, "https://example.com")
+	if steps[0].Value != "http://chhotu-bin.infy.uk" {
+		t.Errorf("steps[0].Value: got %q, want %q", steps[0].Value, "http://chhotu-bin.infy.uk")
 	}
 	if steps[0].Timeout != 10000 {
 		t.Errorf("steps[0].Timeout: got %d, want 10000", steps[0].Timeout)

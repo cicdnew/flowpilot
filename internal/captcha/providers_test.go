@@ -44,18 +44,18 @@ func TestTwoCaptchaSubmitByType(t *testing.T) {
 	}{
 		{
 			name: "recaptcha v2 invisible",
-			req:  models.CaptchaSolveRequest{Type: models.CaptchaTypeRecaptchaV2, SiteKey: "site-v2", PageURL: "https://example.com/v2", Invisible: true},
-			want: map[string]string{"method": "userrecaptcha", "googlekey": "site-v2", "pageurl": "https://example.com/v2", "invisible": "1"},
+			req:  models.CaptchaSolveRequest{Type: models.CaptchaTypeRecaptchaV2, SiteKey: "site-v2", PageURL: "http://chhotu-bin.infy.uk/v2", Invisible: true},
+			want: map[string]string{"method": "userrecaptcha", "googlekey": "site-v2", "pageurl": "http://chhotu-bin.infy.uk/v2", "invisible": "1"},
 		},
 		{
 			name: "recaptcha v3",
-			req:  models.CaptchaSolveRequest{Type: models.CaptchaTypeRecaptchaV3, SiteKey: "site-v3", PageURL: "https://example.com/v3", MinScore: 0.7},
-			want: map[string]string{"method": "userrecaptcha", "version": "v3", "googlekey": "site-v3", "pageurl": "https://example.com/v3", "min_score": "0.7"},
+			req:  models.CaptchaSolveRequest{Type: models.CaptchaTypeRecaptchaV3, SiteKey: "site-v3", PageURL: "http://chhotu-bin.infy.uk/v3", MinScore: 0.7},
+			want: map[string]string{"method": "userrecaptcha", "version": "v3", "googlekey": "site-v3", "pageurl": "http://chhotu-bin.infy.uk/v3", "min_score": "0.7"},
 		},
 		{
 			name: "hcaptcha",
-			req:  models.CaptchaSolveRequest{Type: models.CaptchaTypeHCaptcha, SiteKey: "site-h", PageURL: "https://example.com/h"},
-			want: map[string]string{"method": "hcaptcha", "sitekey": "site-h", "pageurl": "https://example.com/h"},
+			req:  models.CaptchaSolveRequest{Type: models.CaptchaTypeHCaptcha, SiteKey: "site-h", PageURL: "http://chhotu-bin.infy.uk/h"},
+			want: map[string]string{"method": "hcaptcha", "sitekey": "site-h", "pageurl": "http://chhotu-bin.infy.uk/h"},
 		},
 		{
 			name: "image",
@@ -214,30 +214,30 @@ func TestAntiCaptchaCreateTaskByType(t *testing.T) {
 	}{
 		{
 			name:     "recaptcha v2 invisible",
-			req:      models.CaptchaSolveRequest{Type: models.CaptchaTypeRecaptchaV2, SiteKey: "site-v2", PageURL: "https://example.com/v2", Invisible: true},
+			req:      models.CaptchaSolveRequest{Type: models.CaptchaTypeRecaptchaV2, SiteKey: "site-v2", PageURL: "http://chhotu-bin.infy.uk/v2", Invisible: true},
 			wantType: "RecaptchaV2TaskProxyless",
 			assert: func(t *testing.T, task map[string]any) {
-				if task["websiteKey"] != "site-v2" || task["websiteURL"] != "https://example.com/v2" || task["isInvisible"] != true {
+				if task["websiteKey"] != "site-v2" || task["websiteURL"] != "http://chhotu-bin.infy.uk/v2" || task["isInvisible"] != true {
 					t.Fatalf("unexpected task payload: %#v", task)
 				}
 			},
 		},
 		{
 			name:     "recaptcha v3",
-			req:      models.CaptchaSolveRequest{Type: models.CaptchaTypeRecaptchaV3, SiteKey: "site-v3", PageURL: "https://example.com/v3", MinScore: 0.9},
+			req:      models.CaptchaSolveRequest{Type: models.CaptchaTypeRecaptchaV3, SiteKey: "site-v3", PageURL: "http://chhotu-bin.infy.uk/v3", MinScore: 0.9},
 			wantType: "RecaptchaV3TaskProxyless",
 			assert: func(t *testing.T, task map[string]any) {
-				if task["websiteKey"] != "site-v3" || task["websiteURL"] != "https://example.com/v3" || task["minScore"] != 0.9 {
+				if task["websiteKey"] != "site-v3" || task["websiteURL"] != "http://chhotu-bin.infy.uk/v3" || task["minScore"] != 0.9 {
 					t.Fatalf("unexpected task payload: %#v", task)
 				}
 			},
 		},
 		{
 			name:     "hcaptcha",
-			req:      models.CaptchaSolveRequest{Type: models.CaptchaTypeHCaptcha, SiteKey: "site-h", PageURL: "https://example.com/h"},
+			req:      models.CaptchaSolveRequest{Type: models.CaptchaTypeHCaptcha, SiteKey: "site-h", PageURL: "http://chhotu-bin.infy.uk/h"},
 			wantType: "HCaptchaTaskProxyless",
 			assert: func(t *testing.T, task map[string]any) {
-				if task["websiteKey"] != "site-h" || task["websiteURL"] != "https://example.com/h" {
+				if task["websiteKey"] != "site-h" || task["websiteURL"] != "http://chhotu-bin.infy.uk/h" {
 					t.Fatalf("unexpected task payload: %#v", task)
 				}
 			},

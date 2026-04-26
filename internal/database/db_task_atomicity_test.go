@@ -221,7 +221,7 @@ func TestFinalizeTaskSuccessIsAtomic(t *testing.T) {
 			{StepIndex: 1, Action: models.ActionClick, DurationMs: 50, StartedAt: time.Now()},
 		},
 		NetworkLogs: []models.NetworkLog{
-			{RequestURL: "https://example.com", Method: "GET", StatusCode: 200},
+			{RequestURL: "http://chhotu-bin.infy.uk", Method: "GET", StatusCode: 200},
 		},
 		ExtractedData: map[string]string{"title": "Example Domain"},
 	}
@@ -289,7 +289,7 @@ func TestFinalizeTaskFailureIsAtomic(t *testing.T) {
 		{StepIndex: 1, Action: models.ActionClick, DurationMs: 50, ErrorMsg: "element not found", StartedAt: time.Now()},
 	}
 	networkLogs := []models.NetworkLog{
-		{RequestURL: "https://example.com", Method: "GET", StatusCode: 200},
+		{RequestURL: "http://chhotu-bin.infy.uk", Method: "GET", StatusCode: 200},
 	}
 
 	if err := db.FinalizeTaskFailure(ctx, task.ID, "element not found", stepLogs, networkLogs); err != nil {

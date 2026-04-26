@@ -1,11 +1,11 @@
 {
   "name": "Chhotu.com Page Test {{counter}}",
-  "url": "https://chhotu.com/page/{{counter}}",
+  "url": "http://chhotu-bin.infy.uk/page/{{counter}}",
   "steps": [
     {
       "action": "navigate",
       "selector": "",
-      "value": "https://chhotu.com/page/{{counter}}",
+      "value": "http://chhotu-bin.infy.uk/page/{{counter}}",
       "timeout": 30
     },
     {

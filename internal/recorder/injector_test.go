@@ -52,15 +52,15 @@ func TestParseBindingPayloadSelect(t *testing.T) {
 }
 
 func TestParseBindingPayloadNavigate(t *testing.T) {
-	action, _, value, err := parseBindingPayload(`{"action":"navigate","selector":"","value":"https://example.com"}`)
+	action, _, value, err := parseBindingPayload(`{"action":"navigate","selector":"","value":"http://chhotu-bin.infy.uk"}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if action != models.ActionNavigate {
 		t.Errorf("action: got %q, want %q", action, models.ActionNavigate)
 	}
-	if value != "https://example.com" {
-		t.Errorf("value: got %q, want %q", value, "https://example.com")
+	if value != "http://chhotu-bin.infy.uk" {
+		t.Errorf("value: got %q, want %q", value, "http://chhotu-bin.infy.uk")
 	}
 }
 
@@ -128,7 +128,7 @@ func TestHandleBindingCallEmitsStep(t *testing.T) {
 	}
 
 	r.handleBindingCall(`{"action":"click","selector":"#submit","value":""}`)
-	r.handleBindingCall(`{"action":"type","selector":"#email","value":"test@example.com"}`)
+	r.handleBindingCall(`{"action":"type","selector":"#email","value":"test@chhotu-bin.infy.uk"}`)
 
 	if len(captured) != 2 {
 		t.Fatalf("expected 2 steps, got %d", len(captured))
@@ -142,7 +142,7 @@ func TestHandleBindingCallEmitsStep(t *testing.T) {
 	if captured[1].Action != models.ActionType {
 		t.Errorf("step[1].Action: got %q, want %q", captured[1].Action, models.ActionType)
 	}
-	if captured[1].Value != "test@example.com" {
+	if captured[1].Value != "test@chhotu-bin.infy.uk" {
 		t.Errorf("step[1].Value: got %q", captured[1].Value)
 	}
 	if captured[0].Index != 0 || captured[1].Index != 1 {

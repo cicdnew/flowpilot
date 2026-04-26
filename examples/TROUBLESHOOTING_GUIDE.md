@@ -237,7 +237,7 @@ Formula: `(EndVal - StartVal) / Step + 1`
     "varName": "counter"  // Define here
   },
   "steps": [
-    {"action": "navigate", "value": "https://example.com/{{counter}}"}  // Use here
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/{{counter}}"}  // Use here
   ]
 }
 ```

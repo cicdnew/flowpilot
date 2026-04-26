@@ -57,7 +57,8 @@ func DefaultAppConfig() AppConfig {
 		RetentionDays:       90,
 		HealthCheckInterval: 30,
 		MaxProxyFailures:    2,
-		HealthCheckURL:      "https://httpbin.org/ip",
+		HealthCheckURL:      "http://chhotu-bin.infy.uk",
+
 		CaptureStepLogs:     true,
 		CaptureNetworkLogs:  false,
 		CaptureScreenshots:  false,

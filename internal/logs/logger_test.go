@@ -71,7 +71,7 @@ func TestEndStepWithError(t *testing.T) {
 
 func TestEndStepWithoutError(t *testing.T) {
 	l := NewStepLogger("task-ok")
-	start := l.StartStep(0, models.ActionNavigate, "", "https://example.com", "snap-1")
+	start := l.StartStep(0, models.ActionNavigate, "", "http://chhotu-bin.infy.uk", "snap-1")
 
 	time.Sleep(5 * time.Millisecond)
 
@@ -79,7 +79,7 @@ func TestEndStepWithoutError(t *testing.T) {
 		StepIndex:  0,
 		Action:     models.ActionNavigate,
 		Selector:   "",
-		Value:      "https://example.com",
+		Value:      "http://chhotu-bin.infy.uk",
 		SnapshotID: "snap-1",
 		Start:      start,
 		Err:        nil,
@@ -95,8 +95,8 @@ func TestEndStepWithoutError(t *testing.T) {
 	if log.ErrorMsg != "" {
 		t.Errorf("ErrorMsg should be empty, got %q", log.ErrorMsg)
 	}
-	if log.Value != "https://example.com" {
-		t.Errorf("Value: got %q, want %q", log.Value, "https://example.com")
+	if log.Value != "http://chhotu-bin.infy.uk" {
+		t.Errorf("Value: got %q, want %q", log.Value, "http://chhotu-bin.infy.uk")
 	}
 	if log.SnapshotID != "snap-1" {
 		t.Errorf("SnapshotID: got %q, want %q", log.SnapshotID, "snap-1")

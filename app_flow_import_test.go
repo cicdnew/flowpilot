@@ -18,7 +18,7 @@ func TestImportFlowWithWarningsReturnsUnknownActionWarnings(t *testing.T) {
 		FlowName:   "Imported",
 		Tasks: []models.Task{{
 			Name:      "Imported Task",
-			URL:       "https://example.com",
+			URL:       "http://chhotu-bin.infy.uk",
 			Steps:     []models.TaskStep{{Action: models.StepAction("legacy_action")}},
 			CreatedAt: time.Now(),
 		}},
@@ -53,13 +53,13 @@ func TestImportFlowWithWarningsCollectsMultipleWarnings(t *testing.T) {
 		Tasks: []models.Task{
 			{
 				Name:      "Task A",
-				URL:       "https://example.com/a",
-				Steps:     []models.TaskStep{{Action: models.StepAction("legacy_a")}, {Action: models.ActionNavigate, Value: "https://example.com/a"}},
+				URL:       "http://chhotu-bin.infy.uk/a",
+				Steps:     []models.TaskStep{{Action: models.StepAction("legacy_a")}, {Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk/a"}},
 				CreatedAt: time.Now(),
 			},
 			{
 				Name:      "Task B",
-				URL:       "https://example.com/b",
+				URL:       "http://chhotu-bin.infy.uk/b",
 				Steps:     []models.TaskStep{{Action: models.StepAction("legacy_b")}},
 				CreatedAt: time.Now(),
 			},

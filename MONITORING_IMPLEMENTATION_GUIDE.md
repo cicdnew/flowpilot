@@ -663,7 +663,7 @@ go test -tags=dev ./internal/browser -v -run TestPoolStats
 # Simulate workload
 for i in {1..100}; do
   curl -X POST http://localhost:3000/api/task/create \
-    -d '{"name":"test-$i","url":"https://example.com"}'
+    -d '{"name":"test-$i","url":"http://chhotu-bin.infy.uk"}'
 done
 
 # Observe metrics

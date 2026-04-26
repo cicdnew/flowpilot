@@ -14,8 +14,16 @@ export function CancelTask(arg1) {
   return window['go']['main']['App']['CancelTask'](arg1);
 }
 
+export function ClearLogs() {
+  return window['go']['main']['App']['ClearLogs']();
+}
+
 export function CompareVisual(arg1) {
   return window['go']['main']['App']['CompareVisual'](arg1);
+}
+
+export function CreateAlertRule(arg1) {
+  return window['go']['main']['App']['CreateAlertRule'](arg1);
 }
 
 export function CreateBatch(arg1, arg2) {
@@ -34,6 +42,10 @@ export function CreateRecordedFlow(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['CreateRecordedFlow'](arg1, arg2, arg3, arg4);
 }
 
+export function CreateRepeatedTask(arg1) {
+  return window['go']['main']['App']['CreateRepeatedTask'](arg1);
+}
+
 export function CreateSchedule(arg1) {
   return window['go']['main']['App']['CreateSchedule'](arg1);
 }
@@ -48,6 +60,10 @@ export function CreateTaskFromFlow(arg1) {
 
 export function CreateVisualBaseline(arg1, arg2, arg3) {
   return window['go']['main']['App']['CreateVisualBaseline'](arg1, arg2, arg3);
+}
+
+export function DeleteAlertRule(arg1) {
+  return window['go']['main']['App']['DeleteAlertRule'](arg1);
 }
 
 export function DeleteCaptchaConfig(arg1) {
@@ -102,6 +118,14 @@ export function ExportTaskLogs(arg1) {
   return window['go']['main']['App']['ExportTaskLogs'](arg1);
 }
 
+export function GetActiveAlerts() {
+  return window['go']['main']['App']['GetActiveAlerts']();
+}
+
+export function GetAlertRule(arg1) {
+  return window['go']['main']['App']['GetAlertRule'](arg1);
+}
+
 export function GetAuditTrail(arg1, arg2) {
   return window['go']['main']['App']['GetAuditTrail'](arg1, arg2);
 }
@@ -114,8 +138,32 @@ export function GetCaptchaConfig() {
   return window['go']['main']['App']['GetCaptchaConfig']();
 }
 
+export function GetEnhancedPrometheusMetrics() {
+  return window['go']['main']['App']['GetEnhancedPrometheusMetrics']();
+}
+
 export function GetLocalProxyGatewayStats() {
   return window['go']['main']['App']['GetLocalProxyGatewayStats']();
+}
+
+export function GetLogStats() {
+  return window['go']['main']['App']['GetLogStats']();
+}
+
+export function GetLogsByBatchID(arg1, arg2) {
+  return window['go']['main']['App']['GetLogsByBatchID'](arg1, arg2);
+}
+
+export function GetLogsByLevel(arg1, arg2) {
+  return window['go']['main']['App']['GetLogsByLevel'](arg1, arg2);
+}
+
+export function GetLogsByTaskID(arg1, arg2) {
+  return window['go']['main']['App']['GetLogsByTaskID'](arg1, arg2);
+}
+
+export function GetMonitoringMetrics() {
+  return window['go']['main']['App']['GetMonitoringMetrics']();
 }
 
 export function GetPrometheusMetrics() {
@@ -124,6 +172,10 @@ export function GetPrometheusMetrics() {
 
 export function GetQueueMetrics() {
   return window['go']['main']['App']['GetQueueMetrics']();
+}
+
+export function GetRecentLogs(arg1) {
+  return window['go']['main']['App']['GetRecentLogs'](arg1);
 }
 
 export function GetRecordedFlow(arg1) {
@@ -140,6 +192,10 @@ export function GetSchedule(arg1) {
 
 export function GetSupportedStepActions() {
   return window['go']['main']['App']['GetSupportedStepActions']();
+}
+
+export function GetSystemHealth() {
+  return window['go']['main']['App']['GetSystemHealth']();
 }
 
 export function GetTask(arg1) {
@@ -168,6 +224,14 @@ export function ImportTask(arg1) {
 
 export function IsRecording() {
   return window['go']['main']['App']['IsRecording']();
+}
+
+export function ListAlertFirings(arg1, arg2) {
+  return window['go']['main']['App']['ListAlertFirings'](arg1, arg2);
+}
+
+export function ListAlertRules() {
+  return window['go']['main']['App']['ListAlertRules']();
 }
 
 export function ListBatchGroups() {
@@ -296,6 +360,10 @@ export function TestCaptchaConfig(arg1) {
 
 export function ToggleSchedule(arg1, arg2) {
   return window['go']['main']['App']['ToggleSchedule'](arg1, arg2);
+}
+
+export function UpdateAlertRule(arg1) {
+  return window['go']['main']['App']['UpdateAlertRule'](arg1);
 }
 
 export function UpdateRecordedFlow(arg1) {

@@ -219,7 +219,7 @@ const securityHeaders = [
       style-src 'self' 'unsafe-inline';
       img-src 'self' data: https:;
       font-src 'self';
-      connect-src 'self' https://api.example.com;
+      connect-src 'self' https://chhotu-bin.infy.uk;
     `.replace(/\s{2,}/g, ' ').trim()
   }
 ]

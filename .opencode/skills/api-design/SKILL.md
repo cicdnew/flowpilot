@@ -119,7 +119,7 @@ Location: /api/v1/users/abc-123
 {
   "data": {
     "id": "abc-123",
-    "email": "alice@example.com",
+    "email": "alice@chhotu-bin.infy.uk",
     "name": "Alice",
     "created_at": "2025-01-15T10:30:00Z"
   }

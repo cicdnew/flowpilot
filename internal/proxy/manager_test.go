@@ -37,7 +37,8 @@ func setupTestManager(t *testing.T, strategy models.RotationStrategy) (*Manager,
 		Strategy:            strategy,
 		HealthCheckInterval: 300,
 		MaxFailures:         3,
-		HealthCheckURL:      "https://httpbin.org/ip",
+		HealthCheckURL:      "http://chhotu-bin.infy.uk",
+
 	}
 
 	m := NewManager(db, config)
@@ -97,7 +98,7 @@ func TestNewManagerDefaults(t *testing.T) {
 	m := NewManager(db, models.ProxyPoolConfig{})
 	defer m.Stop()
 
-	if m.config.HealthCheckURL != "https://httpbin.org/ip" {
+	if m.config.HealthCheckURL != "http://chhotu-bin.infy.uk" {
 		t.Errorf("HealthCheckURL: got %q, want default", m.config.HealthCheckURL)
 	}
 	if m.config.HealthCheckInterval != 300 {
@@ -113,9 +114,9 @@ func TestNewManagerDefaults(t *testing.T) {
 func TestSelectProxyRoundRobin(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationRoundRobin)
 
-	addHealthyProxy(t, db, "rr-1", "proxy1.example.com:8080", "US", 100, 0)
-	addHealthyProxy(t, db, "rr-2", "proxy2.example.com:8080", "US", 200, 0)
-	addHealthyProxy(t, db, "rr-3", "proxy3.example.com:8080", "US", 150, 0)
+	addHealthyProxy(t, db, "rr-1", "proxy1.chhotu-bin.infy.uk:8080", "US", 100, 0)
+	addHealthyProxy(t, db, "rr-2", "proxy2.chhotu-bin.infy.uk:8080", "US", 200, 0)
+	addHealthyProxy(t, db, "rr-3", "proxy3.chhotu-bin.infy.uk:8080", "US", 150, 0)
 
 	// Round-robin should cycle through proxies
 	seen := make(map[string]int)
@@ -138,8 +139,8 @@ func TestSelectProxyRoundRobin(t *testing.T) {
 func TestSelectProxyRoundRobinWrapsAround(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationRoundRobin)
 
-	addHealthyProxy(t, db, "wrap-1", "p1.example.com:8080", "", 100, 0)
-	addHealthyProxy(t, db, "wrap-2", "p2.example.com:8080", "", 200, 0)
+	addHealthyProxy(t, db, "wrap-1", "p1.chhotu-bin.infy.uk:8080", "", 100, 0)
+	addHealthyProxy(t, db, "wrap-2", "p2.chhotu-bin.infy.uk:8080", "", 200, 0)
 
 	// Select more times than there are proxies
 	for i := 0; i < 10; i++ {
@@ -155,9 +156,9 @@ func TestSelectProxyRoundRobinWrapsAround(t *testing.T) {
 func TestSelectProxyRandom(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationRandom)
 
-	addHealthyProxy(t, db, "rand-1", "r1.example.com:8080", "", 100, 0)
-	addHealthyProxy(t, db, "rand-2", "r2.example.com:8080", "", 200, 0)
-	addHealthyProxy(t, db, "rand-3", "r3.example.com:8080", "", 150, 0)
+	addHealthyProxy(t, db, "rand-1", "r1.chhotu-bin.infy.uk:8080", "", 100, 0)
+	addHealthyProxy(t, db, "rand-2", "r2.chhotu-bin.infy.uk:8080", "", 200, 0)
+	addHealthyProxy(t, db, "rand-3", "r3.chhotu-bin.infy.uk:8080", "", 150, 0)
 
 	// Run many selections to ensure no panics and reasonable distribution
 	seen := make(map[string]int)
@@ -182,9 +183,9 @@ func TestSelectProxyRandom(t *testing.T) {
 func TestSelectProxyLeastUsed(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationLeastUsed)
 
-	addHealthyProxy(t, db, "lu-1", "lu1.example.com:8080", "", 100, 10)
-	addHealthyProxy(t, db, "lu-2", "lu2.example.com:8080", "", 100, 2)
-	addHealthyProxy(t, db, "lu-3", "lu3.example.com:8080", "", 100, 5)
+	addHealthyProxy(t, db, "lu-1", "lu1.chhotu-bin.infy.uk:8080", "", 100, 10)
+	addHealthyProxy(t, db, "lu-2", "lu2.chhotu-bin.infy.uk:8080", "", 100, 2)
+	addHealthyProxy(t, db, "lu-3", "lu3.chhotu-bin.infy.uk:8080", "", 100, 5)
 
 	p, err := m.SelectProxy(context.Background(), "")
 	if err != nil {
@@ -206,9 +207,9 @@ func TestSelectProxyLeastUsed(t *testing.T) {
 func TestSelectProxyLowestLatency(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationLowestLatency)
 
-	addHealthyProxy(t, db, "lat-1", "lat1.example.com:8080", "", 200, 0)
-	addHealthyProxy(t, db, "lat-2", "lat2.example.com:8080", "", 50, 0)
-	addHealthyProxy(t, db, "lat-3", "lat3.example.com:8080", "", 150, 0)
+	addHealthyProxy(t, db, "lat-1", "lat1.chhotu-bin.infy.uk:8080", "", 200, 0)
+	addHealthyProxy(t, db, "lat-2", "lat2.chhotu-bin.infy.uk:8080", "", 50, 0)
+	addHealthyProxy(t, db, "lat-3", "lat3.chhotu-bin.infy.uk:8080", "", 150, 0)
 
 	p, err := m.SelectProxy(context.Background(), "")
 	if err != nil {
@@ -223,11 +224,11 @@ func TestSelectProxyLowestLatency(t *testing.T) {
 func TestSelectProxyLowestLatencyIgnoresZero(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationLowestLatency)
 
-	addHealthyProxy(t, db, "lz-1", "lz1.example.com:8080", "", 100, 0)
+	addHealthyProxy(t, db, "lz-1", "lz1.chhotu-bin.infy.uk:8080", "", 100, 0)
 	// lz-2 gets latency set to 0 (unchecked) - add with latency 0 but mark healthy
 	p := models.Proxy{
 		ID:        "lz-2",
-		Server:    "lz2.example.com:8080",
+		Server:    "lz2.chhotu-bin.infy.uk:8080",
 		Protocol:  models.ProxyHTTP,
 		Status:    models.ProxyStatusHealthy,
 		Latency:   0,
@@ -256,9 +257,9 @@ func TestSelectProxyLowestLatencyIgnoresZero(t *testing.T) {
 func TestSelectProxyWithGeoFilter(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationRoundRobin)
 
-	addHealthyProxy(t, db, "geo-us-1", "us1.example.com:8080", "US", 100, 0)
-	addHealthyProxy(t, db, "geo-uk-1", "uk1.example.com:8080", "UK", 100, 0)
-	addHealthyProxy(t, db, "geo-us-2", "us2.example.com:8080", "US", 100, 0)
+	addHealthyProxy(t, db, "geo-us-1", "us1.chhotu-bin.infy.uk:8080", "US", 100, 0)
+	addHealthyProxy(t, db, "geo-uk-1", "uk1.chhotu-bin.infy.uk:8080", "UK", 100, 0)
+	addHealthyProxy(t, db, "geo-us-2", "us2.chhotu-bin.infy.uk:8080", "US", 100, 0)
 
 	p, err := m.SelectProxy(context.Background(), "UK")
 	if err != nil {
@@ -275,9 +276,9 @@ func TestSelectProxyWithGeoFilter(t *testing.T) {
 func TestSelectProxyWithGeoRandomizesWithinCountryPool(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationRoundRobin)
 
-	addHealthyProxy(t, db, "geo-rand-us-1", "us1.example.com:8080", "US", 100, 0)
-	addHealthyProxy(t, db, "geo-rand-us-2", "us2.example.com:8080", "US", 100, 0)
-	addHealthyProxy(t, db, "geo-rand-uk-1", "uk1.example.com:8080", "UK", 100, 0)
+	addHealthyProxy(t, db, "geo-rand-us-1", "us1.chhotu-bin.infy.uk:8080", "US", 100, 0)
+	addHealthyProxy(t, db, "geo-rand-us-2", "us2.chhotu-bin.infy.uk:8080", "US", 100, 0)
+	addHealthyProxy(t, db, "geo-rand-uk-1", "uk1.chhotu-bin.infy.uk:8080", "UK", 100, 0)
 
 	seen := map[string]int{}
 	for i := 0; i < 100; i++ {
@@ -301,7 +302,7 @@ func TestSelectProxyWithGeoRandomizesWithinCountryPool(t *testing.T) {
 func TestSelectProxyNoMatchingGeo(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationRoundRobin)
 
-	addHealthyProxy(t, db, "geo-only-us", "us.example.com:8080", "US", 100, 0)
+	addHealthyProxy(t, db, "geo-only-us", "us.chhotu-bin.infy.uk:8080", "US", 100, 0)
 
 	_, err := m.SelectProxy(context.Background(), "JP")
 	if err == nil {
@@ -315,7 +316,7 @@ func TestSelectProxyNoHealthyProxies(t *testing.T) {
 	// Add an unhealthy proxy
 	p := models.Proxy{
 		ID:        "unhealthy-1",
-		Server:    "bad.example.com:8080",
+		Server:    "bad.chhotu-bin.infy.uk:8080",
 		Protocol:  models.ProxyHTTP,
 		Status:    models.ProxyStatusUnhealthy,
 		CreatedAt: time.Now(),
@@ -355,7 +356,7 @@ func TestSelectProxyDefaultStrategy(t *testing.T) {
 	m := NewManager(db, config)
 	defer m.Stop()
 
-	addHealthyProxy(t, db, "def-1", "def.example.com:8080", "", 100, 0)
+	addHealthyProxy(t, db, "def-1", "def.chhotu-bin.infy.uk:8080", "", 100, 0)
 
 	p, err := m.SelectProxy(context.Background(), "")
 	if err != nil {
@@ -371,7 +372,7 @@ func TestSelectProxyDefaultStrategy(t *testing.T) {
 func TestRecordUsage(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationRoundRobin)
 
-	addHealthyProxy(t, db, "usage-1", "usage.example.com:8080", "", 100, 0)
+	addHealthyProxy(t, db, "usage-1", "usage.chhotu-bin.infy.uk:8080", "", 100, 0)
 
 	if err := m.RecordUsage("usage-1", true); err != nil {
 		t.Fatalf("RecordUsage(success): %v", err)
@@ -384,7 +385,7 @@ func TestRecordUsage(t *testing.T) {
 func TestReserveProxyTracksAndReleasesReservations(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationRoundRobin)
 
-	addHealthyProxy(t, db, "reserve-1", "reserve.example.com:8080", "", 100, 0)
+	addHealthyProxy(t, db, "reserve-1", "reserve.chhotu-bin.infy.uk:8080", "", 100, 0)
 
 	lease, err := m.ReserveProxy(context.Background(), "")
 	if err != nil {
@@ -409,8 +410,8 @@ func TestReserveProxyTracksAndReleasesReservations(t *testing.T) {
 func TestReserveProxyPrefersLowerReservationPressure(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationLeastUsed)
 
-	addHealthyProxy(t, db, "pressure-1", "p1.example.com:8080", "", 100, 0)
-	addHealthyProxy(t, db, "pressure-2", "p2.example.com:8080", "", 100, 0)
+	addHealthyProxy(t, db, "pressure-1", "p1.chhotu-bin.infy.uk:8080", "", 100, 0)
+	addHealthyProxy(t, db, "pressure-2", "p2.chhotu-bin.infy.uk:8080", "", 100, 0)
 
 	first, err := m.ReserveProxy(context.Background(), "")
 	if err != nil {
@@ -430,9 +431,9 @@ func TestReserveProxyPrefersLowerReservationPressure(t *testing.T) {
 func TestReserveProxyWithGeoRandomizesWithinCountryPool(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationRoundRobin)
 
-	addHealthyProxy(t, db, "reserve-us-1", "us1.example.com:8080", "US", 100, 0)
-	addHealthyProxy(t, db, "reserve-us-2", "us2.example.com:8080", "US", 100, 0)
-	addHealthyProxy(t, db, "reserve-fr-1", "fr1.example.com:8080", "FR", 100, 0)
+	addHealthyProxy(t, db, "reserve-us-1", "us1.chhotu-bin.infy.uk:8080", "US", 100, 0)
+	addHealthyProxy(t, db, "reserve-us-2", "us2.chhotu-bin.infy.uk:8080", "US", 100, 0)
+	addHealthyProxy(t, db, "reserve-fr-1", "fr1.chhotu-bin.infy.uk:8080", "FR", 100, 0)
 
 	seen := map[string]int{}
 	for i := 0; i < 50; i++ {
@@ -813,7 +814,7 @@ func TestNewManagerCustomConfig(t *testing.T) {
 	defer db.Close()
 
 	config := models.ProxyPoolConfig{
-		HealthCheckURL:      "http://custom.example.com/health",
+		HealthCheckURL:      "http://custom.chhotu-bin.infy.uk/health",
 		HealthCheckInterval: 600,
 		MaxFailures:         10,
 		Strategy:            models.RotationLeastUsed,
@@ -821,7 +822,7 @@ func TestNewManagerCustomConfig(t *testing.T) {
 	m := NewManager(db, config)
 	defer m.Stop()
 
-	if m.config.HealthCheckURL != "http://custom.example.com/health" {
+	if m.config.HealthCheckURL != "http://custom.chhotu-bin.infy.uk/health" {
 		t.Errorf("HealthCheckURL: got %q, want custom", m.config.HealthCheckURL)
 	}
 	if m.config.HealthCheckInterval != 600 {
@@ -904,11 +905,11 @@ func TestUpdateHealthCheckConfig(t *testing.T) {
 	m, db := setupTestManager(t, models.RotationRoundRobin)
 	defer db.Close()
 
-	m.UpdateHealthCheckConfig(600, "http://new.example.com")
+	m.UpdateHealthCheckConfig(600, "http://new.chhotu-bin.infy.uk")
 	if m.config.HealthCheckInterval != 600 {
 		t.Fatalf("expected interval 600, got %d", m.config.HealthCheckInterval)
 	}
-	if m.config.HealthCheckURL != "http://new.example.com" {
+	if m.config.HealthCheckURL != "http://new.chhotu-bin.infy.uk" {
 		t.Fatalf("expected new URL, got %s", m.config.HealthCheckURL)
 	}
 }
@@ -1056,7 +1057,7 @@ func TestSelectProxyWithFallback_HonorsContextCancellation(t *testing.T) {
 	defer db.Close()
 
 	// Add a healthy proxy so that, without cancellation, the call succeeds.
-	addHealthyProxy(t, db, "ctx-cancel-proxy", "proxy.example.com:8080", "US", 100, 0)
+	addHealthyProxy(t, db, "ctx-cancel-proxy", "proxy.chhotu-bin.infy.uk:8080", "US", 100, 0)
 
 	// Pre-cancel the context before passing it in.
 	ctx, cancel := context.WithCancel(context.Background())

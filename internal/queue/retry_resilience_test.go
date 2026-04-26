@@ -34,7 +34,7 @@ func TestHandleFailurePersistsRetryAttemptLogs(t *testing.T) {
 		NetworkLogs: []models.NetworkLog{{
 			TaskID:      task.ID,
 			StepIndex:   0,
-			RequestURL:  "https://example.com",
+			RequestURL:  "http://chhotu-bin.infy.uk",
 			Method:      "GET",
 			StatusCode:  500,
 			DurationMs:  10,

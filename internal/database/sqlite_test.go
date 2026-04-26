@@ -16,8 +16,8 @@ import (
 const (
 	// Common test values.
 	testPassword     = "testpass"
-	testURL          = "https://example.com"
-	testProxy        = "proxy.example.com:8080"
+	testURL          = "http://chhotu-bin.infy.uk"
+	testProxy        = "proxy.chhotu-bin.infy.uk:8080"
 	testDBFile       = "test.db"
 	testCronHourly   = "0 * * * *"
 	testCronWeekday  = "0 9 * * 1-5"
@@ -26,7 +26,7 @@ const (
 	testBatchID      = "batch-1"
 	testFlowWSID     = "flow-ws-1"
 	testWSReqID      = "ws-req-1"
-	testWSURL        = "wss://example.com/ws"
+	testWSURL        = "wss://chhotu-bin.infy.uk/ws"
 	testSnapID       = "snap-1"
 	testHealthProxy  = "health-1"
 	testUsageID      = "usage-1"
@@ -120,13 +120,13 @@ func makeTask(id, name string) models.Task {
 	return models.Task{
 		ID:   id,
 		Name: name,
-		URL:  "https://example.com",
+		URL:  "http://chhotu-bin.infy.uk",
 		Steps: []models.TaskStep{
-			{Action: models.ActionNavigate, Value: "https://example.com"},
+			{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 			{Action: models.ActionClick, Selector: "#btn"},
 		},
 		Proxy: models.ProxyConfig{
-			Server:   "proxy.example.com:8080",
+			Server:   "proxy.chhotu-bin.infy.uk:8080",
 			Username: "user",
 			Password: "pass",
 			Geo:      "US",
@@ -353,7 +353,7 @@ func TestUpdateTaskResult(t *testing.T) {
 		},
 		Screenshots: []string{"/tmp/shot1.png"},
 		StepLogs:    []models.StepLog{{TaskID: task.ID, StepIndex: 0, Action: models.ActionNavigate}},
-		NetworkLogs: []models.NetworkLog{{TaskID: task.ID, StepIndex: 0, RequestURL: "https://example.com", Method: "GET"}},
+		NetworkLogs: []models.NetworkLog{{TaskID: task.ID, StepIndex: 0, RequestURL: "http://chhotu-bin.infy.uk", Method: "GET"}},
 		Duration:    5 * time.Second,
 	}
 
@@ -460,8 +460,8 @@ func TestGetTaskStats(t *testing.T) {
 func TestCreateAndListProxies(t *testing.T) {
 	db := setupTestDB(t)
 
-	p1 := makeProxy("proxy-1", "proxy1.example.com:8080", "US")
-	p2 := makeProxy("proxy-2", "proxy2.example.com:8080", "UK")
+	p1 := makeProxy("proxy-1", "proxy1.chhotu-bin.infy.uk:8080", "US")
+	p2 := makeProxy("proxy-2", "proxy2.chhotu-bin.infy.uk:8080", "UK")
 
 	if err := db.CreateProxy(context.Background(), p1); err != nil {
 		t.Fatalf("CreateProxy 1: %v", err)
@@ -482,8 +482,8 @@ func TestCreateAndListProxies(t *testing.T) {
 func TestListHealthyProxies(t *testing.T) {
 	db := setupTestDB(t)
 
-	p1 := makeProxy("hp-1", "h1.example.com:8080", "US")
-	p2 := makeProxy("hp-2", "h2.example.com:8080", "UK")
+	p1 := makeProxy("hp-1", "h1.chhotu-bin.infy.uk:8080", "US")
+	p2 := makeProxy("hp-2", "h2.chhotu-bin.infy.uk:8080", "UK")
 
 	if err := db.CreateProxy(context.Background(), p1); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
@@ -538,7 +538,7 @@ func TestListHealthyProxiesDecryptsCredentials(t *testing.T) {
 
 func TestUpdateProxyHealth(t *testing.T) {
 	db := setupTestDB(t)
-	p := makeProxy("health-1", "health.example.com:8080", "US")
+	p := makeProxy("health-1", "health.chhotu-bin.infy.uk:8080", "US")
 	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
@@ -574,7 +574,7 @@ func TestUpdateProxyHealth(t *testing.T) {
 
 func TestIncrementProxyUsage(t *testing.T) {
 	db := setupTestDB(t)
-	p := makeProxy("usage-1", "usage.example.com:8080", "US")
+	p := makeProxy("usage-1", "usage.chhotu-bin.infy.uk:8080", "US")
 	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
@@ -608,7 +608,7 @@ func TestIncrementProxyUsage(t *testing.T) {
 
 func TestDeleteProxy(t *testing.T) {
 	db := setupTestDB(t)
-	p := makeProxy("del-p-1", "del.example.com:8080", "US")
+	p := makeProxy("del-p-1", "del.chhotu-bin.infy.uk:8080", "US")
 	if err := db.CreateProxy(context.Background(), p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
@@ -638,7 +638,7 @@ func TestCreateTaskWithNilStepsAndTags(t *testing.T) {
 	task := models.Task{
 		ID:        "nil-fields",
 		Name:      "Nil Fields",
-		URL:       "https://example.com",
+		URL:       "http://chhotu-bin.infy.uk",
 		Status:    models.TaskStatusPending,
 		CreatedAt: time.Now(),
 		// Steps and Tags are nil
@@ -696,7 +696,7 @@ func TestNewDatabasePermissions(t *testing.T) {
 
 func TestProxyCredentialsEncryptedAtRest(t *testing.T) {
 	db := setupTestDB(t)
-	p := makeProxy("enc-1", "proxy.example.com:8080", "US")
+	p := makeProxy("enc-1", "proxy.chhotu-bin.infy.uk:8080", "US")
 	p.Username = "cleartext_user"
 	p.Password = testPassword
 
@@ -1011,10 +1011,10 @@ func makeFlow(id, name string) models.RecordedFlow {
 		Name:        name,
 		Description: "Test flow description",
 		Steps: []models.RecordedStep{
-			{Index: 0, Action: models.ActionNavigate, Value: "https://example.com", Timestamp: now},
+			{Index: 0, Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk", Timestamp: now},
 			{Index: 1, Action: models.ActionClick, Selector: "#btn", Timestamp: now},
 		},
-		OriginURL: "https://example.com",
+		OriginURL: "http://chhotu-bin.infy.uk",
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -1162,7 +1162,7 @@ func TestDeleteRecordedFlowCascade(t *testing.T) {
 	snap := models.DOMSnapshot{
 		ID: "cascade-snap-1", FlowID: "cascade-flow", StepIndex: 0,
 		HTML: "<html></html>", ScreenshotPath: "/tmp/s.png",
-		URL: "https://example.com", CapturedAt: time.Now(),
+		URL: "http://chhotu-bin.infy.uk", CapturedAt: time.Now(),
 	}
 	if err := db.CreateDOMSnapshot(context.Background(), snap); err != nil {
 		t.Fatalf("CreateDOMSnapshot: %v", err)
@@ -1170,7 +1170,7 @@ func TestDeleteRecordedFlowCascade(t *testing.T) {
 
 	wsLogs := []models.WebSocketLog{
 		{FlowID: "cascade-flow", StepIndex: 0, RequestID: "ws-1",
-			URL: "wss://example.com", EventType: models.WSEventCreated,
+			URL: "wss://chhotu-bin.infy.uk", EventType: models.WSEventCreated,
 			Timestamp: time.Now()},
 	}
 	if err := db.InsertWebSocketLogs(context.Background(), "cascade-flow", wsLogs); err != nil {
@@ -1204,8 +1204,8 @@ func TestCreateAndListDOMSnapshots(t *testing.T) {
 	db := setupTestDB(t)
 
 	snapshots := []models.DOMSnapshot{
-		{ID: "snap-1", FlowID: "flow-1", StepIndex: 0, HTML: "<html>step0</html>", ScreenshotPath: "/tmp/s0.png", URL: "https://example.com", CapturedAt: time.Now()},
-		{ID: "snap-2", FlowID: "flow-1", StepIndex: 1, HTML: "<html>step1</html>", ScreenshotPath: "/tmp/s1.png", URL: "https://example.com/page", CapturedAt: time.Now()},
+		{ID: "snap-1", FlowID: "flow-1", StepIndex: 0, HTML: "<html>step0</html>", ScreenshotPath: "/tmp/s0.png", URL: "http://chhotu-bin.infy.uk", CapturedAt: time.Now()},
+		{ID: "snap-2", FlowID: "flow-1", StepIndex: 1, HTML: "<html>step1</html>", ScreenshotPath: "/tmp/s1.png", URL: "http://chhotu-bin.infy.uk/page", CapturedAt: time.Now()},
 		{ID: "snap-3", FlowID: "flow-2", StepIndex: 0, HTML: "<html>other</html>", ScreenshotPath: "/tmp/s2.png", URL: "https://other.com", CapturedAt: time.Now()},
 	}
 
@@ -1386,7 +1386,7 @@ func TestInsertAndListStepLogs(t *testing.T) {
 	}
 
 	logs := []models.StepLog{
-		{TaskID: "step-log-task", StepIndex: 0, Action: models.ActionNavigate, Value: "https://example.com", DurationMs: 100, StartedAt: time.Now()},
+		{TaskID: "step-log-task", StepIndex: 0, Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk", DurationMs: 100, StartedAt: time.Now()},
 		{TaskID: "step-log-task", StepIndex: 1, Action: models.ActionClick, Selector: "#btn", DurationMs: 50, StartedAt: time.Now()},
 		{TaskID: "step-log-task", StepIndex: 2, Action: models.ActionType, Selector: "#input", Value: "hello", ErrorCode: "TIMEOUT", ErrorMsg: "timed out", DurationMs: 5000, StartedAt: time.Now()},
 	}
@@ -1449,9 +1449,9 @@ func TestInsertAndListNetworkLogs(t *testing.T) {
 	}
 
 	logs := []models.NetworkLog{
-		{TaskID: "net-log-task", StepIndex: 0, RequestURL: "https://example.com", Method: "GET", StatusCode: 200, MimeType: "text/html", DurationMs: 150, Timestamp: time.Now()},
-		{TaskID: "net-log-task", StepIndex: 0, RequestURL: "https://cdn.example.com/style.css", Method: "GET", StatusCode: 200, MimeType: "text/css", ResponseSize: 1024, DurationMs: 50, Timestamp: time.Now()},
-		{TaskID: "net-log-task", StepIndex: 1, RequestURL: "https://api.example.com/data", Method: "POST", StatusCode: 500, Error: "server error", DurationMs: 300, Timestamp: time.Now()},
+		{TaskID: "net-log-task", StepIndex: 0, RequestURL: "http://chhotu-bin.infy.uk", Method: "GET", StatusCode: 200, MimeType: "text/html", DurationMs: 150, Timestamp: time.Now()},
+		{TaskID: "net-log-task", StepIndex: 0, RequestURL: "https://cdn.chhotu-bin.infy.uk/style.css", Method: "GET", StatusCode: 200, MimeType: "text/css", ResponseSize: 1024, DurationMs: 50, Timestamp: time.Now()},
+		{TaskID: "net-log-task", StepIndex: 1, RequestURL: "https://api.chhotu-bin.infy.uk/data", Method: "POST", StatusCode: 500, Error: "server error", DurationMs: 300, Timestamp: time.Now()},
 	}
 
 	if err := db.InsertNetworkLogs(context.Background(), "net-log-task", logs); err != nil {
@@ -1738,7 +1738,7 @@ func TestUpdateProxyHealthNotFound(t *testing.T) {
 
 func TestUpdateTaskNotFound(t *testing.T) {
 	db := setupTestDB(t)
-	err := db.UpdateTask(context.Background(), "nonexistent", TaskUpdateParams{Name: "Name", URL: "https://example.com", Steps: nil, ProxyConfig: models.ProxyConfig{}, Priority: models.PriorityNormal, Tags: nil, Timeout: 0, LoggingPolicy: nil})
+	err := db.UpdateTask(context.Background(), "nonexistent", TaskUpdateParams{Name: "Name", URL: "http://chhotu-bin.infy.uk", Steps: nil, ProxyConfig: models.ProxyConfig{}, Priority: models.PriorityNormal, Tags: nil, Timeout: 0, LoggingPolicy: nil})
 	if err == nil {
 		t.Fatal("expected error for nonexistent task update")
 	}
@@ -1794,8 +1794,8 @@ func TestUpdateTaskOnFailedTask(t *testing.T) {
 
 	err := db.UpdateTask(context.Background(), "upd-failed-1", TaskUpdateParams{
 		Name:        "Retried",
-		URL:         "https://example.com",
-		Steps:       []models.TaskStep{{Action: models.ActionNavigate, Value: "https://example.com"}},
+		URL:         "http://chhotu-bin.infy.uk",
+		Steps:       []models.TaskStep{{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"}},
 		ProxyConfig: models.ProxyConfig{},
 		Priority:    models.PriorityNormal,
 		Tags:        nil,
@@ -1884,7 +1884,7 @@ func TestCreateTaskWithEmptyProxy(t *testing.T) {
 	task := models.Task{
 		ID:        "empty-proxy",
 		Name:      "Empty Proxy",
-		URL:       "https://example.com",
+		URL:       "http://chhotu-bin.infy.uk",
 		Status:    models.TaskStatusPending,
 		CreatedAt: time.Now(),
 	}
@@ -2149,7 +2149,7 @@ func TestInsertNetworkLogsMultiple(t *testing.T) {
 		logs[i] = models.NetworkLog{
 			TaskID:          "nl-multi-1",
 			StepIndex:       i,
-			RequestURL:      fmt.Sprintf("https://example.com/page%d", i),
+			RequestURL:      fmt.Sprintf("http://chhotu-bin.infy.uk/page%d", i),
 			Method:          "GET",
 			StatusCode:      200,
 			MimeType:        "text/html",
@@ -2175,7 +2175,7 @@ func TestInsertNetworkLogsMultiple(t *testing.T) {
 	}
 
 	for i, log := range got {
-		if log.RequestURL != fmt.Sprintf("https://example.com/page%d", i) {
+		if log.RequestURL != fmt.Sprintf("http://chhotu-bin.infy.uk/page%d", i) {
 			t.Errorf("log[%d].RequestURL: got %q", i, log.RequestURL)
 		}
 		if log.RequestHeaders != `{"Accept":"text/html"}` {
@@ -2230,7 +2230,7 @@ func TestPurgeOldRecordsWithOldData(t *testing.T) {
 	}
 
 	if err := db.InsertNetworkLogs(context.Background(), "purge-old-1", []models.NetworkLog{
-		{TaskID: "purge-old-1", StepIndex: 0, RequestURL: "https://example.com", Method: "GET", StatusCode: 200, Timestamp: time.Now()},
+		{TaskID: "purge-old-1", StepIndex: 0, RequestURL: "http://chhotu-bin.infy.uk", Method: "GET", StatusCode: 200, Timestamp: time.Now()},
 	}); err != nil {
 		t.Fatalf("InsertNetworkLogs: %v", err)
 	}
@@ -2280,7 +2280,7 @@ func TestInsertAndListWebSocketLogs(t *testing.T) {
 			FlowID:         "flow-ws-1",
 			StepIndex:      0,
 			RequestID:      "ws-req-1",
-			URL:            "wss://example.com/ws",
+			URL:            "wss://chhotu-bin.infy.uk/ws",
 			EventType:      models.WSEventCreated,
 			Direction:      "",
 			Opcode:         0,
@@ -2295,7 +2295,7 @@ func TestInsertAndListWebSocketLogs(t *testing.T) {
 			FlowID:         "flow-ws-1",
 			StepIndex:      0,
 			RequestID:      "ws-req-1",
-			URL:            "wss://example.com/ws",
+			URL:            "wss://chhotu-bin.infy.uk/ws",
 			EventType:      models.WSEventHandshake,
 			Direction:      "",
 			Opcode:         0,
@@ -2307,7 +2307,7 @@ func TestInsertAndListWebSocketLogs(t *testing.T) {
 			FlowID:         "flow-ws-1",
 			StepIndex:      1,
 			RequestID:      "ws-req-1",
-			URL:            "wss://example.com/ws",
+			URL:            "wss://chhotu-bin.infy.uk/ws",
 			EventType:      models.WSEventFrameSent,
 			Direction:      "send",
 			Opcode:         1,
@@ -2319,7 +2319,7 @@ func TestInsertAndListWebSocketLogs(t *testing.T) {
 			FlowID:         "flow-ws-1",
 			StepIndex:      1,
 			RequestID:      "ws-req-1",
-			URL:            "wss://example.com/ws",
+			URL:            "wss://chhotu-bin.infy.uk/ws",
 			EventType:      models.WSEventFrameReceived,
 			Direction:      "receive",
 			Opcode:         1,
@@ -2331,7 +2331,7 @@ func TestInsertAndListWebSocketLogs(t *testing.T) {
 			FlowID:      "flow-ws-1",
 			StepIndex:   2,
 			RequestID:   "ws-req-1",
-			URL:         "wss://example.com/ws",
+			URL:         "wss://chhotu-bin.infy.uk/ws",
 			EventType:   models.WSEventClosed,
 			CloseCode:   1000,
 			CloseReason: "normal closure",
@@ -2357,7 +2357,7 @@ func TestInsertAndListWebSocketLogs(t *testing.T) {
 	if got[0].EventType != models.WSEventCreated {
 		t.Errorf("log[0].EventType: got %q, want %q", got[0].EventType, models.WSEventCreated)
 	}
-	if got[0].URL != "wss://example.com/ws" {
+	if got[0].URL != "wss://chhotu-bin.infy.uk/ws" {
 		t.Errorf("log[0].URL: got %q", got[0].URL)
 	}
 	if got[0].RequestID != "ws-req-1" {
@@ -2420,7 +2420,7 @@ func TestInsertWebSocketLogsErrorEvent(t *testing.T) {
 			FlowID:       "flow-ws-err",
 			StepIndex:    0,
 			RequestID:    "ws-err-1",
-			URL:          "wss://example.com/ws",
+			URL:          "wss://chhotu-bin.infy.uk/ws",
 			EventType:    models.WSEventError,
 			ErrorMessage: "connection reset by peer",
 			Timestamp:    time.Now().Truncate(time.Second),
@@ -2534,7 +2534,7 @@ func TestInsertAndListStepLogsRoundTrip(t *testing.T) {
 	}
 
 	logs := []models.StepLog{
-		{TaskID: "sl-round-1", StepIndex: 0, Action: models.ActionNavigate, Value: "https://example.com", DurationMs: 150, StartedAt: time.Now().Truncate(time.Second)},
+		{TaskID: "sl-round-1", StepIndex: 0, Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk", DurationMs: 150, StartedAt: time.Now().Truncate(time.Second)},
 		{TaskID: "sl-round-1", StepIndex: 1, Action: models.ActionClick, Selector: "#btn", SnapshotID: "snap-1", ErrorCode: "TIMEOUT", ErrorMsg: "timed out", DurationMs: 200, StartedAt: time.Now().Truncate(time.Second)},
 	}
 
@@ -2552,7 +2552,7 @@ func TestInsertAndListStepLogsRoundTrip(t *testing.T) {
 	if got[0].Action != models.ActionNavigate {
 		t.Errorf("log[0].Action: got %q", got[0].Action)
 	}
-	if got[0].Value != "https://example.com" {
+	if got[0].Value != "http://chhotu-bin.infy.uk" {
 		t.Errorf("log[0].Value: got %q", got[0].Value)
 	}
 	if got[1].Selector != "#btn" {
@@ -2581,7 +2581,7 @@ func TestInsertAndListNetworkLogsRoundTrip(t *testing.T) {
 		{
 			TaskID:          "nl-round-1",
 			StepIndex:       0,
-			RequestURL:      "https://example.com/api",
+			RequestURL:      "http://chhotu-bin.infy.uk/api",
 			Method:          "POST",
 			StatusCode:      201,
 			MimeType:        "application/json",
@@ -2631,7 +2631,7 @@ func TestScanTaskCorruptedStepsJSON(t *testing.T) {
 	task := models.Task{
 		ID:     "corrupt-steps-1",
 		Name:   "test",
-		URL:    "https://example.com",
+		URL:    "http://chhotu-bin.infy.uk",
 		Status: "pending",
 		Steps:  []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 		Tags:   []string{"ok"},
@@ -2657,7 +2657,7 @@ func TestScanTaskCorruptedResultJSON(t *testing.T) {
 	task := models.Task{
 		ID:     "corrupt-result-1",
 		Name:   "test",
-		URL:    "https://example.com",
+		URL:    "http://chhotu-bin.infy.uk",
 		Status: "completed",
 		Steps:  []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 		Tags:   []string{},
@@ -2683,7 +2683,7 @@ func TestScanTaskCorruptedTagsJSON(t *testing.T) {
 	task := models.Task{
 		ID:     "corrupt-tags-1",
 		Name:   "test",
-		URL:    "https://example.com",
+		URL:    "http://chhotu-bin.infy.uk",
 		Status: "pending",
 		Steps:  []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 		Tags:   []string{"valid"},
@@ -2708,7 +2708,7 @@ func TestListTasksCorruptedJSON(t *testing.T) {
 	task := models.Task{
 		ID:     "corrupt-list-1",
 		Name:   "test",
-		URL:    "https://example.com",
+		URL:    "http://chhotu-bin.infy.uk",
 		Status: "pending",
 		Steps:  []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 		Tags:   []string{},
@@ -2733,7 +2733,7 @@ func TestListTasksByStatusCorruptedJSON(t *testing.T) {
 	task := models.Task{
 		ID:     "corrupt-status-1",
 		Name:   "test",
-		URL:    "https://example.com",
+		URL:    "http://chhotu-bin.infy.uk",
 		Status: "pending",
 		Steps:  []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 		Tags:   []string{},
@@ -2761,7 +2761,7 @@ func TestGetRecordedFlowCorruptedSteps(t *testing.T) {
 		Name:        "corrupt flow",
 		Description: "testing corrupted steps",
 		Steps:       []models.RecordedStep{{Index: 0, Action: models.ActionClick, Selector: "#btn", Timestamp: now}},
-		OriginURL:   "https://example.com",
+		OriginURL:   "http://chhotu-bin.infy.uk",
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -2788,7 +2788,7 @@ func TestListRecordedFlowsCorruptedSteps(t *testing.T) {
 		Name:        "corrupt flow list",
 		Description: "testing corrupted steps",
 		Steps:       []models.RecordedStep{{Index: 0, Action: models.ActionClick, Selector: "#btn", Timestamp: now}},
-		OriginURL:   "https://example.com",
+		OriginURL:   "http://chhotu-bin.infy.uk",
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -2812,7 +2812,7 @@ func TestListTasksPaginatedIgnoresCorruptedHeavyJSON(t *testing.T) {
 	task := models.Task{
 		ID:     "corrupt-pag-1",
 		Name:   "test",
-		URL:    "https://example.com",
+		URL:    "http://chhotu-bin.infy.uk",
 		Status: "pending",
 		Steps:  []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 		Tags:   []string{},
@@ -2851,7 +2851,7 @@ func TestGetTaskStatsMultipleStatuses(t *testing.T) {
 		task := models.Task{
 			ID:     fmt.Sprintf("stats-multi-%d", i),
 			Name:   "stats test",
-			URL:    "https://example.com",
+			URL:    "http://chhotu-bin.infy.uk",
 			Status: status,
 			Steps:  []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
 			Tags:   []string{},
@@ -2918,7 +2918,7 @@ func TestListTasksByBatchCorruptedJSON(t *testing.T) {
 	task := models.Task{
 		ID:      "corrupt-batch-1",
 		Name:    "test",
-		URL:     "https://example.com",
+		URL:     "http://chhotu-bin.infy.uk",
 		Status:  "pending",
 		BatchID: "batch-corrupt-1",
 		Steps:   []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
@@ -2944,7 +2944,7 @@ func TestListTasksByBatchStatusCorruptedJSON(t *testing.T) {
 	task := models.Task{
 		ID:      "corrupt-bstat-1",
 		Name:    "test",
-		URL:     "https://example.com",
+		URL:     "http://chhotu-bin.infy.uk",
 		Status:  "pending",
 		BatchID: "batch-bstat-corrupt-1",
 		Steps:   []models.TaskStep{{Action: models.ActionClick, Selector: "#btn"}},
@@ -2974,9 +2974,9 @@ func makeSchedule(id, name string) models.Schedule {
 		Name:     name,
 		CronExpr: "*/15 * * * *",
 		FlowID:   "flow-1",
-		URL:      "https://example.com",
+		URL:      "http://chhotu-bin.infy.uk",
 		ProxyConfig: models.ProxyConfig{
-			Server:   "proxy.example.com:8080",
+			Server:   "proxy.chhotu-bin.infy.uk:8080",
 			Username: "user",
 			Password: "pass",
 		},
@@ -3294,7 +3294,7 @@ func TestCreateVisualBaseline(t *testing.T) {
 		ID:             "vb-1",
 		Name:           "Homepage",
 		TaskID:         "task-1",
-		URL:            "https://example.com",
+		URL:            "http://chhotu-bin.infy.uk",
 		ScreenshotPath: "/tmp/baseline.png",
 		Width:          1920,
 		Height:         1080,
@@ -3331,7 +3331,7 @@ func TestListVisualBaselines(t *testing.T) {
 		b := models.VisualBaseline{
 			ID:             fmt.Sprintf("vb-list-%d", i),
 			Name:           fmt.Sprintf("Baseline %d", i),
-			URL:            "https://example.com",
+			URL:            "http://chhotu-bin.infy.uk",
 			ScreenshotPath: fmt.Sprintf("/tmp/baseline-%d.png", i),
 			Width:          1920,
 			Height:         1080,
@@ -3358,7 +3358,7 @@ func TestDeleteVisualBaseline(t *testing.T) {
 	b := models.VisualBaseline{
 		ID:             "vb-del-1",
 		Name:           "ToDelete",
-		URL:            "https://example.com",
+		URL:            "http://chhotu-bin.infy.uk",
 		ScreenshotPath: "/tmp/del.png",
 		Width:          800,
 		Height:         600,
@@ -3385,7 +3385,7 @@ func TestCreateVisualDiff(t *testing.T) {
 	b := models.VisualBaseline{
 		ID:             "vb-diff-base",
 		Name:           "Base",
-		URL:            "https://example.com",
+		URL:            "http://chhotu-bin.infy.uk",
 		ScreenshotPath: "/tmp/base.png",
 		Width:          1920,
 		Height:         1080,
@@ -3439,7 +3439,7 @@ func TestListVisualDiffs(t *testing.T) {
 	b := models.VisualBaseline{
 		ID:             "vb-listdiff",
 		Name:           "Base",
-		URL:            "https://example.com",
+		URL:            "http://chhotu-bin.infy.uk",
 		ScreenshotPath: "/tmp/base.png",
 		Width:          800,
 		Height:         600,
@@ -3485,7 +3485,7 @@ func TestListVisualDiffsByTask(t *testing.T) {
 	b := models.VisualBaseline{
 		ID:             "vb-bytask",
 		Name:           "Base",
-		URL:            "https://example.com",
+		URL:            "http://chhotu-bin.infy.uk",
 		ScreenshotPath: "/tmp/base.png",
 		Width:          800,
 		Height:         600,
@@ -3593,7 +3593,7 @@ func TestReaderConn(t *testing.T) {
 func TestListProxiesBestEffort(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
-	p := makeProxy("p1", "proxy.example.com:8080", "US")
+	p := makeProxy("p1", "proxy.chhotu-bin.infy.uk:8080", "US")
 	if err := db.CreateProxy(ctx, p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
@@ -3612,7 +3612,7 @@ func TestListProxiesBestEffort(t *testing.T) {
 func TestUpdateProxyRateLimit(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
-	p := makeProxy("p1", "proxy.example.com:8080", "US")
+	p := makeProxy("p1", "proxy.chhotu-bin.infy.uk:8080", "US")
 	if err := db.CreateProxy(ctx, p); err != nil {
 		t.Fatalf("CreateProxy: %v", err)
 	}
@@ -3656,7 +3656,7 @@ func TestGetSchedule(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 	nr := time.Now().Add(time.Hour)
-	sched := models.Schedule{ID: "s1", Name: "Test", CronExpr: "0 * * * *", FlowID: "flow1", URL: "https://example.com", Enabled: true, NextRunAt: &nr, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	sched := models.Schedule{ID: "s1", Name: "Test", CronExpr: "0 * * * *", FlowID: "flow1", URL: "http://chhotu-bin.infy.uk", Enabled: true, NextRunAt: &nr, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	if err := db.CreateSchedule(ctx, sched); err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
@@ -3673,7 +3673,7 @@ func TestDeleteScheduleDB(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 	nr := time.Now().Add(time.Hour)
-	sched := models.Schedule{ID: "s1", Name: "Test", CronExpr: "0 * * * *", FlowID: "flow1", URL: "https://example.com", Enabled: true, NextRunAt: &nr, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	sched := models.Schedule{ID: "s1", Name: "Test", CronExpr: "0 * * * *", FlowID: "flow1", URL: "http://chhotu-bin.infy.uk", Enabled: true, NextRunAt: &nr, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	if err := db.CreateSchedule(ctx, sched); err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
@@ -3689,7 +3689,7 @@ func TestUpdateScheduleRunDB(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 	nr := time.Now().Add(time.Hour)
-	sched := models.Schedule{ID: "s1", Name: "Test", CronExpr: "0 * * * *", FlowID: "flow1", URL: "https://example.com", Enabled: true, NextRunAt: &nr, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	sched := models.Schedule{ID: "s1", Name: "Test", CronExpr: "0 * * * *", FlowID: "flow1", URL: "http://chhotu-bin.infy.uk", Enabled: true, NextRunAt: &nr, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	if err := db.CreateSchedule(ctx, sched); err != nil {
 		t.Fatalf("CreateSchedule: %v", err)
 	}
@@ -3703,7 +3703,7 @@ func TestUpdateScheduleRunDB(t *testing.T) {
 func TestDeleteVisualDiffDB(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
-	baseline := models.VisualBaseline{ID: "b1", Name: "baseline1", URL: "https://example.com", ScreenshotPath: "/tmp/img.png", CreatedAt: time.Now()}
+	baseline := models.VisualBaseline{ID: "b1", Name: "baseline1", URL: "http://chhotu-bin.infy.uk", ScreenshotPath: "/tmp/img.png", CreatedAt: time.Now()}
 	if err := db.CreateVisualBaseline(ctx, baseline); err != nil {
 		t.Fatalf("CreateVisualBaseline: %v", err)
 	}
@@ -3815,7 +3815,7 @@ func TestSqliteLocalDSN(t *testing.T) {
 func TestDeleteRecordedFlowDB(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
-	flow := models.RecordedFlow{ID: "flow1", Name: "Test Flow", Steps: []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "https://example.com"}}, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	flow := models.RecordedFlow{ID: "flow1", Name: "Test Flow", Steps: []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"}}, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	if err := db.CreateRecordedFlow(ctx, flow); err != nil {
 		t.Fatalf("CreateRecordedFlow: %v", err)
 	}
@@ -3845,7 +3845,7 @@ func TestDeleteTaskDB(t *testing.T) {
 func TestDeleteVisualBaselineDB(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
-	baseline := models.VisualBaseline{ID: "b1", Name: "baseline1", URL: "https://example.com", ScreenshotPath: "/tmp/img.png", CreatedAt: time.Now()}
+	baseline := models.VisualBaseline{ID: "b1", Name: "baseline1", URL: "http://chhotu-bin.infy.uk", ScreenshotPath: "/tmp/img.png", CreatedAt: time.Now()}
 	if err := db.CreateVisualBaseline(ctx, baseline); err != nil {
 		t.Fatalf("CreateVisualBaseline: %v", err)
 	}
@@ -3878,7 +3878,7 @@ func TestListRecordedFlowsDB(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 	for i := 0; i < 3; i++ {
-		flow := models.RecordedFlow{ID: fmt.Sprintf("flow%d", i), Name: fmt.Sprintf("Flow %d", i), Steps: []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "https://example.com"}}, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+		flow := models.RecordedFlow{ID: fmt.Sprintf("flow%d", i), Name: fmt.Sprintf("Flow %d", i), Steps: []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"}}, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 		if err := db.CreateRecordedFlow(ctx, flow); err != nil {
 			t.Fatalf("CreateRecordedFlow: %v", err)
 		}
@@ -3914,7 +3914,7 @@ func TestCloseDoubleDB(t *testing.T) {
 func TestGetRecordedFlowDB(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
-	flow := models.RecordedFlow{ID: "f1", Name: "Flow", Steps: []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "https://example.com"}}, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	flow := models.RecordedFlow{ID: "f1", Name: "Flow", Steps: []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"}}, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	if err := db.CreateRecordedFlow(ctx, flow); err != nil {
 		t.Fatalf("CreateRecordedFlow: %v", err)
 	}
@@ -3930,7 +3930,7 @@ func TestGetRecordedFlowDB(t *testing.T) {
 func TestUpdateRecordedFlowDB(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
-	flow := models.RecordedFlow{ID: "f2", Name: "Original", Steps: []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "https://example.com"}}, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	flow := models.RecordedFlow{ID: "f2", Name: "Original", Steps: []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"}}, CreatedAt: time.Now(), UpdatedAt: time.Now()}
 	if err := db.CreateRecordedFlow(ctx, flow); err != nil {
 		t.Fatalf("CreateRecordedFlow: %v", err)
 	}
@@ -3982,7 +3982,7 @@ func TestInsertNetworkLogsDB(t *testing.T) {
 	if err := db.CreateTask(ctx, task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
-	networkLogs := []models.NetworkLog{{RequestURL: "https://example.com", Method: "GET", StatusCode: 200}}
+	networkLogs := []models.NetworkLog{{RequestURL: "http://chhotu-bin.infy.uk", Method: "GET", StatusCode: 200}}
 	if err := db.InsertNetworkLogs(ctx, "t1", networkLogs); err != nil {
 		t.Fatalf("InsertNetworkLogs: %v", err)
 	}
@@ -4003,7 +4003,7 @@ func TestUpdateTaskDB(t *testing.T) {
 func TestListProxiesBestEffortWithCreds(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
-	p := makeProxy("enc-p1", "proxy.example.com:8080", "US")
+	p := makeProxy("enc-p1", "proxy.chhotu-bin.infy.uk:8080", "US")
 	p.Username = "user"
 	p.Password = testPassword
 	if err := db.CreateProxy(ctx, p); err != nil {
@@ -4024,7 +4024,7 @@ func TestCreateRecordedFlowWithLoggingPolicy(t *testing.T) {
 	lp := models.TaskLoggingPolicy{MaxExecutionLogs: 50}
 	flow := models.RecordedFlow{
 		ID: "flow-lp", Name: "Flow LP",
-		Steps:         []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "https://example.com"}},
+		Steps:         []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"}},
 		LoggingPolicy: &lp,
 		CreatedAt:     time.Now(), UpdatedAt: time.Now(),
 	}
@@ -4046,7 +4046,7 @@ func TestUpdateRecordedFlowWithPolicy(t *testing.T) {
 	lp := models.TaskLoggingPolicy{MaxExecutionLogs: 10}
 	flow := models.RecordedFlow{
 		ID: "flow-upd", Name: "Original",
-		Steps:         []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "https://example.com"}},
+		Steps:         []models.RecordedStep{{Index: 0, Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"}},
 		LoggingPolicy: &lp,
 		CreatedAt:     time.Now(), UpdatedAt: time.Now(),
 	}
@@ -4099,7 +4099,7 @@ func TestListNetworkLogsDB(t *testing.T) {
 	ctx := context.Background()
 	task := makeTask("t1", "Task")
 	_ = db.CreateTask(ctx, task)
-	nLogs := []models.NetworkLog{{RequestURL: "https://example.com", Method: "GET", StatusCode: 200}}
+	nLogs := []models.NetworkLog{{RequestURL: "http://chhotu-bin.infy.uk", Method: "GET", StatusCode: 200}}
 	if err := db.InsertNetworkLogs(ctx, "t1", nLogs); err != nil {
 		t.Fatalf("InsertNetworkLogs: %v", err)
 	}
@@ -4116,7 +4116,7 @@ func TestInsertWebSocketLogsDB(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
 	wsLogs := []models.WebSocketLog{
-		{FlowID: "flow1", URL: "wss://example.com", Direction: "send", PayloadSnippet: "ping", Timestamp: time.Now()},
+		{FlowID: "flow1", URL: "wss://chhotu-bin.infy.uk", Direction: "send", PayloadSnippet: "ping", Timestamp: time.Now()},
 	}
 	if err := db.InsertWebSocketLogs(ctx, "flow1", wsLogs); err != nil {
 		t.Fatalf("InsertWebSocketLogs: %v", err)
@@ -4185,7 +4185,7 @@ func TestUpdateScheduleDB(t *testing.T) {
 	nr := time.Now().Add(time.Hour)
 	sched := models.Schedule{
 		ID: "s1", Name: "Test", CronExpr: "0 * * * *",
-		FlowID: "flow1", URL: "https://example.com", Enabled: true,
+		FlowID: "flow1", URL: "http://chhotu-bin.infy.uk", Enabled: true,
 		NextRunAt: &nr, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	}
 	if err := db.CreateSchedule(ctx, sched); err != nil {
@@ -4201,7 +4201,7 @@ func TestUpdateScheduleDB(t *testing.T) {
 func TestCreateProxyAndListDB(t *testing.T) {
 	db := setupTestDB(t)
 	ctx := context.Background()
-	p := makeProxy("p1", "proxy.example.com:8080", "US")
+	p := makeProxy("p1", "proxy.chhotu-bin.infy.uk:8080", "US")
 	p.Username = "myuser"
 	p.Password = "mypass"
 	if err := db.CreateProxy(ctx, p); err != nil {

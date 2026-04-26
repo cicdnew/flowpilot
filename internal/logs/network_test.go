@@ -14,12 +14,12 @@ func TestNetworkLoggerCapsEntries(t *testing.T) {
 		reqID := network.RequestID(fmt.Sprintf("req-%d", i))
 		nl.HandleRequestWillBeSent(&network.EventRequestWillBeSent{
 			RequestID: reqID,
-			Request:   &network.Request{Method: "GET", URL: fmt.Sprintf("https://example.com/%d", i)},
+			Request:   &network.Request{Method: "GET", URL: fmt.Sprintf("http://chhotu-bin.infy.uk/%d", i)},
 		})
 		nl.HandleResponseReceived(&network.EventResponseReceived{
 			RequestID: reqID,
 			Response: &network.Response{
-				URL:      fmt.Sprintf("https://example.com/%d", i),
+				URL:      fmt.Sprintf("http://chhotu-bin.infy.uk/%d", i),
 				Status:   200,
 				MimeType: "text/html",
 			},
@@ -46,7 +46,7 @@ func TestNetworkLoggerCapsPendingRequests(t *testing.T) {
 		reqID := network.RequestID(fmt.Sprintf("pending-%d", i))
 		nl.HandleRequestWillBeSent(&network.EventRequestWillBeSent{
 			RequestID: reqID,
-			Request:   &network.Request{Method: "GET", URL: fmt.Sprintf("https://example.com/%d", i)},
+			Request:   &network.Request{Method: "GET", URL: fmt.Sprintf("http://chhotu-bin.infy.uk/%d", i)},
 		})
 	}
 
@@ -66,12 +66,12 @@ func TestNetworkLoggerDroppedCount(t *testing.T) {
 		reqID := network.RequestID(fmt.Sprintf("req-%d", i))
 		nl.HandleRequestWillBeSent(&network.EventRequestWillBeSent{
 			RequestID: reqID,
-			Request:   &network.Request{Method: "GET", URL: fmt.Sprintf("https://example.com/%d", i)},
+			Request:   &network.Request{Method: "GET", URL: fmt.Sprintf("http://chhotu-bin.infy.uk/%d", i)},
 		})
 		nl.HandleResponseReceived(&network.EventResponseReceived{
 			RequestID: reqID,
 			Response: &network.Response{
-				URL:      fmt.Sprintf("https://example.com/%d", i),
+				URL:      fmt.Sprintf("http://chhotu-bin.infy.uk/%d", i),
 				Status:   200,
 				MimeType: "text/html",
 			},
@@ -98,12 +98,12 @@ func TestNetworkLoggerBasicFlow(t *testing.T) {
 	reqID := network.RequestID("req-1")
 	nl.HandleRequestWillBeSent(&network.EventRequestWillBeSent{
 		RequestID: reqID,
-		Request:   &network.Request{Method: "GET", URL: "https://example.com"},
+		Request:   &network.Request{Method: "GET", URL: "http://chhotu-bin.infy.uk"},
 	})
 	nl.HandleResponseReceived(&network.EventResponseReceived{
 		RequestID: reqID,
 		Response: &network.Response{
-			URL:      "https://example.com",
+			URL:      "http://chhotu-bin.infy.uk",
 			Status:   200,
 			MimeType: "text/html",
 		},
@@ -134,7 +134,7 @@ func TestNetworkLoggerHandleLoadingFailed(t *testing.T) {
 	reqID := network.RequestID("req-fail")
 	nl.HandleRequestWillBeSent(&network.EventRequestWillBeSent{
 		RequestID: reqID,
-		Request:   &network.Request{Method: "GET", URL: "https://example.com"},
+		Request:   &network.Request{Method: "GET", URL: "http://chhotu-bin.infy.uk"},
 	})
 	nl.HandleLoadingFailed(reqID)
 

@@ -12,7 +12,7 @@ Common patterns you can copy and customize for your tests.
 ```json
 {
   "steps": [
-    {"action": "navigate", "value": "https://example.com/page/{{counter}}"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/page/{{counter}}"},
     {"action": "wait", "value": "2"},
     {"action": "extract", "selector": "h1", "value": "title_{{counter}}"},
     {"action": "screenshot", "value": "page_{{counter}}"}
@@ -24,7 +24,7 @@ Common patterns you can copy and customize for your tests.
 ```json
 {
   "steps": [
-    {"action": "navigate", "value": "https://example.com"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk"},
     {"action": "type", "selector": "#search", "value": "query {{counter}}"},
     {"action": "click", "selector": "#search-btn"},
     {"action": "wait", "value": "2"},
@@ -72,7 +72,7 @@ Common patterns you can copy and customize for your tests.
 ```json
 {
   "steps": [
-    {"action": "navigate", "value": "https://example.com/contact"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/contact"},
     {"action": "type", "selector": "#name", "value": "User {{counter}}"},
     {"action": "type", "selector": "#email", "value": "user{{counter}}@test.com"},
     {"action": "type", "selector": "#message", "value": "Test message {{counter}}"},
@@ -87,7 +87,7 @@ Common patterns you can copy and customize for your tests.
 ```json
 {
   "steps": [
-    {"action": "navigate", "value": "https://example.com/signup"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/signup"},
     {"action": "type", "selector": "#username", "value": "user{{counter}}"},
     {"action": "type", "selector": "#email", "value": "user{{counter}}@test.com"},
     {"action": "click", "selector": ".next-step"},
@@ -107,7 +107,7 @@ Common patterns you can copy and customize for your tests.
 ```json
 {
   "steps": [
-    {"action": "navigate", "value": "https://example.com/login"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/login"},
     {"action": "type", "selector": "#username", "value": "testuser{{counter}}"},
     {"action": "type", "selector": "#password", "value": "TestPass{{counter}}!"},
     {"action": "click", "selector": "#login"},
@@ -121,12 +121,12 @@ Common patterns you can copy and customize for your tests.
 ```json
 {
   "steps": [
-    {"action": "navigate", "value": "https://example.com/login"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/login"},
     {"action": "type", "selector": "#username", "value": "user{{counter}}"},
     {"action": "type", "selector": "#password", "value": "pass{{counter}}"},
     {"action": "click", "selector": "#login"},
     {"action": "wait", "value": "2"},
-    {"action": "navigate", "value": "https://example.com/dashboard"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/dashboard"},
     {"action": "extract", "selector": ".balance", "value": "balance_{{counter}}"},
     {"action": "extract", "selector": ".username", "value": "name_{{counter}}"}
   ]
@@ -141,7 +141,7 @@ Common patterns you can copy and customize for your tests.
 ```json
 {
   "steps": [
-    {"action": "navigate", "value": "https://example.com/page/{{counter}}"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/page/{{counter}}"},
     {"action": "wait", "value": "2"},
     {"action": "if_element_exists", "selector": ".error-message", "jumpTo": "error_handler"},
     {"action": "screenshot", "value": "success_{{counter}}"},
@@ -157,7 +157,7 @@ Common patterns you can copy and customize for your tests.
 ```json
 {
   "steps": [
-    {"action": "navigate", "value": "https://example.com/page/{{counter}}"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/page/{{counter}}"},
     {"action": "wait", "value": "2"},
     {"action": "extract", "selector": "h1", "value": "title_{{counter}}"},
     {"action": "extract", "selector": ".author", "value": "author_{{counter}}"},
@@ -175,7 +175,7 @@ Common patterns you can copy and customize for your tests.
 ```json
 {
   "steps": [
-    {"action": "navigate", "value": "https://example.com/data/{{counter}}"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/data/{{counter}}"},
     {"action": "wait", "value": "2"},
     {"action": "scroll", "value": "bottom"},
     {"action": "wait", "value": "1"},
@@ -190,7 +190,7 @@ Common patterns you can copy and customize for your tests.
 ```json
 {
   "steps": [
-    {"action": "navigate", "value": "https://example.com/list?page={{counter}}"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/list?page={{counter}}"},
     {"action": "wait", "value": "2"},
     {"action": "extract", "selector": ".item:nth-child(1) .title", "value": "p{{counter}}_item1"},
     {"action": "extract", "selector": ".item:nth-child(2) .title", "value": "p{{counter}}_item2"},
@@ -208,7 +208,7 @@ Common patterns you can copy and customize for your tests.
 ```json
 {
   "steps": [
-    {"action": "navigate", "value": "https://example.com/page/{{counter}}"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/page/{{counter}}"},
     {"action": "wait", "value": "2"},
     {"action": "eval", "value": "performance.timing"},
     {"action": "extract", "selector": "body", "value": "timing_{{counter}}"},
@@ -226,7 +226,7 @@ Common patterns you can copy and customize for your tests.
 ```json
 {
   "steps": [
-    {"action": "navigate", "value": "https://example.com/page/{{counter}}"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/page/{{counter}}"},
     {"action": "wait", "value": "2"},
     {"action": "screenshot", "value": "desktop_{{counter}}"},
     {"action": "emulate_device", "value": "mobile"},
@@ -246,7 +246,7 @@ Common patterns you can copy and customize for your tests.
 ```json
 {
   "steps": [
-    {"action": "navigate", "value": "https://example.com"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk"},
     {"action": "click", "selector": ".menu-item:nth-child({{counter}})"},
     {"action": "wait", "value": "2"},
     {"action": "screenshot", "value": "menu_{{counter}}"},
@@ -259,7 +259,7 @@ Common patterns you can copy and customize for your tests.
 ```json
 {
   "steps": [
-    {"action": "navigate", "value": "https://example.com/product/{{counter}}"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/product/{{counter}}"},
     {"action": "hover", "selector": ".product-image"},
     {"action": "wait", "value": "1"},
     {"action": "screenshot", "value": "hover_{{counter}}"},
@@ -277,7 +277,7 @@ Common patterns you can copy and customize for your tests.
 {
   "name": "User {{user_id}} - Product {{product_id}}",
   "steps": [
-    {"action": "navigate", "value": "https://example.com/user/{{user_id}}"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/user/{{user_id}}"},
     {"action": "click", "selector": "#product-{{product_id}}"},
     {"action": "extract", "selector": ".result", "value": "u{{user_id}}_p{{product_id}}"}
   ]
@@ -289,7 +289,7 @@ Common patterns you can copy and customize for your tests.
 {
   "name": "Test #{{index}} - {{category}}",
   "steps": [
-    {"action": "navigate", "value": "https://example.com/{{category}}"},
+    {"action": "navigate", "value": "http://chhotu-bin.infy.uk/{{category}}"},
     {"action": "extract", "selector": ".count", "value": "test{{index}}_{{category}}_count"}
   ]
 }
@@ -300,7 +300,7 @@ Common patterns you can copy and customize for your tests.
 ## 💡 Customization Tips
 
 ### Replace These Values
-- `example.com` → Your domain
+- `chhotu-bin.infy.uk` → Your domain
 - `#search`, `.title` → Your actual selectors
 - `counter`, `product_id` → Your variable names
 - Wait times → Adjust for your site's speed

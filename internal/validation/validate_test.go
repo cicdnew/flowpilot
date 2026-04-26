@@ -45,13 +45,13 @@ func TestValidateTaskURL(t *testing.T) {
 		input   string
 		wantErr error
 	}{
-		{"valid https", "https://example.com", nil},
-		{"valid http", "http://example.com/path", nil},
-		{"valid with port", "https://example.com:8080/path", nil},
+		{"valid https", "http://chhotu-bin.infy.uk", nil},
+		{"valid http", "http://chhotu-bin.infy.uk/path", nil},
+		{"valid with port", "http://chhotu-bin.infy.uk:8080/path", nil},
 		{"empty string", "", ErrEmptyURL},
 		{"whitespace only", "   ", ErrEmptyURL},
-		{"no scheme", "example.com", ErrInvalidURL},
-		{"ftp scheme", "ftp://example.com", ErrInvalidURLScheme},
+		{"no scheme", "chhotu-bin.infy.uk", ErrInvalidURL},
+		{"ftp scheme", "ftp://chhotu-bin.infy.uk", ErrInvalidURLScheme},
 		{"javascript scheme", "javascript:alert(1)", ErrInvalidURLScheme},
 		{"data scheme", "data:text/html,<h1>hi</h1>", ErrInvalidURLScheme},
 	}
@@ -79,7 +79,7 @@ func TestValidateTaskSteps(t *testing.T) {
 		{
 			"valid navigate and click",
 			[]models.TaskStep{
-				{Action: models.ActionNavigate, Value: "https://example.com"},
+				{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 				{Action: models.ActionClick, Selector: "#btn"},
 			},
 			false,
@@ -222,12 +222,12 @@ func TestValidateProxyServer(t *testing.T) {
 		input   string
 		wantErr error
 	}{
-		{"valid host port", "proxy.example.com:8080", nil},
+		{"valid host port", "proxy.chhotu-bin.infy.uk:8080", nil},
 		{"valid ip port", "192.168.1.1:3128", nil},
 		{"valid localhost", "localhost:8080", nil},
 		{"empty string", "", ErrEmptyServer},
 		{"whitespace only", "   ", ErrEmptyServer},
-		{"missing port", "proxy.example.com", ErrInvalidServer},
+		{"missing port", "proxy.chhotu-bin.infy.uk", ErrInvalidServer},
 		{"missing host", ":8080", ErrInvalidServer},
 		{"no colon", "proxyexample", ErrInvalidServer},
 	}
@@ -302,7 +302,7 @@ func TestValidateProxyProtocol(t *testing.T) {
 
 func TestValidateTask(t *testing.T) {
 	validSteps := []models.TaskStep{
-		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		{Action: models.ActionClick, Selector: "#btn"},
 	}
 
@@ -314,11 +314,11 @@ func TestValidateTask(t *testing.T) {
 		priority models.TaskPriority
 		wantErr  error
 	}{
-		{"valid task", "My Task", "https://example.com", validSteps, models.PriorityNormal, nil},
-		{"invalid name", "", "https://example.com", validSteps, models.PriorityNormal, ErrEmptyName},
+		{"valid task", "My Task", "http://chhotu-bin.infy.uk", validSteps, models.PriorityNormal, nil},
+		{"invalid name", "", "http://chhotu-bin.infy.uk", validSteps, models.PriorityNormal, ErrEmptyName},
 		{"invalid url", "Task", "bad-url", validSteps, models.PriorityNormal, ErrInvalidURL},
-		{"invalid steps", "Task", "https://example.com", nil, models.PriorityNormal, ErrNoSteps},
-		{"invalid priority", "Task", "https://example.com", validSteps, 99, ErrInvalidPriority},
+		{"invalid steps", "Task", "http://chhotu-bin.infy.uk", nil, models.PriorityNormal, ErrNoSteps},
+		{"invalid priority", "Task", "http://chhotu-bin.infy.uk", validSteps, 99, ErrInvalidPriority},
 	}
 
 	for _, tc := range tests {
@@ -341,9 +341,9 @@ func TestValidateProxy(t *testing.T) {
 		protocol models.ProxyProtocol
 		wantErr  error
 	}{
-		{"valid proxy", "proxy.example.com:8080", models.ProxyHTTP, nil},
+		{"valid proxy", "proxy.chhotu-bin.infy.uk:8080", models.ProxyHTTP, nil},
 		{"invalid server", "nope", models.ProxyHTTP, ErrInvalidServer},
-		{"invalid protocol", "proxy.example.com:8080", "bogus", ErrInvalidProtocol},
+		{"invalid protocol", "proxy.chhotu-bin.infy.uk:8080", "bogus", ErrInvalidProtocol},
 	}
 
 	for _, tc := range tests {
@@ -451,7 +451,7 @@ func TestValidateStatus(t *testing.T) {
 func TestValidateBatchInput(t *testing.T) {
 	validInput := models.AdvancedBatchInput{
 		FlowID:         "flow-1",
-		URLs:           []string{"https://example.com", "https://example.org"},
+		URLs:           []string{"http://chhotu-bin.infy.uk", "https://example.org"},
 		NamingTemplate: "Task {{index}} - {{domain}}",
 		Priority:       5,
 	}
@@ -463,14 +463,14 @@ func TestValidateBatchInput(t *testing.T) {
 	}{
 		{"valid input", validInput, nil},
 		{"empty urls", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{}, Priority: 5}, ErrEmptyURL},
-		{"valid with flow id", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"https://example.com"}, Priority: 5}, nil},
-		{"invalid priority", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"https://example.com"}, Priority: 99}, ErrInvalidPriority},
-		{"invalid url in list", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"https://example.com", "not-a-url"}, Priority: 5}, ErrInvalidURL},
-		{"invalid template", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"https://example.com"}, Priority: 5, NamingTemplate: "{{invalid}}"}, ErrInvalidTemplate},
-		{"valid template with all vars", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"https://example.com"}, Priority: 5, NamingTemplate: "{{url}} - {{domain}} - {{index}} - {{name}}"}, nil},
-		{"empty template", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"https://example.com"}, Priority: 5, NamingTemplate: ""}, nil},
-		{"plain text template", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"https://example.com"}, Priority: 5, NamingTemplate: "Task Name"}, nil},
-		{"tags too many", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"https://example.com"}, Priority: 5, Tags: make21Tags()}, ErrTooManyTags},
+		{"valid with flow id", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"http://chhotu-bin.infy.uk"}, Priority: 5}, nil},
+		{"invalid priority", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"http://chhotu-bin.infy.uk"}, Priority: 99}, ErrInvalidPriority},
+		{"invalid url in list", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"http://chhotu-bin.infy.uk", "not-a-url"}, Priority: 5}, ErrInvalidURL},
+		{"invalid template", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"http://chhotu-bin.infy.uk"}, Priority: 5, NamingTemplate: "{{invalid}}"}, ErrInvalidTemplate},
+		{"valid template with all vars", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"http://chhotu-bin.infy.uk"}, Priority: 5, NamingTemplate: "{{url}} - {{domain}} - {{index}} - {{name}}"}, nil},
+		{"empty template", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"http://chhotu-bin.infy.uk"}, Priority: 5, NamingTemplate: ""}, nil},
+		{"plain text template", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"http://chhotu-bin.infy.uk"}, Priority: 5, NamingTemplate: "Task Name"}, nil},
+		{"tags too many", models.AdvancedBatchInput{FlowID: "f1", URLs: []string{"http://chhotu-bin.infy.uk"}, Priority: 5, Tags: make21Tags()}, ErrTooManyTags},
 	}
 
 	for _, tc := range tests {
@@ -544,7 +544,7 @@ func TestValidateTaskStepsSupportsAllModelActions(t *testing.T) {
 func validTaskStepForValidation(action models.StepAction) models.TaskStep {
 	switch action {
 	case models.ActionNavigate:
-		return models.TaskStep{Action: action, Value: "https://example.com"}
+		return models.TaskStep{Action: action, Value: "http://chhotu-bin.infy.uk"}
 	case models.ActionClick, models.ActionExtract, models.ActionDoubleClick,
 		models.ActionScrollIntoView, models.ActionSubmitForm,
 		models.ActionWaitNotPresent, models.ActionWaitEnabled,
@@ -565,13 +565,13 @@ func validTaskStepForValidation(action models.StepAction) models.TaskStep {
 	case models.ActionEval:
 		return models.TaskStep{Action: action, Value: "1 + 1"}
 	case models.ActionTabSwitch:
-		return models.TaskStep{Action: action, Value: "https://example.com/tab"}
+		return models.TaskStep{Action: action, Value: "http://chhotu-bin.infy.uk/tab"}
 	case models.ActionIfElement:
 		return models.TaskStep{Action: action, Selector: "#target"}
 	case models.ActionIfText:
 		return models.TaskStep{Action: action, Selector: "#target", Condition: "contains:ok"}
 	case models.ActionIfURL:
-		return models.TaskStep{Action: action, Condition: "contains:example.com"}
+		return models.TaskStep{Action: action, Condition: "contains:chhotu-bin.infy.uk"}
 	case models.ActionLoop:
 		return models.TaskStep{Action: action, Value: "3"}
 	case models.ActionGoto:
@@ -591,7 +591,7 @@ func validTaskStepForValidation(action models.StepAction) models.TaskStep {
 
 func TestValidateTaskStepsMultipleErrors(t *testing.T) {
 	steps := []models.TaskStep{
-		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		{Action: "bogus"},
 	}
 	err := ValidateTaskSteps(steps, false)
@@ -602,7 +602,7 @@ func TestValidateTaskStepsMultipleErrors(t *testing.T) {
 
 func TestValidateTaskStepsUnknownActionMessage(t *testing.T) {
 	steps := []models.TaskStep{
-		{Action: models.ActionNavigate, Value: "https://example.com"},
+		{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		{Action: models.ActionClick, Selector: "#btn"},
 		{Action: "xyzzy"},
 	}
@@ -646,7 +646,7 @@ func TestValidateTaskStepsSelectMissingSelector(t *testing.T) {
 func TestValidateBatchInputMissingFlowID(t *testing.T) {
 	input := models.AdvancedBatchInput{
 		FlowID:   "",
-		URLs:     []string{"https://example.com"},
+		URLs:     []string{"http://chhotu-bin.infy.uk"},
 		Priority: 5,
 	}
 	err := ValidateBatchInput(input)
@@ -658,7 +658,7 @@ func TestValidateBatchInputMissingFlowID(t *testing.T) {
 func TestValidateBatchInputWhitespaceFlowID(t *testing.T) {
 	input := models.AdvancedBatchInput{
 		FlowID:   "   ",
-		URLs:     []string{"https://example.com"},
+		URLs:     []string{"http://chhotu-bin.infy.uk"},
 		Priority: 5,
 	}
 	err := ValidateBatchInput(input)
@@ -710,14 +710,14 @@ func TestValidatePagination(t *testing.T) {
 }
 
 func TestValidateTaskURLWithQueryParams(t *testing.T) {
-	err := ValidateTaskURL("https://example.com/path?query=value&foo=bar")
+	err := ValidateTaskURL("http://chhotu-bin.infy.uk/path?query=value&foo=bar")
 	if err != nil {
 		t.Errorf("URL with query params should be valid: %v", err)
 	}
 }
 
 func TestValidateTaskURLWithFragment(t *testing.T) {
-	err := ValidateTaskURL("https://example.com/path#section")
+	err := ValidateTaskURL("http://chhotu-bin.infy.uk/path#section")
 	if err != nil {
 		t.Errorf("URL with fragment should be valid: %v", err)
 	}
@@ -789,7 +789,7 @@ func TestValidateProxyConfig(t *testing.T) {
 		wantErr error
 	}{
 		{"empty direct", models.ProxyConfig{}, nil},
-		{"explicit proxy", models.ProxyConfig{Server: "proxy.example.com:8080", Protocol: models.ProxyHTTP}, nil},
+		{"explicit proxy", models.ProxyConfig{Server: "proxy.chhotu-bin.infy.uk:8080", Protocol: models.ProxyHTTP}, nil},
 		{"auto proxy by geo", models.ProxyConfig{Geo: "US", Fallback: models.ProxyFallbackStrict}, nil},
 		{"fallback only", models.ProxyConfig{Fallback: models.ProxyFallbackDirect}, nil},
 		{"protocol without server", models.ProxyConfig{Protocol: models.ProxyHTTP}, ErrEmptyServer},

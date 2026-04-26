@@ -67,9 +67,9 @@ func makeTestTask(id string) models.Task {
 	return models.Task{
 		ID:   id,
 		Name: "Test Task " + id,
-		URL:  "https://example.com",
+		URL:  "http://chhotu-bin.infy.uk",
 		Steps: []models.TaskStep{
-			{Action: models.ActionNavigate, Value: "https://example.com"},
+			{Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk"},
 		},
 		Priority:   models.PriorityNormal,
 		Status:     models.TaskStatusPending,

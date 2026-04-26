@@ -20,11 +20,11 @@ import (
 
 func TestWriteJSONLToWriter(t *testing.T) {
 	stepLogs := []models.StepLog{
-		{TaskID: "task-1", StepIndex: 0, Action: models.ActionNavigate, Value: "https://example.com", DurationMs: 100, StartedAt: time.Now()},
+		{TaskID: "task-1", StepIndex: 0, Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk", DurationMs: 100, StartedAt: time.Now()},
 		{TaskID: "task-1", StepIndex: 1, Action: models.ActionClick, Selector: "#btn", DurationMs: 50, StartedAt: time.Now()},
 	}
 	networkLogs := []models.NetworkLog{
-		{TaskID: "task-1", StepIndex: 0, RequestURL: "https://example.com", Method: "GET", StatusCode: 200, DurationMs: 150, Timestamp: time.Now()},
+		{TaskID: "task-1", StepIndex: 0, RequestURL: "http://chhotu-bin.infy.uk", Method: "GET", StatusCode: 200, DurationMs: 150, Timestamp: time.Now()},
 	}
 
 	var buf bytes.Buffer
@@ -71,10 +71,10 @@ func TestWriteJSONLToWriterEmpty(t *testing.T) {
 
 func TestWriteCSVToWriter(t *testing.T) {
 	stepLogs := []models.StepLog{
-		{TaskID: "task-1", StepIndex: 0, Action: models.ActionNavigate, Value: "https://example.com", DurationMs: 100, StartedAt: time.Now()},
+		{TaskID: "task-1", StepIndex: 0, Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk", DurationMs: 100, StartedAt: time.Now()},
 	}
 	networkLogs := []models.NetworkLog{
-		{TaskID: "task-1", StepIndex: 0, RequestURL: "https://example.com", Method: "GET", StatusCode: 200, DurationMs: 150, Timestamp: time.Now()},
+		{TaskID: "task-1", StepIndex: 0, RequestURL: "http://chhotu-bin.infy.uk", Method: "GET", StatusCode: 200, DurationMs: 150, Timestamp: time.Now()},
 	}
 
 	var buf bytes.Buffer
@@ -138,7 +138,7 @@ func TestWriteJSONL(t *testing.T) {
 		{TaskID: "task-1", StepIndex: 0, Action: models.ActionClick, Selector: "#btn", DurationMs: 42, StartedAt: time.Now()},
 	}
 	networkLogs := []models.NetworkLog{
-		{TaskID: "task-1", StepIndex: 0, RequestURL: "https://example.com", Method: "POST", StatusCode: 201, DurationMs: 99, Timestamp: time.Now()},
+		{TaskID: "task-1", StepIndex: 0, RequestURL: "http://chhotu-bin.infy.uk", Method: "POST", StatusCode: 201, DurationMs: 99, Timestamp: time.Now()},
 	}
 
 	err := writeJSONL(path, stepLogs, networkLogs)
@@ -162,7 +162,7 @@ func TestWriteCSV(t *testing.T) {
 	path := dir + "/test.csv"
 
 	stepLogs := []models.StepLog{
-		{TaskID: "task-1", StepIndex: 0, Action: models.ActionNavigate, Value: "https://example.com", DurationMs: 100, StartedAt: time.Now()},
+		{TaskID: "task-1", StepIndex: 0, Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk", DurationMs: 100, StartedAt: time.Now()},
 	}
 
 	err := writeCSV(path, stepLogs, nil)
@@ -386,7 +386,7 @@ func TestExportBatchLogs(t *testing.T) {
 		task := models.Task{
 			ID:        "batch-export-" + string(rune('0'+i)),
 			Name:      "Batch Export Task",
-			URL:       "https://example.com",
+			URL:       "http://chhotu-bin.infy.uk",
 			Status:    models.TaskStatusCompleted,
 			BatchID:   "batch-export-1",
 			CreatedAt: time.Now(),
@@ -469,7 +469,7 @@ func TestWriteJSONLToWriterMultiple(t *testing.T) {
 		nets[i] = models.NetworkLog{
 			TaskID:     "task-multi",
 			StepIndex:  i,
-			RequestURL: "https://example.com",
+			RequestURL: "http://chhotu-bin.infy.uk",
 			Method:     "GET",
 			StatusCode: 200,
 			Timestamp:  time.Now(),
@@ -522,7 +522,7 @@ func TestExportBatchLogsVerifyZipContents(t *testing.T) {
 	task := models.Task{
 		ID:        "batch-verify-1",
 		Name:      "Batch Verify",
-		URL:       "https://example.com",
+		URL:       "http://chhotu-bin.infy.uk",
 		Status:    models.TaskStatusCompleted,
 		BatchID:   "batch-verify",
 		CreatedAt: time.Now(),
@@ -539,7 +539,7 @@ func TestExportBatchLogsVerifyZipContents(t *testing.T) {
 	}
 
 	networkLogs := []models.NetworkLog{
-		{TaskID: "batch-verify-1", StepIndex: 0, RequestURL: "https://example.com/api", Method: "GET", StatusCode: 200, DurationMs: 100, Timestamp: time.Now()},
+		{TaskID: "batch-verify-1", StepIndex: 0, RequestURL: "http://chhotu-bin.infy.uk/api", Method: "GET", StatusCode: 200, DurationMs: 100, Timestamp: time.Now()},
 	}
 	if err := db.InsertNetworkLogs(context.Background(), "batch-verify-1", networkLogs); err != nil {
 		t.Fatalf("InsertNetworkLogs: %v", err)
@@ -599,7 +599,7 @@ func TestExportTaskLogsZip(t *testing.T) {
 	task := models.Task{
 		ID:        "zip-task-1",
 		Name:      "Zip Export Test",
-		URL:       "https://example.com",
+		URL:       "http://chhotu-bin.infy.uk",
 		Status:    models.TaskStatusCompleted,
 		CreatedAt: time.Now(),
 	}
@@ -608,14 +608,14 @@ func TestExportTaskLogsZip(t *testing.T) {
 	}
 
 	stepLogs := []models.StepLog{
-		{TaskID: "zip-task-1", StepIndex: 0, Action: models.ActionNavigate, Value: "https://example.com", DurationMs: 100, StartedAt: time.Now()},
+		{TaskID: "zip-task-1", StepIndex: 0, Action: models.ActionNavigate, Value: "http://chhotu-bin.infy.uk", DurationMs: 100, StartedAt: time.Now()},
 	}
 	if err := db.InsertStepLogs(context.Background(), "zip-task-1", stepLogs); err != nil {
 		t.Fatalf("InsertStepLogs: %v", err)
 	}
 
 	networkLogs := []models.NetworkLog{
-		{TaskID: "zip-task-1", StepIndex: 0, RequestURL: "https://example.com", Method: "GET", StatusCode: 200, DurationMs: 50, Timestamp: time.Now()},
+		{TaskID: "zip-task-1", StepIndex: 0, RequestURL: "http://chhotu-bin.infy.uk", Method: "GET", StatusCode: 200, DurationMs: 50, Timestamp: time.Now()},
 	}
 	if err := db.InsertNetworkLogs(context.Background(), "zip-task-1", networkLogs); err != nil {
 		t.Fatalf("InsertNetworkLogs: %v", err)

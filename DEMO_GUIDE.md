@@ -16,7 +16,7 @@ wails dev
 ### Step 2: Configure Basic Task
 ```
 Task Name: Product Test {{counter}}
-URL: https://example.com/product/{{counter}}
+URL: http://chhotu-bin.infy.uk/product/{{counter}}
 ```
 
 ### Step 3: Configure Repeat Settings
@@ -73,7 +73,7 @@ Result: 10 tasks numbered 1-10
 ### Example 2: Large Range (100-1000, step 10)
 ```
 Name: Load Test {{counter}}
-URL: https://example.com/api/item/{{counter}}
+URL: http://chhotu-bin.infy.uk/api/item/{{counter}}
 Mode: Range
 Start: 100, End: 1000, Step: 10
 Result: 91 tasks (100, 110, 120... 1000)
@@ -82,7 +82,7 @@ Result: 91 tasks (100, 110, 120... 1000)
 ### Example 3: List Mode (Categories)
 ```
 Name: Category {{item}}
-URL: https://shop.example.com/{{item}}
+URL: https://chhotu-bin.infy.uk/{{item}}
 Mode: List
 Values:
   electronics
@@ -95,7 +95,7 @@ Result: 4 tasks, one per category
 ### Example 4: Paginated Scraping
 ```
 Name: Scrape Page {{index}}
-URL: https://api.example.com/data?page={{index}}
+URL: https://chhotu-bin.infy.uk/data?page={{index}}
 Steps:
   1. Navigate to URL
   2. Extract: selector=body, value=page_{{index}}_data

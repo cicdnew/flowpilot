@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -18,7 +20,38 @@ func (a *App) startMetricsServer(ctx context.Context) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-		_, _ = w.Write([]byte(a.GetPrometheusMetrics()))
+		_, _ = w.Write([]byte(a.GetEnhancedPrometheusMetrics()))
+	})
+
+	mux.HandleFunc("/api/metrics", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		metrics := a.GetQueueMetrics()
+		if err := json.NewEncoder(w).Encode(metrics); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
+	mux.HandleFunc("/api/errors/recent", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		limit := 10
+		if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+			if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
+				limit = parsed
+			}
+		}
+
+		var errors []string
+		if a.monitor != nil {
+			errors = a.monitor.GetRecentErrors(limit)
+		}
+
+		if errors == nil {
+			errors = []string{}
+		}
+
+		if err := json.NewEncoder(w).Encode(errors); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 	})
 
 	ln, err := net.Listen("tcp", addr)

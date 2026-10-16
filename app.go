@@ -532,3 +532,11 @@ func (a *App) getTaskMetrics() models.TaskMetrics {
 func (a *App) shutdownFromSignal() {
 	a.cleanup()
 }
+
+// GetRecentErrors returns the most recent error contexts.
+func (a *App) GetRecentErrors(limit int) []string {
+	if a.monitor == nil {
+		return nil
+	}
+	return a.monitor.GetRecentErrors(limit)
+}

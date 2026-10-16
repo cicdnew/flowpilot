@@ -401,11 +401,14 @@ func (m *Monitor) CheckAlerts(ctx context.Context) {
 		// Evaluate condition
 		m.mu.Unlock()
 		shouldFire := rule.Condition(m)
+
+		// Get metric value without holding the global lock
+		val, ok := m.GetMetricValue(rule.Metric)
+
 		m.mu.Lock()
 
 		if shouldFire {
 			// Get metric value for this rule
-			val, ok := m.GetMetricValue(rule.Metric)
 			if !ok {
 				// Cannot compute metric, skip
 				continue

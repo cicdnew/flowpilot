@@ -122,9 +122,9 @@ export interface TaskResult {
 }
 
 export interface TaskLoggingPolicy {
-  captureStepLogs?: boolean | null;
-  captureNetworkLogs?: boolean | null;
-  captureScreenshots?: boolean | null;
+  captureStepLogs?: boolean;
+  captureNetworkLogs?: boolean;
+  captureScreenshots?: boolean;
   maxExecutionLogs?: number;
 }
 

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { CreateTask, ListProxyRoutingPresets } from '../../wailsjs/go/main/App';
+  import { main } from '../../wailsjs/go/models';
   import type { TaskStep, ProxyConfig, TaskLoggingPolicy, ProxyRoutingFallback, ProxyRoutingPreset } from '../lib/types';
   import { ensureStepActionStateLoaded, getStepActionOptions, stepActionState } from '../lib/step-actions';
   import { createEventDispatcher, onMount } from 'svelte';
@@ -110,7 +111,7 @@
 
     try {
       errorMessage = '';
-      await CreateTask({ Name: name, URL: url, Steps: taskSteps, ProxyConfig: proxyConfig, Priority: priority, AutoStart: autoStart, Tags: tags, Timeout: taskTimeout, LoggingPolicy: loggingPolicy });
+      await CreateTask(main.CreateTaskParams.createFrom({ Name: name, URL: url, Steps: taskSteps, ProxyConfig: proxyConfig, Priority: priority, AutoStart: autoStart, Tags: tags, Timeout: taskTimeout, LoggingPolicy: loggingPolicy }));
       dispatch('created');
       dispatch('close');
     } catch (err: any) {

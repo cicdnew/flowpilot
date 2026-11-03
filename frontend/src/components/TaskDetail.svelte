@@ -1,6 +1,7 @@
 <script lang="ts">
   import { selectedTask, replaceTaskInStore } from '../lib/store';
   import { UpdateTask, GetTask, ListTaskEvents, ListProxyRoutingPresets } from '../../wailsjs/go/main/App';
+  import { database } from '../../wailsjs/go/models';
   import type { Task, TaskStep, ProxyConfig, TaskLifecycleEvent, TaskLoggingPolicy, ProxyRoutingFallback, ProxyRoutingPreset } from '../lib/types';
   import { ensureStepActionStateLoaded, getStepActionOptions, stepActionState } from '../lib/step-actions';
   import { onMount } from 'svelte';
@@ -128,7 +129,7 @@
         captureScreenshots: editCaptureScreenshots,
         maxExecutionLogs: editMaxExecutionLogs,
       };
-      await UpdateTask($selectedTask.id, editName, editUrl, editSteps, proxyConfig, editPriority, tags, editTimeout, loggingPolicy as any);
+      await UpdateTask($selectedTask.id, database.TaskUpdateParams.createFrom({ Name: editName, URL: editUrl, Steps: editSteps, ProxyConfig: proxyConfig, Priority: editPriority, Tags: tags, Timeout: editTimeout, LoggingPolicy: loggingPolicy }), editPriority);
       const updated = await GetTask($selectedTask.id) as Task;
       replaceTaskInStore(updated);
       editing = false;

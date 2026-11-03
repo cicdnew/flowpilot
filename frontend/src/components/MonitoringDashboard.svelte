@@ -257,16 +257,16 @@
      {/if}
 
      <!-- Queue Performance -->
-     {#if health}
+     {#if queueMetrics}
        <div class="section">
          <h2>Queue Performance</h2>
          <div class="metrics-grid">
            <div class="metric-card">
-             <div class="metric-value">{health.systemMetrics?.avgStepDurationMs ? health.systemMetrics.avgStepDurationMs.toFixed(1) + ' ms' : 'N/A'}</div>
+             <div class="metric-value">{queueMetrics.avgStepDurationMs ? queueMetrics.avgStepDurationMs.toFixed(1) + ' ms' : 'N/A'}</div>
              <div class="metric-label">Avg Step Duration</div>
            </div>
            <div class="metric-card">
-             <div class="metric-value">{health.systemMetrics?.workerUtilizationPercent ? health.systemMetrics.workerUtilizationPercent.toFixed(1) + '%' : 'N/A'}</div>
+             <div class="metric-value">{queueMetrics.workerUtilizationPercent.toFixed(1) + '%'}</div>
              <div class="metric-label">Worker Utilization</div>
            </div>
          </div>

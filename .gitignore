@@ -1,4 +1,7 @@
 build/bin
+/flowpilot
+/flowpilot-agent
+/flowpilot-copilot
 node_modules
 frontend/dist
 *.db
@@ -10,6 +13,7 @@ frontend/dist
 
 # Test artifacts
 cover.out
+coverage.out
 
 # Session files
 session-*.md

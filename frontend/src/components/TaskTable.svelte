@@ -160,7 +160,7 @@
                     {isBusy(task.id) ? 'Starting…' : 'Start'}
                   </button>
                 {/if}
-                {#if task.status === 'running' || task.status === 'queued'}
+                {#if task.status === 'running' || task.status === 'queued' || task.status === 'retrying'}
                   <button
                     type="button"
                     class="btn-danger btn-sm"
@@ -170,7 +170,7 @@
                     {isBusy(task.id) ? 'Stopping…' : 'Cancel'}
                   </button>
                 {/if}
-                {#if task.status !== 'running' && task.status !== 'queued'}
+                {#if task.status !== 'running' && task.status !== 'queued' && task.status !== 'retrying'}
                   <button
                     type="button"
                     class="btn-secondary btn-sm"

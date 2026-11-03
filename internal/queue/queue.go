@@ -73,8 +73,10 @@ type Queue struct {
 	pausedSet      map[string]struct{} // O(1) lookup for pausedPQ
 	running        map[string]context.CancelFunc
 	cancelled      map[string]bool
-	paused         map[string]bool // batchID → paused
+	retrying       map[string]chan struct{} // taskID → closed when cancelled during retry backoff
+	paused         map[string]bool          // batchID → paused
 	runningProxied int
+	outcomes       taskOutcomeCounts
 	stopped        bool
 	stopOnce       sync.Once
 	stopCh         chan struct{}
@@ -101,6 +103,7 @@ func New(db *database.DB, runner *browser.Runner, maxConcurrency int, onEvent Ev
 		pausedSet:            make(map[string]struct{}, maxConcurrency*10),
 		running:              make(map[string]context.CancelFunc),
 		cancelled:            make(map[string]bool),
+		retrying:             make(map[string]chan struct{}),
 		paused:               make(map[string]bool),
 		stopCh:               make(chan struct{}),
 	}
@@ -222,15 +225,18 @@ func (q *Queue) Submit(ctx context.Context, task models.Task) error {
 
 	_, cancel := q.addTaskToHeap(task, ctx)
 	q.mu.Unlock()
+	return q.finishSubmit(task.ID, cancel)
+}
 
-	if err := q.enqueueTaskStateChange(database.TaskStateChange{TaskID: task.ID, Status: models.TaskStatusQueued}); err != nil {
+func (q *Queue) finishSubmit(taskID string, cancel context.CancelFunc) error {
+	if err := q.enqueueTaskStateChange(database.TaskStateChange{TaskID: taskID, Status: models.TaskStatusQueued}); err != nil {
 		q.mu.Lock()
-		q.removeFromHeap(task.ID)
+		q.removeFromHeap(taskID)
 		q.mu.Unlock()
 		cancel()
 		return fmt.Errorf("update task status to queued: %w", err)
 	}
-	q.emitEvent(task.ID, models.TaskStatusQueued, "")
+	q.emitEvent(taskID, models.TaskStatusQueued, "")
 
 	// Signal one worker that a task is available.
 	q.cond.Signal()
@@ -330,6 +336,9 @@ func (q *Queue) Cancel(taskID string) error {
 		delete(q.running, taskID)
 	} else if q.removeFromHeap(taskID) || q.removeFromPausedHeap(taskID) {
 		q.cancelled[taskID] = true
+	} else if cancelRetry, ok := q.retrying[taskID]; ok {
+		delete(q.retrying, taskID)
+		close(cancelRetry)
 	}
 	q.mu.Unlock()
 
@@ -695,6 +704,48 @@ type retryInfo struct {
 	shouldRetry bool
 	task        models.Task
 	backoff     time.Duration
+	cancelled   <-chan struct{}
+}
+
+// taskOutcomeCounts accumulates final task outcomes for the TaskMetrics snapshot.
+type taskOutcomeCounts struct {
+	completed           int
+	failed              int
+	completedDurationMs int64
+}
+
+// recordTaskOutcome publishes a final task outcome to TaskMetrics and the monitor.
+func (q *Queue) recordTaskOutcome(task models.Task, duration time.Duration, success bool) {
+	q.mu.Lock()
+	if success {
+		q.outcomes.completed++
+		q.outcomes.completedDurationMs += duration.Milliseconds()
+	} else {
+		q.outcomes.failed++
+	}
+	avgDurationMs := 0
+	if q.outcomes.completed > 0 {
+		avgDurationMs = int(q.outcomes.completedDurationMs / int64(q.outcomes.completed))
+	}
+	completed, failed := q.outcomes.completed, q.outcomes.failed
+	queueDepth := q.pq.Len() + q.pausedPQ.Len()
+	monitor := q.monitor
+	q.mu.Unlock()
+
+	q.UpdateMetrics(completed, failed, avgDurationMs, queueDepth)
+	if monitor != nil {
+		monitor.RecordTaskOutcome(task.BatchID, success)
+	}
+}
+
+func (q *Queue) recordFailedAttempt() {
+	q.mu.Lock()
+	monitor := q.monitor
+	q.mu.Unlock()
+	if monitor != nil {
+		monitor.RecordRequest()
+		monitor.RecordError()
+	}
 }
 
 func (q *Queue) handleCancelledItemLocked(item *heapItem) bool {
@@ -959,6 +1010,7 @@ func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execE
 	q.mu.Lock()
 	q.metrics.TotalFailed++
 	q.mu.Unlock()
+	q.recordTaskOutcome(task, duration, false)
 	logs.Logger.Error("task failed",
 		slog.String("task_id", task.ID),
 		slog.String("action", "failure"),
@@ -973,15 +1025,21 @@ func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execE
 }
 
 func (q *Queue) prepareRetry(parentCtx context.Context, task models.Task, execErr error, result *models.TaskResult) retryInfo {
+	cancelRetry, ok := q.registerRetry(task.ID)
+	if !ok {
+		return retryInfo{}
+	}
 	q.persistRetryLogs(parentCtx, task.ID, result)
 	dbCtx, cancel := q.dbWriteContext(parentCtx)
 	err := q.db.BatchApplyTaskStateChanges(dbCtx, []database.TaskStateChange{{TaskID: task.ID, Status: models.TaskStatusRetrying, Error: execErr.Error(), IncrementRetry: true}})
 	cancel()
 	if err != nil {
+		q.unregisterRetry(task.ID)
 		q.emitEvent(task.ID, models.TaskStatusFailed, fmt.Sprintf("increment retry: %v", err))
 		return retryInfo{}
 	}
 	q.emitEvent(task.ID, models.TaskStatusRetrying, execErr.Error())
+	q.recordFailedAttempt()
 
 	// Increment total retried counter
 	q.mu.Lock()
@@ -1003,7 +1061,31 @@ func (q *Queue) prepareRetry(parentCtx context.Context, task models.Task, execEr
 	retryTask.Steps = make([]models.TaskStep, len(task.Steps))
 	copy(retryTask.Steps, task.Steps)
 
-	return retryInfo{shouldRetry: true, task: retryTask, backoff: backoff}
+	return retryInfo{shouldRetry: true, task: retryTask, backoff: backoff, cancelled: cancelRetry}
+}
+
+// registerRetry records a pending retry so Cancel can stop it during backoff.
+// It refuses to register when the task was cancelled while its attempt was running.
+func (q *Queue) registerRetry(taskID string) (chan struct{}, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.cancelled[taskID] {
+		return nil, false
+	}
+	cancelRetry := make(chan struct{})
+	q.retrying[taskID] = cancelRetry
+	return cancelRetry, true
+}
+
+// unregisterRetry removes a pending retry and reports whether it was still registered.
+func (q *Queue) unregisterRetry(taskID string) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if _, ok := q.retrying[taskID]; !ok {
+		return false
+	}
+	delete(q.retrying, taskID)
+	return true
 }
 
 func (q *Queue) retryBackoff(retryCount int) time.Duration {
@@ -1046,6 +1128,7 @@ func (q *Queue) handleSuccess(execCtx context.Context, task models.Task, result 
 	q.mu.Lock()
 	q.metrics.TotalCompleted++
 	q.mu.Unlock()
+	q.recordTaskOutcome(task, result.Duration, true)
 	logs.Logger.Info("task completed",
 		slog.String("task_id", task.ID),
 		slog.String("action", "success"),
@@ -1063,22 +1146,46 @@ func (q *Queue) handleSuccess(execCtx context.Context, task models.Task, result 
 
 func (q *Queue) scheduleRetry(ctx context.Context, ri retryInfo) {
 	timer := time.NewTimer(ri.backoff)
+	defer timer.Stop()
 	select {
 	case <-timer.C:
+	case <-ri.cancelled:
+		// Cancel already persisted the cancelled state and emitted the event.
+		return
 	case <-q.stopCh:
-		timer.Stop()
+		q.unregisterRetry(ri.task.ID)
 		q.markRetryCancelled(ctx, ri.task.ID, "cancelled during retry backoff (queue stopped)")
 		return
 	case <-ctx.Done():
-		timer.Stop()
+		q.unregisterRetry(ri.task.ID)
 		q.markRetryCancelled(ctx, ri.task.ID, "cancelled during retry backoff")
 		return
 	}
 
 	// Re-submit via the heap instead of spawning another goroutine.
-	if err := q.Submit(ctx, ri.task); err != nil {
+	submitted, err := q.resubmitRetry(ctx, ri.task)
+	if submitted && err != nil {
 		q.failRetryResubmit(ctx, ri.task.ID, err)
 	}
+}
+
+// resubmitRetry re-queues a task after its backoff. The registration check and
+// heap insertion happen under one lock so a concurrent Cancel either stops the
+// retry here or finds the task in the heap. Returns false if the retry was cancelled.
+func (q *Queue) resubmitRetry(ctx context.Context, task models.Task) (bool, error) {
+	q.mu.Lock()
+	if _, ok := q.retrying[task.ID]; !ok {
+		q.mu.Unlock()
+		return false, nil
+	}
+	delete(q.retrying, task.ID)
+	if err := q.validateSubmitTask(task.ID); err != nil {
+		q.mu.Unlock()
+		return true, err
+	}
+	_, cancel := q.addTaskToHeap(task, ctx)
+	q.mu.Unlock()
+	return true, q.finishSubmit(task.ID, cancel)
 }
 
 func (q *Queue) markRetryCancelled(ctx context.Context, taskID, reason string) {

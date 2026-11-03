@@ -174,6 +174,10 @@ export function GetQueueMetrics() {
   return window['go']['main']['App']['GetQueueMetrics']();
 }
 
+export function GetRecentErrors(arg1) {
+  return window['go']['main']['App']['GetRecentErrors'](arg1);
+}
+
 export function GetRecentLogs(arg1) {
   return window['go']['main']['App']['GetRecentLogs'](arg1);
 }
@@ -212,6 +216,10 @@ export function GetVisualDiff(arg1) {
 
 export function ImportFlow(arg1) {
   return window['go']['main']['App']['ImportFlow'](arg1);
+}
+
+export function ImportFlowFromDialog() {
+  return window['go']['main']['App']['ImportFlowFromDialog']();
 }
 
 export function ImportFlowWithWarnings(arg1) {

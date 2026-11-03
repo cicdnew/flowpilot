@@ -16,6 +16,10 @@
     persistenceQueueDepth: 0,
     persistenceQueueCapacity: 0,
     persistenceBatchSize: 0,
+    totalRetried: 0,
+    avgStepDurationMs: 0,
+    workerUtilizationPercent: 0,
+    lastUpdated: '',
   };
 
   const metricCards = [

@@ -1,4 +1,5 @@
 import './style.css'
+import { mount } from 'svelte'
 import App from './App.svelte'
 
 const target = document.getElementById('app')
@@ -10,6 +11,6 @@ if (!target) {
 document.documentElement.dataset.app = 'flowpilot'
 document.body.dataset.theme = 'dark'
 
-new App({
+mount(App, {
   target,
 })

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ListRecordedFlows, DeleteRecordedFlow, PlayRecordedFlow, UpdateRecordedFlow } from '../../wailsjs/go/main/App';
+  import { ListRecordedFlows, DeleteRecordedFlow, PlayRecordedFlow, UpdateRecordedFlow, ImportFlowFromDialog } from '../../wailsjs/go/main/App';
   import { recordedFlows, tasks } from '../lib/store';
   import type { RecordedFlow, Task } from '../lib/types';
   import { createEventDispatcher, onMount } from 'svelte';
@@ -9,7 +9,6 @@
   let loading = false;
   let errorMessage = '';
   let importWarning = '';
-  let importInput: HTMLInputElement | null = null;
   let playingFlowId = '';
   let headless = false;
   let editingFlowId = '';
@@ -44,7 +43,7 @@
     playingFlowId = id;
     try {
       errorMessage = '';
-      await PlayRecordedFlow(id, originUrl, headless);
+      await PlayRecordedFlow(id, originUrl, headless, 0, null as any);
     } catch (err: any) {
       errorMessage = err?.message || String(err);
     } finally {
@@ -82,38 +81,21 @@
     }
   }
 
-  function openImportDialog() {
-    importInput?.click();
-  }
-
-  async function importFlow(event: Event) {
-    const file = (event.currentTarget as HTMLInputElement).files?.[0] as (File & { path?: string }) | undefined;
-    const path = file?.path;
-    if (!path) return;
+  async function importFlow() {
     errorMessage = '';
     importWarning = '';
     try {
-      const app = (window as Window & { go?: { main?: { App?: { ImportFlowWithWarnings?: (path: string) => Promise<{ tasks?: Task[]; warnings?: string[] }> } } } }).go?.main?.App;
-      let imported: Task[] = [];
-      let warnings: string[] = [];
-      if (app?.ImportFlowWithWarnings) {
-        const result = await app.ImportFlowWithWarnings(path);
-        imported = (result?.tasks as Task[] | undefined) || [];
-        warnings = result?.warnings || [];
+      const result = await ImportFlowFromDialog();
+      const imported = (result?.tasks || []) as unknown as Task[];
+      if (imported.length > 0) {
+        tasks.update((list) => [...imported, ...list]);
       }
-      if (imported.length === 0) {
-        imported = await (await import('../../wailsjs/go/main/App')).ImportFlow(path) as unknown as Task[];
-      }
-      tasks.update((list) => [...imported, ...list]);
+      const warnings = result?.warnings || [];
       if (warnings.length > 0) {
         importWarning = warnings.join(' · ');
       }
     } catch (err: any) {
       errorMessage = err?.message || String(err);
-    } finally {
-      if (importInput) {
-        importInput.value = '';
-      }
     }
   }
 
@@ -126,12 +108,11 @@
   <div class="panel-header">
     <h2>Recorded Flows</h2>
     <div class="header-controls">
-      <input bind:this={importInput} type="file" accept=".json" style="display: none" on:change={importFlow} />
       <label class="checkbox">
         <input type="checkbox" bind:checked={headless} />
         Headless
       </label>
-      <button class="btn-secondary btn-sm" on:click={openImportDialog}>Import</button>
+      <button class="btn-secondary btn-sm" on:click={importFlow}>Import</button>
       <button class="btn-secondary btn-sm" on:click={refresh} disabled={loading}>Refresh</button>
     </div>
   </div>

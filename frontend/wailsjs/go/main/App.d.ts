@@ -92,6 +92,8 @@ export function GetPrometheusMetrics():Promise<string>;
 
 export function GetQueueMetrics():Promise<models.QueueMetrics>;
 
+export function GetRecentErrors(arg1:number):Promise<Array<string>>;
+
 export function GetRecentLogs(arg1:number):Promise<Array<monitoring.LogEntry>>;
 
 export function GetRecordedFlow(arg1:string):Promise<models.RecordedFlow>;
@@ -111,6 +113,8 @@ export function GetTaskStats():Promise<Record<string, number>>;
 export function GetVisualDiff(arg1:string):Promise<models.VisualDiff>;
 
 export function ImportFlow(arg1:string):Promise<Array<models.Task>>;
+
+export function ImportFlowFromDialog():Promise<main.FlowImportResult>;
 
 export function ImportFlowWithWarnings(arg1:string):Promise<main.FlowImportResult>;
 

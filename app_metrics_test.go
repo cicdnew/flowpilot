@@ -7,6 +7,7 @@ import (
 
 	"flowpilot/internal/browser"
 	"flowpilot/internal/models"
+	"flowpilot/internal/monitoring"
 )
 
 func TestGetPrometheusMetricsIncludesProxyAndPoolMetrics(t *testing.T) {
@@ -58,5 +59,26 @@ func TestGetPrometheusMetricsIncludesProxyAndPoolMetrics(t *testing.T) {
 		if !strings.Contains(metrics, want) {
 			t.Fatalf("metrics missing %q:\n%s", want, metrics)
 		}
+	}
+}
+
+func TestRateAlertRuleUsesRatio(t *testing.T) {
+	app := NewApp()
+	app.monitor = monitoring.New()
+	rule := app.buildAlertRule(models.AlertRule{ID: "high-error-rate", Metric: "totalErrors", Cond: "rate_gt", Threshold: 0.1})
+
+	for i := 0; i < 100; i++ {
+		app.monitor.RecordRequest()
+	}
+	app.monitor.RecordError()
+	if rule.Condition(app.monitor) {
+		t.Fatal("10% error-rate alert fired at a 1% error rate")
+	}
+
+	for i := 0; i < 20; i++ {
+		app.monitor.RecordError()
+	}
+	if !rule.Condition(app.monitor) {
+		t.Fatal("10% error-rate alert did not fire at a 21% error rate")
 	}
 }

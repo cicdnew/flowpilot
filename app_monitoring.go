@@ -345,7 +345,8 @@ func (a *App) buildAlertRule(r models.AlertRule) monitoring.AlertRule {
 		case "eq":
 			return val == r.Threshold
 		case "rate_gt":
-			return val > r.Threshold
+			rate, ok := m.GetMetricRate(r.Metric)
+			return ok && rate > r.Threshold
 		default:
 			return false
 		}

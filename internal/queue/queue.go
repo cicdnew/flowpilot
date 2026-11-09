@@ -74,6 +74,7 @@ type Queue struct {
 	running        map[string]context.CancelFunc
 	cancelled      map[string]bool
 	retrying       map[string]chan struct{} // taskID → closed when cancelled during retry backoff
+	finalizing     map[string]struct{}      // taskID → worker claimed the final outcome; Cancel is a no-op
 	paused         map[string]bool          // batchID → paused
 	runningProxied int
 	outcomes       taskOutcomeCounts
@@ -104,6 +105,7 @@ func New(db *database.DB, runner *browser.Runner, maxConcurrency int, onEvent Ev
 		running:              make(map[string]context.CancelFunc),
 		cancelled:            make(map[string]bool),
 		retrying:             make(map[string]chan struct{}),
+		finalizing:           make(map[string]struct{}),
 		paused:               make(map[string]bool),
 		stopCh:               make(chan struct{}),
 	}
@@ -330,25 +332,93 @@ func (q *Queue) SubmitBatch(ctx context.Context, tasks []models.Task) error {
 func (q *Queue) Cancel(taskID string) error {
 	q.mu.Lock()
 
-	if cancel, ok := q.running[taskID]; ok {
+	// countHere is true when this call is what stops the task. A running task
+	// is counted by its worker instead (handleTaskCancellation / handleFailure),
+	// so that each cancellation is counted exactly once.
+	countHere := false
+	inQueue := true
+	if _, ok := q.finalizing[taskID]; ok {
+		// The worker already claimed the final outcome (completed/failed);
+		// the cancel arrived too late and must not overwrite it.
+		q.mu.Unlock()
+		return nil
+	} else if q.cancelled[taskID] {
+		q.mu.Unlock()
+		return nil
+	} else if cancelRetry, ok := q.retrying[taskID]; ok {
+		delete(q.retrying, taskID)
+		close(cancelRetry)
+		if cancel, running := q.running[taskID]; running {
+			cancel()
+			delete(q.running, taskID)
+		}
+		countHere = true
+	} else if cancel, ok := q.running[taskID]; ok {
 		q.cancelled[taskID] = true
 		cancel()
 		delete(q.running, taskID)
 	} else if q.removeFromHeap(taskID) || q.removeFromPausedHeap(taskID) {
 		q.cancelled[taskID] = true
-	} else if cancelRetry, ok := q.retrying[taskID]; ok {
-		delete(q.retrying, taskID)
-		close(cancelRetry)
+		countHere = true
+	} else {
+		inQueue = false
 	}
 	q.mu.Unlock()
+
+	// Not tracked by the queue (e.g. a pending task never submitted, or one
+	// that has already finished). No worker can write it any more, so its
+	// stored status is stable: leave finished tasks untouched.
+	if !inQueue && q.isFinishedInDB(taskID) {
+		return nil
+	}
 
 	dbCtx, cancel := q.dbWriteContext(context.TODO())
 	defer cancel()
 	if err := q.db.BatchApplyTaskStateChanges(dbCtx, []database.TaskStateChange{{TaskID: taskID, Status: models.TaskStatusCancelled, Error: errCancelledByUser}}); err != nil {
 		return fmt.Errorf("update task status to cancelled: %w", err)
 	}
+	if countHere {
+		q.recordCancelled()
+	}
 	q.emitEvent(taskID, models.TaskStatusCancelled, errCancelledByUser)
 	return nil
+}
+
+// recordCancelled increments the lifetime cancelled-task counter.
+func (q *Queue) recordCancelled() {
+	q.mu.Lock()
+	q.metrics.TotalCancelled++
+	q.mu.Unlock()
+}
+
+// claimFinalOutcome lets a worker commit to finishing a task as completed or
+// failed. It and Cancel decide under q.mu, so exactly one of them wins: it
+// returns false if Cancel already claimed the task. On success the task is
+// marked finalizing until finishExecuteTask, and later Cancel calls are no-ops.
+func (q *Queue) claimFinalOutcome(taskID string) bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.cancelled[taskID] {
+		return false
+	}
+	q.finalizing[taskID] = struct{}{}
+	return true
+}
+
+// isFinishedInDB reports whether the stored task is already in a terminal state.
+// Lookup errors return false so Cancel keeps its existing error reporting.
+func (q *Queue) isFinishedInDB(taskID string) bool {
+	ctx, cancel := q.dbWriteContext(context.TODO())
+	defer cancel()
+	task, err := q.db.GetTask(ctx, taskID)
+	if err != nil || task == nil {
+		return false
+	}
+	switch task.Status {
+	case models.TaskStatusCompleted, models.TaskStatusFailed, models.TaskStatusCancelled:
+		return true
+	}
+	return false
 }
 
 // PauseBatch pauses all pending tasks for the given batch. Running tasks
@@ -857,6 +927,7 @@ func (q *Queue) finishExecuteTask(taskID string, countsAgainstProxyLimit *bool) 
 	q.mu.Lock()
 	delete(q.running, taskID)
 	delete(q.cancelled, taskID)
+	delete(q.finalizing, taskID)
 	if *countsAgainstProxyLimit && q.runningProxied > 0 {
 		q.runningProxied--
 	}
@@ -869,6 +940,9 @@ func (q *Queue) shouldSkipExecution(taskID string) bool {
 	defer q.mu.Unlock()
 	if !q.stopped && !q.cancelled[taskID] {
 		return false
+	}
+	if q.cancelled[taskID] {
+		q.metrics.TotalCancelled++
 	}
 	delete(q.cancelled, taskID)
 	return true
@@ -885,6 +959,10 @@ func (q *Queue) newTaskContext(parent context.Context, timeoutSeconds int) (cont
 func (q *Queue) setTaskCancel(taskID string, cancel context.CancelFunc) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if q.cancelled[taskID] || q.stopped {
+		cancel()
+		return
+	}
 	q.running[taskID] = cancel
 }
 
@@ -942,6 +1020,10 @@ func (q *Queue) handleTaskCancellation(ctx context.Context, taskID string, runEr
 	if !errors.Is(runErr, context.Canceled) {
 		return false
 	}
+	if !q.claimFinalOutcome(taskID) {
+		q.recordCancelled()
+		return true
+	}
 	// ctx is cancelled at this point; use WithoutCancel to allow the DB write
 	// to complete while still propagating parent values.
 	dbCtx, cancel := q.dbWriteContext(context.WithoutCancel(ctx))
@@ -950,9 +1032,7 @@ func (q *Queue) handleTaskCancellation(ctx context.Context, taskID string, runEr
 	if err != nil {
 		emitUpdateStatusError(q, taskID, err)
 	} else {
-		q.mu.Lock()
-		q.metrics.TotalFailed++
-		q.mu.Unlock()
+		q.recordCancelled()
 	}
 	q.emitEvent(taskID, models.TaskStatusCancelled, errCancelledByUser)
 	return true
@@ -997,7 +1077,15 @@ func (q *Queue) persistRetryLogs(ctx context.Context, taskID string, result *mod
 
 func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execErr error, result *models.TaskResult) retryInfo {
 	if task.RetryCount < task.MaxRetries {
+		// registerRetry atomically refuses tasks that Cancel already claimed.
 		return q.prepareRetry(parentCtx, task, execErr, result)
+	}
+	// Final attempt. If Cancel won (the runner returned an error that does not
+	// wrap context.Canceled), Cancel already persisted the cancelled state: do
+	// not overwrite it with failed or count it as a failure.
+	if !q.claimFinalOutcome(task.ID) {
+		q.recordCancelled()
+		return retryInfo{}
 	}
 
 	stepLogs, networkLogs, duration, extractedDataKeys := failureArtifacts(result)
@@ -1027,6 +1115,9 @@ func (q *Queue) handleFailure(parentCtx context.Context, task models.Task, execE
 func (q *Queue) prepareRetry(parentCtx context.Context, task models.Task, execErr error, result *models.TaskResult) retryInfo {
 	cancelRetry, ok := q.registerRetry(task.ID)
 	if !ok {
+		// Cancelled between handleFailure's check and registration; Cancel
+		// already persisted the cancelled state.
+		q.recordCancelled()
 		return retryInfo{}
 	}
 	q.persistRetryLogs(parentCtx, task.ID, result)
@@ -1115,6 +1206,13 @@ func failureArtifacts(result *models.TaskResult) ([]models.StepLog, []models.Net
 }
 
 func (q *Queue) handleSuccess(execCtx context.Context, task models.Task, result *models.TaskResult) {
+	// The runner finished, but Cancel may have claimed the task first. In that
+	// case Cancel persisted the cancelled state and emitted the event; do not
+	// write a completed result over it.
+	if !q.claimFinalOutcome(task.ID) {
+		q.recordCancelled()
+		return
+	}
 	if result == nil {
 		q.emitEvent(task.ID, models.TaskStatusFailed, "save result: missing task result")
 		return
@@ -1153,12 +1251,16 @@ func (q *Queue) scheduleRetry(ctx context.Context, ri retryInfo) {
 		// Cancel already persisted the cancelled state and emitted the event.
 		return
 	case <-q.stopCh:
-		q.unregisterRetry(ri.task.ID)
-		q.markRetryCancelled(ctx, ri.task.ID, "cancelled during retry backoff (queue stopped)")
+		// select picks randomly among ready cases, so a concurrent Cancel may
+		// already own this retry; only mark/count it if we still do.
+		if q.unregisterRetry(ri.task.ID) {
+			q.markRetryCancelled(ctx, ri.task.ID, "cancelled during retry backoff (queue stopped)")
+		}
 		return
 	case <-ctx.Done():
-		q.unregisterRetry(ri.task.ID)
-		q.markRetryCancelled(ctx, ri.task.ID, "cancelled during retry backoff")
+		if q.unregisterRetry(ri.task.ID) {
+			q.markRetryCancelled(ctx, ri.task.ID, "cancelled during retry backoff")
+		}
 		return
 	}
 
@@ -1196,7 +1298,10 @@ func (q *Queue) markRetryCancelled(ctx context.Context, taskID, reason string) {
 	cancel()
 	if err != nil {
 		emitUpdateStatusError(q, taskID, err)
+		return
 	}
+	q.recordCancelled()
+	q.emitEvent(taskID, models.TaskStatusCancelled, reason)
 }
 
 func (q *Queue) failRetryResubmit(ctx context.Context, taskID string, submitErr error) {

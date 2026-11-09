@@ -32,6 +32,7 @@ func (a *App) GetPrometheusMetrics() string {
 	appendMetric("Configured proxy concurrency limit.", "gauge", "flowpilot_queue_proxy_concurrency_limit", queueMetrics.ProxyConcurrencyLimit)
 	appendMetric("Total completed tasks observed in memory.", "counter", "flowpilot_tasks_completed_total", taskMetrics.Completed)
 	appendMetric("Total failed tasks observed in memory.", "counter", "flowpilot_tasks_failed_total", taskMetrics.Failed)
+	appendMetric("Total tasks cancelled by the user or by queue shutdown.", "counter", "flowpilot_tasks_cancelled_total", queueMetrics.TotalCancelled)
 	appendMetric("Average completed task duration in milliseconds.", "gauge", "flowpilot_tasks_avg_duration_ms", taskMetrics.AvgDurationMs)
 	appendMetric("Task queue depth snapshot from task metrics.", "gauge", "flowpilot_tasks_queue_depth", taskMetrics.QueueDepth)
 	appendMetric("Current persistence writer queue depth.", "gauge", "flowpilot_persistence_queue_depth", queueMetrics.PersistenceQueueDepth)

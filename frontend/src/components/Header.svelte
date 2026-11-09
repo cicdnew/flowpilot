@@ -11,6 +11,7 @@
     totalSubmitted: 0,
     totalCompleted: 0,
     totalFailed: 0,
+    totalCancelled: 0,
     runningProxied: 0,
     proxyConcurrencyLimit: 0,
     persistenceQueueDepth: 0,

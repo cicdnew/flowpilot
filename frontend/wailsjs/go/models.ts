@@ -1132,6 +1132,7 @@ export namespace models {
 	    totalSubmitted: number;
 	    totalCompleted: number;
 	    totalFailed: number;
+	    totalCancelled: number;
 	    totalRetried: number;
 	    runningProxied: number;
 	    proxyConcurrencyLimit: number;
@@ -1155,6 +1156,7 @@ export namespace models {
 	        this.totalSubmitted = source["totalSubmitted"];
 	        this.totalCompleted = source["totalCompleted"];
 	        this.totalFailed = source["totalFailed"];
+	        this.totalCancelled = source["totalCancelled"];
 	        this.totalRetried = source["totalRetried"];
 	        this.runningProxied = source["runningProxied"];
 	        this.proxyConcurrencyLimit = source["proxyConcurrencyLimit"];

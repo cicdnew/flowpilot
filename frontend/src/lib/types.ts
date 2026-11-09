@@ -241,6 +241,7 @@ export interface QueueMetrics {
   totalSubmitted: number;
   totalCompleted: number;
   totalFailed: number;
+  totalCancelled: number;
   totalRetried: number;
   runningProxied: number;
   proxyConcurrencyLimit: number;

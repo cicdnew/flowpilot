@@ -55,6 +55,7 @@ func setupTestQueue(t *testing.T, maxConcurrency int, events *[]models.TaskEvent
 	}
 
 	q := New(db, runner, maxConcurrency, onEvent)
+	t.Cleanup(q.Stop)
 	return q, db
 }
 

@@ -19,7 +19,8 @@ type TaskLifecycleEvent struct {
 //   - Running: tasks currently executing in browser workers.
 //   - Queued: tasks waiting for a concurrency slot (submitted but not yet running).
 //   - Pending: total tasks not yet finished (Queued + Running).
-//   - TotalSubmitted/TotalCompleted/TotalFailed: lifetime counters since queue creation.
+//   - TotalSubmitted/TotalCompleted/TotalFailed/TotalCancelled: lifetime counters since queue creation.
+//     Cancellations (user cancel, queue shutdown) are counted in TotalCancelled, never in TotalFailed.
 type QueueMetrics struct {
 	Running                  int   `json:"running"`
 	Queued                   int   `json:"queued"`
@@ -27,6 +28,7 @@ type QueueMetrics struct {
 	TotalSubmitted           int64 `json:"totalSubmitted"`
 	TotalCompleted           int64 `json:"totalCompleted"`
 	TotalFailed              int64 `json:"totalFailed"`
+	TotalCancelled           int64 `json:"totalCancelled"`
 	TotalRetried             int64 `json:"totalRetried"`
 	RunningProxied           int   `json:"runningProxied"`
 	ProxyConcurrencyLimit    int   `json:"proxyConcurrencyLimit"`

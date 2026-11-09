@@ -126,7 +126,7 @@ func (r *Runner) getStepHandlerWithResult(action models.StepAction) stepHandlerW
 func (r *Runner) executeStepWithResult(ctx context.Context, step models.TaskStep, result *models.TaskResult) error {
 	handler := r.getStepHandlerWithResult(step.Action)
 	if handler == nil {
-		return fmt.Errorf("unknown action: %s", step.Action)
+		return r.executePluginStep(ctx, -1, step, result)
 	}
 	return handler(ctx, step, result)
 }

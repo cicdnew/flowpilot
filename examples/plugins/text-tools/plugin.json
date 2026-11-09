@@ -1,0 +1,21 @@
+{
+  "id": "text-tools",
+  "name": "Text Tools",
+  "version": "1.0.0",
+  "description": "Adds a text_transform step and an optional navigation blocklist hook.",
+  "type": "process",
+  "entrypoint": "text-tools",
+  "timeout_ms": 5000,
+  "actions": [
+    {
+      "name": "text_transform",
+      "description": "Transforms value (supports {{variable}} placeholders) with operator trim|upper|lower|title|reverse|slug and stores it in varName.",
+      "value_required": true
+    }
+  ],
+  "hooks": ["pre_execute"],
+  "capabilities": ["variables.read", "variables.write"],
+  "config": {
+    "blocked_hosts": []
+  }
+}

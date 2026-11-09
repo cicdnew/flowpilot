@@ -166,6 +166,10 @@ export function GetMonitoringMetrics() {
   return window['go']['main']['App']['GetMonitoringMetrics']();
 }
 
+export function GetObservabilitySnapshot() {
+  return window['go']['main']['App']['GetObservabilitySnapshot']();
+}
+
 export function GetPrometheusMetrics() {
   return window['go']['main']['App']['GetPrometheusMetrics']();
 }
@@ -254,6 +258,10 @@ export function ListDOMSnapshots(arg1) {
   return window['go']['main']['App']['ListDOMSnapshots'](arg1);
 }
 
+export function ListPlugins() {
+  return window['go']['main']['App']['ListPlugins']();
+}
+
 export function ListProxies() {
   return window['go']['main']['App']['ListProxies']();
 }
@@ -324,6 +332,10 @@ export function PlayRecordedFlow(arg1, arg2, arg3, arg4, arg5) {
 
 export function PurgeOldData(arg1) {
   return window['go']['main']['App']['PurgeOldData'](arg1);
+}
+
+export function ReloadPlugins() {
+  return window['go']['main']['App']['ReloadPlugins']();
 }
 
 export function ResumeBatch(arg1) {

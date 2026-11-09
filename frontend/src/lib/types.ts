@@ -360,3 +360,40 @@ export interface Alert {
   value: number;
 }
 
+
+export type PluginHookPoint = 'pre_execute' | 'post_execute' | 'on_error';
+
+export interface PluginActionSpec {
+  name: string;
+  description?: string;
+  selector_required?: boolean;
+  value_required?: boolean;
+}
+
+export interface PluginInfo {
+  id: string;
+  name: string;
+  version: string;
+  description?: string;
+  type: 'process' | 'builtin';
+  entrypoint?: string;
+  actions: PluginActionSpec[];
+  hooks: PluginHookPoint[];
+  capabilities: string[];
+  timeout_ms?: number;
+  source?: string;
+  loadedAt: string;
+  status?: PluginRuntimeStatus;
+}
+
+export interface PluginRuntimeStatus {
+  running: boolean;
+  restarts: number;
+  lastError?: string;
+}
+
+export interface PluginStatus {
+  dir: string;
+  plugins: PluginInfo[];
+  errors: string[];
+}

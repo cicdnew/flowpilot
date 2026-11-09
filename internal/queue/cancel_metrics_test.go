@@ -42,12 +42,16 @@ func createTask(t *testing.T, db *database.DB, task models.Task) {
 	}
 }
 
-// A running task whose runner returns context.Canceled is a cancellation, not a failure.
+// A running task cancelled by the user whose runner returns context.Canceled is a cancellation, not a failure.
 func TestCancelMetricsRunningTaskCountsAsCancelled(t *testing.T) {
 	q, db := setupTestQueueNoWorkers(t, nil, nil)
 	defer q.Stop()
 	task := makeTestTask("cm-running")
 	createTask(t, db, task)
+	markRunning(q, task.ID)
+	if err := q.Cancel(task.ID); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
 
 	if !q.handleTaskCancellation(context.Background(), task.ID, context.Canceled) {
 		t.Fatal("expected context.Canceled to be handled as a cancellation")
@@ -91,7 +95,7 @@ func TestCancelMetricsQueuedTaskCountedOnce(t *testing.T) {
 	createTask(t, db, task)
 	q.mu.Lock()
 	heap.Push(&q.pq, &heapItem{task: task, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.heapSet[task.ID] = struct{}{}
+	q.heapSet[task.ID] = heapItemByID(q.pq, task.ID)
 	q.mu.Unlock()
 
 	for i := 0; i < 2; i++ {

@@ -4,6 +4,7 @@ import { get } from 'svelte/store';
 import {
   ensureStepActionStateLoaded,
   getStepActionOptions,
+  refreshStepActionState,
   resetStepActionStateForTest,
   stepActionState,
   supportedStepActions,
@@ -79,5 +80,16 @@ describe('step-actions', () => {
     expect(state.usingFallback).toBe(true);
     expect(state.warning).not.toBe('');
     expect(state.actions).toEqual([...supportedStepActions]);
+  });
+  it('refreshes the catalog so newly loaded plugin actions appear in the picker', async () => {
+    let catalog = ['navigate', 'click'];
+    window.go = { main: { App: { GetSupportedStepActions: async () => catalog } } };
+    expect((await ensureStepActionStateLoaded()).actions).toEqual(['navigate', 'click']);
+
+    catalog = ['navigate', 'click', 'text_transform'];
+    expect((await ensureStepActionStateLoaded()).actions).not.toContain('text_transform');
+    const refreshed = await refreshStepActionState();
+    expect(refreshed.actions).toContain('text_transform');
+    expect(get(stepActionState).actions).toContain('text_transform');
   });
 });

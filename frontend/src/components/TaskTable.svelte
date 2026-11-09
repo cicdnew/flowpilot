@@ -3,6 +3,18 @@
   import { tasks, selectedTaskId, removeTaskFromStore } from '../lib/store';
   import { StartTask, CancelTask, DeleteTask } from '../../wailsjs/go/main/App';
   import type { Task } from '../lib/types';
+  import { computeVirtualWindow } from '../lib/virtual-window';
+
+  const ROW_HEIGHT = 44;
+  let scrollTop = 0;
+  let viewportHeight = 600;
+
+  $: win = computeVirtualWindow($tasks.length, scrollTop, viewportHeight, ROW_HEIGHT);
+  $: visibleTasks = $tasks.slice(win.start, win.end);
+
+  function onScroll(event: Event) {
+    scrollTop = (event.currentTarget as HTMLElement).scrollTop;
+  }
 
   const dispatch = createEventDispatcher();
 
@@ -111,7 +123,7 @@
     <p>Select a row to inspect details, logs, and batch progress.</p>
   </div>
 
-  <div class="table-container">
+  <div class="table-container" bind:clientHeight={viewportHeight} on:scroll={onScroll}>
     <table>
       <thead>
         <tr>
@@ -127,7 +139,10 @@
         </tr>
       </thead>
       <tbody>
-        {#each $tasks as task (task.id)}
+        {#if win.padTop > 0}
+          <tr class="spacer" aria-hidden="true"><td colspan="9" style="height: {win.padTop}px"></td></tr>
+        {/if}
+        {#each visibleTasks as task (task.id)}
           <tr
             class:selected={$selectedTaskId === task.id}
             on:click={() => selectTask(task)}
@@ -190,6 +205,9 @@
             </td>
           </tr>
         {/each}
+        {#if win.padBottom > 0}
+          <tr class="spacer" aria-hidden="true"><td colspan="9" style="height: {win.padBottom}px"></td></tr>
+        {/if}
       </tbody>
     </table>
   </div>
@@ -239,7 +257,13 @@
     overflow: auto;
   }
 
+  tbody tr.spacer td {
+    padding: 0;
+    border: none;
+  }
+
   tbody tr {
+    height: 44px;
     cursor: pointer;
     transition: background-color 0.18s ease, box-shadow 0.18s ease;
   }

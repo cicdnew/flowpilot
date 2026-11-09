@@ -8,6 +8,8 @@
   import RepeatTaskModal from './components/RepeatTaskModal.svelte';
   import BatchCreateModal from './components/BatchCreateModal.svelte';
   import ProxyPanel from './components/ProxyPanel.svelte';
+  import PluginPanel from './components/PluginPanel.svelte';
+  import ObservabilityPanel from './components/ObservabilityPanel.svelte';
   import RecorderPanel from './components/RecorderPanel.svelte';
   import FlowManager from './components/FlowManager.svelte';
   import BatchFromFlow from './components/BatchFromFlow.svelte';
@@ -31,7 +33,7 @@
   import { ListTasksPaginated, GetTask, IsRecording, ListRecordedFlows } from '../wailsjs/go/main/App';
   import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime';
 
-  type TabId = 'tasks' | 'proxies' | 'recorder' | 'schedules' | 'visual' | 'settings';
+  type TabId = 'tasks' | 'proxies' | 'recorder' | 'schedules' | 'visual' | 'plugins' | 'observability' | 'settings';
 
   const tabs: Array<{ id: TabId; label: string; description: string }> = [
     { id: 'tasks', label: 'Tasks', description: 'Monitor runs, triage failures, and inspect logs.' },
@@ -39,6 +41,8 @@
     { id: 'recorder', label: 'Recorder', description: 'Capture browser flows and turn them into reusable automations.' },
     { id: 'schedules', label: 'Schedules', description: 'Automate recurring submissions and queue timing.' },
     { id: 'visual', label: 'Visual', description: 'Review baselines and detect UI drift quickly.' },
+    { id: 'observability', label: 'Observability', description: 'Live health, queue, pool, plugin, MCP and step-latency metrics.' },
+    { id: 'plugins', label: 'Plugins', description: 'Inspect installed step-action and hook plugins.' },
     { id: 'settings', label: 'Settings', description: 'Configure captcha and runtime integrations.' },
   ];
 
@@ -261,6 +265,14 @@
       {:else if $activeTab === 'visual'}
         <div class="panel-view">
           <VisualDiffViewer />
+        </div>
+      {:else if $activeTab === 'observability'}
+        <div class="panel-view">
+          <ObservabilityPanel />
+        </div>
+      {:else if $activeTab === 'plugins'}
+        <div class="panel-view">
+          <PluginPanel />
         </div>
       {:else if $activeTab === 'settings'}
         <div class="panel-view">

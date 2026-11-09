@@ -69,8 +69,12 @@ type Queue struct {
 	cond           *sync.Cond
 	pq             taskHeap            // main priority queue
 	pausedPQ       taskHeap            // tasks from paused batches
-	heapSet        map[string]struct{} // O(1) lookup for pq
-	pausedSet      map[string]struct{} // O(1) lookup for pausedPQ
+	heapSet        map[string]*heapItem // O(1) lookup for pq
+	pausedSet      map[string]*heapItem // O(1) lookup for pausedPQ
+
+	persistMu               sync.RWMutex
+	persistenceClosed       bool
+	persistenceBackpressure atomic.Int64
 	running        map[string]context.CancelFunc
 	cancelled      map[string]bool
 	retrying       map[string]chan struct{} // taskID → closed when cancelled during retry backoff
@@ -95,13 +99,13 @@ func New(db *database.DB, runner *browser.Runner, maxConcurrency int, onEvent Ev
 		maxPending:           maxConcurrency * 10, // default: 10x concurrency limit
 		onEvent:              onEvent,
 		metrics:              models.QueueMetrics{},
-		persistenceBatchSize: max(16, maxConcurrency),
+		persistenceBatchSize: max(64, maxConcurrency*2),
 		persistenceInterval:  100 * time.Millisecond,
 		persistenceCh:        make(chan taskStateWrite, max(64, maxConcurrency*4)),
 		pq:                   make(taskHeap, 0),
 		pausedPQ:             make(taskHeap, 0),
-		heapSet:              make(map[string]struct{}, maxConcurrency*10),
-		pausedSet:            make(map[string]struct{}, maxConcurrency*10),
+		heapSet:              make(map[string]*heapItem, maxConcurrency*10),
+		pausedSet:            make(map[string]*heapItem, maxConcurrency*10),
 		running:              make(map[string]context.CancelFunc),
 		cancelled:            make(map[string]bool),
 		retrying:             make(map[string]chan struct{}),
@@ -213,7 +217,7 @@ func (q *Queue) addTaskToHeap(task models.Task, ctx context.Context) (*heapItem,
 		addedAt: time.Now(),
 	}
 	heap.Push(&q.pq, item)
-	q.heapSet[item.task.ID] = struct{}{}
+	q.heapSet[item.task.ID] = item
 	q.metrics.TotalSubmitted++
 	return item, cancel
 }
@@ -278,7 +282,7 @@ func (q *Queue) addTasksToBatch(ctx context.Context, tasks []models.Task) []mode
 			addedAt: time.Now(),
 		}
 		heap.Push(&q.pq, item)
-		q.heapSet[item.task.ID] = struct{}{}
+		q.heapSet[item.task.ID] = item
 		q.metrics.TotalSubmitted++
 		added = append(added, task)
 	}
@@ -433,14 +437,14 @@ func (q *Queue) PauseBatch(batchID string) {
 		delete(q.heapSet, item.task.ID)
 		if item.task.BatchID == batchID {
 			heap.Push(&q.pausedPQ, item)
-			q.pausedSet[item.task.ID] = struct{}{}
+			q.pausedSet[item.task.ID] = item
 		} else {
 			remaining = append(remaining, item)
 		}
 	}
 	for _, item := range remaining {
 		heap.Push(&q.pq, item)
-		q.heapSet[item.task.ID] = struct{}{}
+		q.heapSet[item.task.ID] = item
 	}
 	q.mu.Unlock()
 }
@@ -458,7 +462,7 @@ func (q *Queue) ResumeBatch(batchID string) {
 		delete(q.pausedSet, item.task.ID)
 		if item.task.BatchID == batchID {
 			heap.Push(&q.pq, item)
-			q.heapSet[item.task.ID] = struct{}{}
+			q.heapSet[item.task.ID] = item
 			movedCount++
 		} else {
 			remaining = append(remaining, item)
@@ -466,7 +470,7 @@ func (q *Queue) ResumeBatch(batchID string) {
 	}
 	for _, item := range remaining {
 		heap.Push(&q.pausedPQ, item)
-		q.pausedSet[item.task.ID] = struct{}{}
+		q.pausedSet[item.task.ID] = item
 	}
 	q.mu.Unlock()
 
@@ -494,16 +498,20 @@ func (q *Queue) enqueueTaskStateChanges(changes []database.TaskStateChange) erro
 		return q.db.BatchApplyTaskStateChanges(dbCtx, changes)
 	}
 
+	q.persistMu.RLock()
+	defer q.persistMu.RUnlock()
+	if q.persistenceClosed {
+		dbCtx, cancel := q.dbWriteContext(context.TODO())
+		defer cancel()
+		return q.db.BatchApplyTaskStateChanges(dbCtx, changes)
+	}
 	for _, change := range changes {
+		w := taskStateWrite{change: change}
 		select {
-		case q.persistenceCh <- taskStateWrite{change: change}:
+		case q.persistenceCh <- w:
 		default:
-			dbCtx, cancel := q.dbWriteContext(context.TODO())
-			err := q.db.BatchApplyTaskStateChanges(dbCtx, []database.TaskStateChange{change})
-			cancel()
-			if err != nil {
-				return err
-			}
+			q.persistenceBackpressure.Add(1)
+			q.persistenceCh <- w
 		}
 	}
 	return nil
@@ -592,7 +600,10 @@ func (q *Queue) Stop() {
 			q.proxyWakeTimer = nil
 		}
 		q.mu.Unlock()
+		q.persistMu.Lock()
+		q.persistenceClosed = true
 		close(q.persistenceCh)
+		q.persistMu.Unlock()
 		q.persistenceWg.Wait()
 	})
 }
@@ -662,6 +673,7 @@ func (q *Queue) Metrics() models.QueueMetrics {
 	metrics.RunningProxied = q.runningProxied
 	metrics.ProxyConcurrencyLimit = q.proxyConcurrencyLimit
 	metrics.PersistenceQueueDepth = len(q.persistenceCh)
+	metrics.PersistenceBackpressure = q.persistenceBackpressure.Load()
 	metrics.PersistenceQueueCapacity = cap(q.persistenceCh)
 	metrics.PersistenceBatchSize = q.persistenceBatchSize
 
@@ -687,14 +699,19 @@ func (q *Queue) RecoverStaleTasks(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list stale tasks: %w", err)
 	}
-	for _, task := range stale {
-		if err := q.enqueueTaskStateChange(database.TaskStateChange{TaskID: task.ID, Status: models.TaskStatusPending, Error: "recovered after restart"}); err != nil {
-			return fmt.Errorf("reset stale task %s: %w", task.ID, err)
-		}
-		task.Status = models.TaskStatusPending
-		if err := q.Submit(ctx, task); err != nil {
-			return fmt.Errorf("re-submit stale task %s: %w", task.ID, err)
-		}
+	if len(stale) == 0 {
+		return nil
+	}
+	resets := make([]database.TaskStateChange, len(stale))
+	for i := range stale {
+		resets[i] = database.TaskStateChange{TaskID: stale[i].ID, Status: models.TaskStatusPending, Error: "recovered after restart"}
+		stale[i].Status = models.TaskStatusPending
+	}
+	if err := q.enqueueTaskStateChanges(resets); err != nil {
+		return fmt.Errorf("reset %d stale tasks: %w", len(stale), err)
+	}
+	if err := q.SubmitBatch(ctx, stale); err != nil {
+		return fmt.Errorf("re-submit %d stale tasks: %w", len(stale), err)
 	}
 	return nil
 }
@@ -832,7 +849,7 @@ func (q *Queue) handlePausedItemLocked(item *heapItem) bool {
 		return false
 	}
 	heap.Push(&q.pausedPQ, item)
-	q.pausedSet[item.task.ID] = struct{}{}
+	q.pausedSet[item.task.ID] = item
 	return true
 }
 
@@ -866,7 +883,7 @@ func (q *Queue) deferForUnavailableProxyLocked(item *heapItem, autoProxy bool, d
 func (q *Queue) restoreDeferredLocked(deferred []*heapItem) {
 	for _, pending := range deferred {
 		heap.Push(&q.pq, pending)
-		q.heapSet[pending.task.ID] = struct{}{}
+		q.heapSet[pending.task.ID] = pending
 	}
 }
 
@@ -1017,7 +1034,7 @@ func (q *Queue) completeTaskReservation(task models.Task, reservation *proxy.Res
 }
 
 func (q *Queue) handleTaskCancellation(ctx context.Context, taskID string, runErr error) bool {
-	if !errors.Is(runErr, context.Canceled) {
+	if !errors.Is(runErr, context.Canceled) || !q.isCancellationRequested(ctx, taskID) {
 		return false
 	}
 	if !q.claimFinalOutcome(taskID) {
@@ -1036,6 +1053,13 @@ func (q *Queue) handleTaskCancellation(ctx context.Context, taskID string, runEr
 	}
 	q.emitEvent(taskID, models.TaskStatusCancelled, errCancelledByUser)
 	return true
+}
+
+func (q *Queue) isCancellationRequested(ctx context.Context, taskID string) bool {
+	q.mu.Lock()
+	requested := q.cancelled[taskID] || q.stopped
+	q.mu.Unlock()
+	return requested || (ctx != nil && ctx.Err() != nil)
 }
 
 // UpdateMetrics updates the in-memory TaskMetrics snapshot.
@@ -1410,27 +1434,25 @@ func (q *Queue) isTaskInHeap(taskID string) bool {
 // removeFromHeap removes a task from the main heap. Returns true if found.
 // Must be called with mu held.
 func (q *Queue) removeFromHeap(taskID string) bool {
-	for i, item := range q.pq {
-		if item.task.ID == taskID {
-			item.cancel()
-			heap.Remove(&q.pq, i)
-			delete(q.heapSet, taskID)
-			return true
-		}
+	item, ok := q.heapSet[taskID]
+	if !ok || item.index < 0 || item.index >= len(q.pq) || q.pq[item.index] != item {
+		return false
 	}
-	return false
+	item.cancel()
+	heap.Remove(&q.pq, item.index)
+	delete(q.heapSet, taskID)
+	return true
 }
 
 // removeFromPausedHeap removes a task from the paused heap. Returns true if found.
 // Must be called with mu held.
 func (q *Queue) removeFromPausedHeap(taskID string) bool {
-	for i, item := range q.pausedPQ {
-		if item.task.ID == taskID {
-			item.cancel()
-			heap.Remove(&q.pausedPQ, i)
-			delete(q.pausedSet, taskID)
-			return true
-		}
+	item, ok := q.pausedSet[taskID]
+	if !ok || item.index < 0 || item.index >= len(q.pausedPQ) || q.pausedPQ[item.index] != item {
+		return false
 	}
-	return false
+	item.cancel()
+	heap.Remove(&q.pausedPQ, item.index)
+	delete(q.pausedSet, taskID)
+	return true
 }

@@ -1,3 +1,46 @@
+export namespace browser {
+	
+	export class PoolStats {
+	    totalBrowsers: number;
+	    maxBrowsers: number;
+	    activeTabs: number;
+	    idleBrowsers: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PoolStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.totalBrowsers = source["totalBrowsers"];
+	        this.maxBrowsers = source["maxBrowsers"];
+	        this.activeTabs = source["activeTabs"];
+	        this.idleBrowsers = source["idleBrowsers"];
+	    }
+	}
+	export class ProxyPoolMetrics {
+	    pools: number;
+	    totalBrowsers: number;
+	    maxBrowsers: number;
+	    activeTabs: number;
+	    idleBrowsers: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProxyPoolMetrics(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pools = source["pools"];
+	        this.totalBrowsers = source["totalBrowsers"];
+	        this.maxBrowsers = source["maxBrowsers"];
+	        this.activeTabs = source["activeTabs"];
+	        this.idleBrowsers = source["idleBrowsers"];
+	    }
+	}
+
+}
+
 export namespace database {
 	
 	export class TaskUpdateParams {
@@ -101,6 +144,7 @@ export namespace main {
 	    Tags: string[];
 	    Timeout: number;
 	    LoggingPolicy?: models.TaskLoggingPolicy;
+	    Headless: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new CreateTaskParams(source);
@@ -117,6 +161,7 @@ export namespace main {
 	        this.Tags = source["Tags"];
 	        this.Timeout = source["Timeout"];
 	        this.LoggingPolicy = this.convertValues(source["LoggingPolicy"], models.TaskLoggingPolicy);
+	        this.Headless = source["Headless"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -169,6 +214,129 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class MCPStatus {
+	    enabled: boolean;
+	    url?: string;
+	    auth: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new MCPStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.url = source["url"];
+	        this.auth = source["auth"];
+	    }
+	}
+	export class RuntimeStats {
+	    goroutines: number;
+	    heapMB: number;
+	    numGC: number;
+	    uptimeSec: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new RuntimeStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.goroutines = source["goroutines"];
+	        this.heapMB = source["heapMB"];
+	        this.numGC = source["numGC"];
+	        this.uptimeSec = source["uptimeSec"];
+	    }
+	}
+	export class PluginStatus {
+	    dir: string;
+	    plugins: plugin.Info[];
+	    errors: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PluginStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.dir = source["dir"];
+	        this.plugins = this.convertValues(source["plugins"], plugin.Info);
+	        this.errors = source["errors"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ObservabilitySnapshot {
+	    // Go type: time
+	    generatedAt: any;
+	    health: monitoring.HealthStatus;
+	    queue: models.QueueMetrics;
+	    browserPool: browser.PoolStats;
+	    proxyPools: browser.ProxyPoolMetrics;
+	    plugins: PluginStatus;
+	    steps: monitoring.ActionStepStats[];
+	    slowSteps: monitoring.SlowStep[];
+	    recentErrors: string[];
+	    activeAlerts: models.AlertFiring[];
+	    runtime: RuntimeStats;
+	    mcp: MCPStatus;
+	
+	    static createFrom(source: any = {}) {
+	        return new ObservabilitySnapshot(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.generatedAt = this.convertValues(source["generatedAt"], null);
+	        this.health = this.convertValues(source["health"], monitoring.HealthStatus);
+	        this.queue = this.convertValues(source["queue"], models.QueueMetrics);
+	        this.browserPool = this.convertValues(source["browserPool"], browser.PoolStats);
+	        this.proxyPools = this.convertValues(source["proxyPools"], browser.ProxyPoolMetrics);
+	        this.plugins = this.convertValues(source["plugins"], PluginStatus);
+	        this.steps = this.convertValues(source["steps"], monitoring.ActionStepStats);
+	        this.slowSteps = this.convertValues(source["slowSteps"], monitoring.SlowStep);
+	        this.recentErrors = source["recentErrors"];
+	        this.activeAlerts = this.convertValues(source["activeAlerts"], models.AlertFiring);
+	        this.runtime = this.convertValues(source["runtime"], RuntimeStats);
+	        this.mcp = this.convertValues(source["mcp"], MCPStatus);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
 	export class ScheduleParams {
 	    Name: string;
 	    CronExpr: string;
@@ -1139,6 +1307,7 @@ export namespace models {
 	    persistenceQueueDepth: number;
 	    persistenceQueueCapacity: number;
 	    persistenceBatchSize: number;
+	    persistenceBackpressure: number;
 	    workerUtilizationPercent: number;
 	    avgStepDurationMs: number;
 	    // Go type: time
@@ -1163,6 +1332,7 @@ export namespace models {
 	        this.persistenceQueueDepth = source["persistenceQueueDepth"];
 	        this.persistenceQueueCapacity = source["persistenceQueueCapacity"];
 	        this.persistenceBatchSize = source["persistenceBatchSize"];
+	        this.persistenceBackpressure = source["persistenceBackpressure"];
 	        this.workerUtilizationPercent = source["workerUtilizationPercent"];
 	        this.avgStepDurationMs = source["avgStepDurationMs"];
 	        this.lastUpdated = this.convertValues(source["lastUpdated"], null);
@@ -1637,6 +1807,36 @@ export namespace models {
 
 export namespace monitoring {
 	
+	export class ActionStepStats {
+	    action: string;
+	    count: number;
+	    errors: number;
+	    errorRate: number;
+	    avgMs: number;
+	    maxMs: number;
+	    p50Ms: number;
+	    p95Ms: number;
+	    slowCount: number;
+	    lastSeenAt?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ActionStepStats(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.action = source["action"];
+	        this.count = source["count"];
+	        this.errors = source["errors"];
+	        this.errorRate = source["errorRate"];
+	        this.avgMs = source["avgMs"];
+	        this.maxMs = source["maxMs"];
+	        this.p50Ms = source["p50Ms"];
+	        this.p95Ms = source["p95Ms"];
+	        this.slowCount = source["slowCount"];
+	        this.lastSeenAt = source["lastSeenAt"];
+	    }
+	}
 	export class Component {
 	    status: string;
 	    message?: string;
@@ -1876,6 +2076,147 @@ export namespace monitoring {
 		}
 	}
 	
+	export class SlowStep {
+	    taskId: string;
+	    stepIndex: number;
+	    action: string;
+	    durationMs: number;
+	    error?: string;
+	    // Go type: time
+	    at: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new SlowStep(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.taskId = source["taskId"];
+	        this.stepIndex = source["stepIndex"];
+	        this.action = source["action"];
+	        this.durationMs = source["durationMs"];
+	        this.error = source["error"];
+	        this.at = this.convertValues(source["at"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
+export namespace plugin {
+	
+	export class RuntimeStatus {
+	    running: boolean;
+	    restarts: number;
+	    lastError?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RuntimeStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.running = source["running"];
+	        this.restarts = source["restarts"];
+	        this.lastError = source["lastError"];
+	    }
+	}
+	export class ActionSpec {
+	    name: string;
+	    description?: string;
+	    selector_required?: boolean;
+	    value_required?: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ActionSpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.description = source["description"];
+	        this.selector_required = source["selector_required"];
+	        this.value_required = source["value_required"];
+	    }
+	}
+	export class Info {
+	    id: string;
+	    name: string;
+	    version: string;
+	    description?: string;
+	    type: string;
+	    entrypoint?: string;
+	    args?: string[];
+	    actions?: ActionSpec[];
+	    hooks?: string[];
+	    capabilities?: string[];
+	    config?: Record<string, any>;
+	    timeout_ms?: number;
+	    max_restarts?: number;
+	    source?: string;
+	    // Go type: time
+	    loadedAt: any;
+	    status?: RuntimeStatus;
+	
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.version = source["version"];
+	        this.description = source["description"];
+	        this.type = source["type"];
+	        this.entrypoint = source["entrypoint"];
+	        this.args = source["args"];
+	        this.actions = this.convertValues(source["actions"], ActionSpec);
+	        this.hooks = source["hooks"];
+	        this.capabilities = source["capabilities"];
+	        this.config = source["config"];
+	        this.timeout_ms = source["timeout_ms"];
+	        this.max_restarts = source["max_restarts"];
+	        this.source = source["source"];
+	        this.loadedAt = this.convertValues(source["loadedAt"], null);
+	        this.status = this.convertValues(source["status"], RuntimeStatus);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 

@@ -37,6 +37,7 @@ func (a *App) GetPrometheusMetrics() string {
 	appendMetric("Task queue depth snapshot from task metrics.", "gauge", "flowpilot_tasks_queue_depth", taskMetrics.QueueDepth)
 	appendMetric("Current persistence writer queue depth.", "gauge", "flowpilot_persistence_queue_depth", queueMetrics.PersistenceQueueDepth)
 	appendMetric("Persistence writer queue capacity.", "gauge", "flowpilot_persistence_queue_capacity", queueMetrics.PersistenceQueueCapacity)
+	appendMetric("Total writes that waited for persistence queue capacity (backpressure).", "counter", "flowpilot_persistence_backpressure_total", queueMetrics.PersistenceBackpressure)
 	appendMetric("Total proxies in the configured pool.", "gauge", "flowpilot_proxies_total", proxyMetrics.Total)
 	appendMetric("Total healthy proxies.", "gauge", "flowpilot_proxies_healthy", proxyMetrics.Healthy)
 	appendMetric("Total unhealthy proxies.", "gauge", "flowpilot_proxies_unhealthy", proxyMetrics.Unhealthy)
@@ -51,6 +52,19 @@ func (a *App) GetPrometheusMetrics() string {
 	appendMetric("Proxy-keyed browser capacity.", "gauge", "flowpilot_proxy_browser_pool_capacity", proxyPoolMetrics.MaxBrowsers)
 	appendMetric("Proxy-keyed active tab count.", "gauge", "flowpilot_proxy_browser_pool_active_tabs", proxyPoolMetrics.ActiveTabs)
 	appendMetric("Proxy-keyed idle browser count.", "gauge", "flowpilot_proxy_browser_pool_idle_browsers", proxyPoolMetrics.IdleBrowsers)
+	plugins := a.pluginRegistry().List()
+	running, restarts := 0, 0
+	for _, p := range plugins {
+		if p.Status == nil || p.Status.Running {
+			running++
+		}
+		if p.Status != nil {
+			restarts += p.Status.Restarts
+		}
+	}
+	appendMetric("Loaded plugins.", "gauge", "flowpilot_plugins_loaded", len(plugins))
+	appendMetric("Loaded plugins whose process is running.", "gauge", "flowpilot_plugins_running", running)
+	appendMetric("Total automatic plugin restarts.", "counter", "flowpilot_plugin_restarts_total", restarts)
 	return strings.Join(lines, "\n") + "\n"
 }
 

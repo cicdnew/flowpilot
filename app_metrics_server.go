@@ -31,6 +31,13 @@ func (a *App) startMetricsServer(ctx context.Context) {
 		}
 	})
 
+	mux.HandleFunc("/api/observability", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(a.GetObservabilitySnapshot()); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+
 	mux.HandleFunc("/api/errors/recent", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		limit := 10
@@ -60,13 +67,14 @@ func (a *App) startMetricsServer(ctx context.Context) {
 		return
 	}
 
+	server := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	a.metricsMu.Lock()
 	a.metricsListener = ln
-	a.metricsServer = &http.Server{Handler: mux}
+	a.metricsServer = server
 	a.metricsMu.Unlock()
 
 	go func() {
-		if err := a.metricsServer.Serve(ln); err != nil && err != http.ErrServerClosed {
+		if err := server.Serve(ln); err != nil && err != http.ErrServerClosed {
 			logWarningf(ctx, "metrics server stopped with error: %v", err)
 		}
 	}()

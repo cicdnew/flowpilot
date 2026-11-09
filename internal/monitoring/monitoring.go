@@ -24,6 +24,8 @@ type Monitor struct {
 	// Error tracking (P0)
 	errorContexts   []string // Serialized ErrorContext for storage
 	maxErrorSamples int
+
+	steps *StepTracker
 }
 
 // RepeatTaskMetrics tracks metrics specific to repeated tasks.
@@ -116,7 +118,17 @@ func New() *Monitor {
 		maxStepSamples:  1000,
 		errorContexts:   make([]string, 0, 100),
 		maxErrorSamples: 100,
+		steps:           NewStepTracker(DefaultSlowStepThreshold),
 	}
+}
+
+func (m *Monitor) RecordStep(taskID, action string, stepIndex int, duration time.Duration, stepErr error) {
+	m.RecordStepDuration(duration.Milliseconds())
+	m.steps.Record(taskID, action, stepIndex, duration, stepErr)
+}
+
+func (m *Monitor) Steps() *StepTracker {
+	return m.steps
 }
 
 // RecordRepeatBatchCreated records a new repeated batch creation.
@@ -591,7 +603,7 @@ func (m *Monitor) GetPrometheusMetrics() string {
 	metrics += "# TYPE flowpilot_system_goroutines gauge\n"
 	metrics += "flowpilot_system_goroutines " + formatInt(m.systemMetrics.GoroutineCount) + "\n"
 
-	return metrics
+	return metrics + m.steps.Prometheus()
 }
 
 // Helper formatting functions

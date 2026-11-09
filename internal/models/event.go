@@ -35,6 +35,7 @@ type QueueMetrics struct {
 	PersistenceQueueDepth    int   `json:"persistenceQueueDepth"`
 	PersistenceQueueCapacity int   `json:"persistenceQueueCapacity"`
 	PersistenceBatchSize     int   `json:"persistenceBatchSize"`
+	PersistenceBackpressure  int64 `json:"persistenceBackpressure"`
 	WorkerUtilizationPercent float64 `json:"workerUtilizationPercent"`
 	AvgStepDurationMs        float64 `json:"avgStepDurationMs"`
 	LastUpdated              time.Time `json:"lastUpdated"`

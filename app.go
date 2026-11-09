@@ -21,6 +21,7 @@ import (
 	"flowpilot/internal/logs"
 	"flowpilot/internal/models"
 	"flowpilot/internal/monitoring"
+	"flowpilot/internal/plugin"
 	"flowpilot/internal/proxy"
 	"flowpilot/internal/queue"
 	"flowpilot/internal/recorder"
@@ -59,13 +60,13 @@ func DefaultAppConfig() AppConfig {
 		MaxProxyFailures:    2,
 		HealthCheckURL:      "http://chhotu-bin.infy.uk",
 
-		CaptureStepLogs:     true,
-		CaptureNetworkLogs:  false,
-		CaptureScreenshots:  false,
-		MaxExecutionLogs:    250,
-		RetryBackoffBaseMs:  5000,
-		LogSlogLevel:        "info",
-		MetricsAddr:         defaultMetricsAddr(),
+		CaptureStepLogs:    true,
+		CaptureNetworkLogs: false,
+		CaptureScreenshots: false,
+		MaxExecutionLogs:   250,
+		RetryBackoffBaseMs: 5000,
+		LogSlogLevel:       "info",
+		MetricsAddr:        defaultMetricsAddr(),
 	}
 }
 
@@ -89,6 +90,15 @@ type App struct {
 	metricsMu         sync.Mutex
 	metricsServer     *http.Server
 	metricsListener   net.Listener
+
+	headless        bool
+	mcpHTTP         *mcpHTTPServer
+	dataDirOverride string
+
+	plugins        *plugin.Registry
+	pluginMu       sync.Mutex
+	pluginReloadMu sync.Mutex
+	pluginErrors   []string
 
 	recorderMu     sync.Mutex
 	activeRecorder *recorder.Recorder
@@ -153,11 +163,15 @@ func (a *App) startupFail(ctx context.Context, err error) {
 
 // initDataDir resolves the home directory and creates the app data directory.
 func (a *App) initDataDir() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("get home directory: %w", err)
+	if a.dataDirOverride != "" {
+		a.dataDir = a.dataDirOverride
+	} else {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("get home directory: %w", err)
+		}
+		a.dataDir = filepath.Join(home, ".flowpilot")
 	}
-	a.dataDir = filepath.Join(home, ".flowpilot")
 	if err := os.MkdirAll(a.dataDir, 0o700); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
@@ -307,7 +321,7 @@ func (a *App) initStartupPhase1(ctx context.Context) error {
 	if err := a.loadConfigFromDisk(); err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	wailsRuntimeLoggingEnabled.Store(true)
+	wailsRuntimeLoggingEnabled.Store(!a.headless)
 	a.configMu.Lock()
 	logLevel := a.config.LogSlogLevel
 	a.configMu.Unlock()
@@ -332,6 +346,9 @@ func (a *App) startup(ctx context.Context) {
 		a.startupFail(ctx, err)
 		return
 	}
+	a.runner.SetPluginRegistry(a.pluginRegistry())
+	a.initPlugins(ctx)
+	a.startEmbeddedMCP()
 
 	if err := a.initCaptchaAndProxies(ctx); err != nil {
 		a.startupFail(ctx, err)
@@ -500,6 +517,8 @@ func (a *App) cleanup() {
 		a.queue.Stop()
 	}
 	a.stopMetricsServer(a.ctx)
+	a.mcpHTTP.Close()
+	a.shutdownPlugins()
 	if a.runner != nil {
 		a.runner.StopProxyPools()
 	}

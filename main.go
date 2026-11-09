@@ -14,6 +14,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		os.Exit(runMCPCommand(os.Args[2:]))
+	}
 	app := NewApp()
 
 	// Graceful shutdown on OS signals (SIGINT, SIGTERM).

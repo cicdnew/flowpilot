@@ -7,7 +7,9 @@ require (
 	github.com/charmbracelet/lipgloss v0.12.1
 	github.com/chromedp/cdproto v0.0.0-20250803210736-d308e07a266d
 	github.com/chromedp/chromedp v0.14.2
+	github.com/google/jsonschema-go v0.4.3
 	github.com/google/uuid v1.6.0
+	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/tursodatabase/libsql-go v0.0.0-20240416075003-747366ff79c4
 	github.com/wailsapp/wails/v2 v2.17.1
 	golang.org/x/net v0.62.0
@@ -52,16 +54,21 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/samber/lo v1.49.1 // indirect
+	github.com/segmentio/asm v1.1.3 // indirect
+	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/tkrajina/go-reflector v0.5.8 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/wailsapp/go-webview2 v1.0.22 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc // indirect
+	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 )
 
 // Vendored go-libsql (upstream 43644db490ff) with linux_amd64 rebuilt from

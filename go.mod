@@ -64,6 +64,9 @@ require (
 	golang.org/x/text v0.35.0 // indirect
 )
 
-replace github.com/tursodatabase/libsql-go => github.com/tursodatabase/go-libsql v0.0.0-20251219133454-43644db490ff
+// Vendored go-libsql (upstream 43644db490ff) with linux_amd64 rebuilt from
+// libsql-0.9.25 plus tursodatabase/libsql#2261 (double sqlite3_close_v2 fix).
+// See third_party/go-libsql/lib/linux_amd64/BUILD_INFO.txt.
+replace github.com/tursodatabase/libsql-go => ./third_party/go-libsql
 
 // replace github.com/wailsapp/wails/v2 v2.11.0 => /root/go/pkg/mod

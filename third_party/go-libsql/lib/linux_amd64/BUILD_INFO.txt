@@ -1,0 +1,27 @@
+Patched libsql_experimental.a for linux/amd64
+
+Why: the upstream go-libsql archive (libsql-0.9.25) closes each local
+sqlite3 handle twice on connection teardown (LibsqlConnection::drop and
+then Connection::drop both call Connection::disconnect). The second
+sqlite3_close_v2 reads freed memory and intermittently crashes with
+SIGSEGV. Upstream issue: https://github.com/tursodatabase/libsql/issues/2251
+Upstream fix:   https://github.com/tursodatabase/libsql/pull/2261 (commit 4e06af572ddf)
+As of 2026-11-09 the latest go-libsql (3051e37e6e04) still ships the
+unfixed archive, so it is rebuilt here.
+
+Source:   tursodatabase/libsql tag libsql-0.9.25 (d4026bcc69c8bbfdcf301b2c438c98856ce54980)
+Patch:    ../../patches/0001-null-sqlite3-handle-after-close.patch (only change)
+Crate:    bindings/c (sql-experimental), cargo build --release --locked
+Image:    ghcr.io/cross-rs/x86_64-unknown-linux-gnu:0.2.5 (same as upstream's `cross`)
+Toolchain: rustc 1.85.0 (4d91de4e4 2025-02-17), cargo 1.85.0, gcc 5.4.0, glibc 2.23
+Rebuild:  ../../patches/build-linux-amd64.sh (see header comment for docker command)
+
+sha256 patched:  a3501069e83ef0379b3354aed06a5bfe6deb67bc33551273610ae416c2989d4a
+sha256 original: 5d46b9ab4c38aa7ed6567fe8a75d8619f0b35183b588bbd6786c08c7a8a33581
+
+Compatibility checks against the original archive: lib/include/libsql.h is
+byte-identical, the exported libsql_* symbol set is identical, and the set of
+glibc-version-sensitive undefined symbols is identical.
+
+Not patched: lib/linux_arm64 and lib/darwin_arm64 are the original upstream
+archives and still contain the double-close bug.

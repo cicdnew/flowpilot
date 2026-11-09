@@ -15,6 +15,7 @@ type Monitor struct {
 	alertRules        []AlertRule
 	alertCallbacks    []AlertCallback
 	firing            map[string]*Alert
+	repeatBatches     map[string]*repeatBatchProgress
 
 	// Step duration tracking (P0)
 	stepDurations  []int64
@@ -23,6 +24,8 @@ type Monitor struct {
 	// Error tracking (P0)
 	errorContexts   []string // Serialized ErrorContext for storage
 	maxErrorSamples int
+
+	steps *StepTracker
 }
 
 // RepeatTaskMetrics tracks metrics specific to repeated tasks.
@@ -110,11 +113,22 @@ func New() *Monitor {
 		alertRules:      make([]AlertRule, 0),
 		alertCallbacks:  make([]AlertCallback, 0),
 		firing:          make(map[string]*Alert),
+		repeatBatches:   make(map[string]*repeatBatchProgress),
 		stepDurations:   make([]int64, 0, 1000),
 		maxStepSamples:  1000,
 		errorContexts:   make([]string, 0, 100),
 		maxErrorSamples: 100,
+		steps:           NewStepTracker(DefaultSlowStepThreshold),
 	}
+}
+
+func (m *Monitor) RecordStep(taskID, action string, stepIndex int, duration time.Duration, stepErr error) {
+	m.RecordStepDuration(duration.Milliseconds())
+	m.steps.Record(taskID, action, stepIndex, duration, stepErr)
+}
+
+func (m *Monitor) Steps() *StepTracker {
+	return m.steps
 }
 
 // RecordRepeatBatchCreated records a new repeated batch creation.
@@ -127,6 +141,9 @@ func (m *Monitor) RecordRepeatBatchCreated(batchID string, taskCount int, mode s
 	m.repeatTaskMetrics.ActiveRepeatedBatches++
 	m.repeatTaskMetrics.LastBatchCreatedAt = time.Now()
 	m.repeatTaskMetrics.LastBatchID = batchID
+	if batchID != "" && taskCount > 0 {
+		m.repeatBatches[batchID] = &repeatBatchProgress{remaining: taskCount, createdAt: time.Now()}
+	}
 
 	switch mode {
 	case "counter":
@@ -160,6 +177,73 @@ func (m *Monitor) RecordRepeatBatchCompleted(batchID string, completionTimeMs in
 		m.repeatTaskMetrics.AvgBatchCompletionTimeMs =
 			(m.repeatTaskMetrics.AvgBatchCompletionTimeMs + completionTimeMs) / 2
 	}
+}
+
+// repeatBatchProgress tracks how many tasks of a repeated batch have not finished yet.
+type repeatBatchProgress struct {
+	remaining int
+	createdAt time.Time
+}
+
+// RecordTaskOutcome records a finished task execution. It counts as a request
+// (and an error when it failed); tasks from repeated batches also update the
+// repeat metrics, and the batch is marked completed when its last task finishes.
+func (m *Monitor) RecordTaskOutcome(batchID string, success bool) {
+	m.mu.Lock()
+	m.systemMetrics.TotalRequests++
+	if !success {
+		m.systemMetrics.TotalErrors++
+	}
+	batch, isRepeat := m.repeatBatches[batchID]
+	if batchID == "" || !isRepeat {
+		m.mu.Unlock()
+		return
+	}
+	if success {
+		m.repeatTaskMetrics.CompletedRepeatedTasks++
+	} else {
+		m.repeatTaskMetrics.FailedRepeatedTasks++
+	}
+	batch.remaining--
+	if batch.remaining > 0 {
+		m.mu.Unlock()
+		return
+	}
+	delete(m.repeatBatches, batchID)
+	m.mu.Unlock()
+	m.RecordRepeatBatchCompleted(batchID, time.Since(batch.createdAt).Milliseconds())
+}
+
+// GetMetricRate returns a ratio metric in [0,1]: totalErrors per totalRequests,
+// or failed/completed repeated tasks per finished repeated task. It returns
+// false when the metric has no rate form or no samples exist yet.
+func (m *Monitor) GetMetricRate(metric string) (float64, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var numerator, denominator int64
+	repeatFinished := m.repeatTaskMetrics.CompletedRepeatedTasks + m.repeatTaskMetrics.FailedRepeatedTasks
+	switch metric {
+	case "totalErrors":
+		numerator, denominator = m.systemMetrics.TotalErrors, m.systemMetrics.TotalRequests
+	case "failedRepeatedTasks":
+		numerator, denominator = m.repeatTaskMetrics.FailedRepeatedTasks, repeatFinished
+	case "completedRepeatedTasks":
+		numerator, denominator = m.repeatTaskMetrics.CompletedRepeatedTasks, repeatFinished
+	default:
+		return 0, false
+	}
+	if denominator == 0 {
+		return 0, false
+	}
+	return float64(numerator) / float64(denominator), true
+}
+
+// ruleValue returns the value a rule compares against its threshold.
+func (m *Monitor) ruleValue(rule AlertRule) (float64, bool) {
+	if rule.Cond == "rate_gt" {
+		return m.GetMetricRate(rule.Metric)
+	}
+	return m.GetMetricValue(rule.Metric)
 }
 
 // RecordRepeatTaskCompleted records a repeated task completion.
@@ -386,76 +470,71 @@ func (m *Monitor) GetMetricValue(metric string) (float64, bool) {
 func (m *Monitor) CheckAlerts(ctx context.Context) {
 	m.mu.Lock()
 	now := time.Now()
-	newFirings := make(map[string]*Alert) // ruleID -> alert
+	nextFiring := make(map[string]*Alert) // ruleID -> alert still or newly active
+	notify := []Alert{}
 
-	// Evaluate each rule
 	for i := range m.alertRules {
 		rule := &m.alertRules[i]
-		if !rule.Enabled {
+		if !rule.Enabled || rule.Condition == nil {
 			continue
 		}
-		// Cooldown check
-		if !rule.lastFired.IsZero() && now.Sub(rule.lastFired) < rule.Cooldown {
-			continue
-		}
-		// Evaluate condition
+		condition, snapshot := rule.Condition, *rule
 		m.mu.Unlock()
-		shouldFire := rule.Condition(m)
-
-		// Get metric value without holding the global lock
-		val, ok := m.GetMetricValue(rule.Metric)
-
+		shouldFire := condition(m)
+		val, ok := m.ruleValue(snapshot)
 		m.mu.Lock()
+		if !shouldFire || !ok {
+			continue
+		}
 
-		if shouldFire {
-			// Get metric value for this rule
-			if !ok {
-				// Cannot compute metric, skip
-				continue
-			}
-			alert := Alert{
-				RuleID:      rule.ID,
-				RuleName:    rule.Name,
-				Description: rule.Description,
-				Severity:    rule.Severity,
-				Timestamp:   now,
-				Metric:      rule.Metric,
-				Condition:   rule.Cond,
-				Threshold:   rule.Threshold,
-				Value:       val,
-			}
-			newFirings[rule.ID] = &alert
+		existing, active := m.firing[rule.ID]
+		inCooldown := !rule.lastFired.IsZero() && now.Sub(rule.lastFired) < rule.Cooldown
+		if !active && inCooldown {
+			// Recently resolved: suppress a re-fire until the cooldown passes.
+			continue
+		}
+		alert := Alert{
+			RuleID:      rule.ID,
+			RuleName:    rule.Name,
+			Description: rule.Description,
+			Severity:    rule.Severity,
+			Timestamp:   now,
+			Metric:      rule.Metric,
+			Condition:   rule.Cond,
+			Threshold:   rule.Threshold,
+			Value:       val,
+		}
+		if active {
+			alert.Timestamp = existing.Timestamp
+		}
+		nextFiring[rule.ID] = &alert
+		// Cooldown limits notifications; a still-true alert stays active meanwhile.
+		if !inCooldown {
+			notify = append(notify, alert)
 			rule.lastFired = now
 		}
 	}
 
-	// Determine resolved alerts
-	resolved := []*Alert{}
+	resolved := []Alert{}
 	for ruleID, alert := range m.firing {
-		if _, still := newFirings[ruleID]; !still {
-			resolved = append(resolved, alert)
+		if _, still := nextFiring[ruleID]; !still {
+			resolved = append(resolved, *alert)
 		}
 	}
+	m.firing = nextFiring
 
-	// Update firing map
-	m.firing = newFirings
-
-	// Copy callbacks
 	callbacks := make([]AlertCallback, len(m.alertCallbacks))
 	copy(callbacks, m.alertCallbacks)
-
 	m.mu.Unlock()
 
-	// Fire new alerts
-	for _, alert := range newFirings {
+	for _, alert := range notify {
 		for _, cb := range callbacks {
-			go cb(*alert, true)
+			go cb(alert, true)
 		}
 	}
-	// Fire resolved alerts
 	for _, alert := range resolved {
 		for _, cb := range callbacks {
-			go cb(*alert, false)
+			go cb(alert, false)
 		}
 	}
 }
@@ -524,7 +603,7 @@ func (m *Monitor) GetPrometheusMetrics() string {
 	metrics += "# TYPE flowpilot_system_goroutines gauge\n"
 	metrics += "flowpilot_system_goroutines " + formatInt(m.systemMetrics.GoroutineCount) + "\n"
 
-	return metrics
+	return metrics + m.steps.Prometheus()
 }
 
 // Helper formatting functions

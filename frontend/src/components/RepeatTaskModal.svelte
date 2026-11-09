@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { CreateRepeatedTask } from '../../wailsjs/go/main/App';
+  import { models } from '../../wailsjs/go/models';
   import type { TaskStep, ProxyConfig, TaskLoggingPolicy } from '../lib/types';
 
   export let visible = false;
@@ -99,9 +100,9 @@
         fallback: 'strict'
       };
 
-      const loggingPolicy: TaskLoggingPolicy | null = null;
+      const loggingPolicy: TaskLoggingPolicy | undefined = undefined;
 
-      await CreateRepeatedTask({
+      await CreateRepeatedTask(models.RepeatTaskInput.createFrom({
         name,
         url,
         steps,
@@ -113,7 +114,7 @@
         timeout,
         loggingPolicy,
         headless: headless
-      });
+      }));
 
       dispatch('success');
       resetForm();
@@ -144,8 +145,8 @@
 </script>
 
 {#if visible}
-  <div class="modal-overlay" on:click={() => dispatch('close')} on:keydown={(e) => e.key === 'Escape' && dispatch('close')}>
-    <div class="modal" on:click|stopPropagation on:keydown={(e) => e.key === 'Escape' && dispatch('close')}>
+  <div class="modal-overlay" role="button" tabindex="0" on:click={() => dispatch('close')} on:keydown={(e) => e.key === 'Escape' && dispatch('close')}>
+    <div class="modal" role="dialog" tabindex="-1" on:click|stopPropagation on:keydown={(e) => e.key === 'Escape' && dispatch('close')}>
       <div class="modal-header">
         <h2>Create Repeated Task</h2>
         <button class="close-btn" on:click={() => dispatch('close')}>&times;</button>

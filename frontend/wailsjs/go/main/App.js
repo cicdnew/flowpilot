@@ -166,12 +166,20 @@ export function GetMonitoringMetrics() {
   return window['go']['main']['App']['GetMonitoringMetrics']();
 }
 
+export function GetObservabilitySnapshot() {
+  return window['go']['main']['App']['GetObservabilitySnapshot']();
+}
+
 export function GetPrometheusMetrics() {
   return window['go']['main']['App']['GetPrometheusMetrics']();
 }
 
 export function GetQueueMetrics() {
   return window['go']['main']['App']['GetQueueMetrics']();
+}
+
+export function GetRecentErrors(arg1) {
+  return window['go']['main']['App']['GetRecentErrors'](arg1);
 }
 
 export function GetRecentLogs(arg1) {
@@ -214,6 +222,10 @@ export function ImportFlow(arg1) {
   return window['go']['main']['App']['ImportFlow'](arg1);
 }
 
+export function ImportFlowFromDialog() {
+  return window['go']['main']['App']['ImportFlowFromDialog']();
+}
+
 export function ImportFlowWithWarnings(arg1) {
   return window['go']['main']['App']['ImportFlowWithWarnings'](arg1);
 }
@@ -244,6 +256,10 @@ export function ListCaptchaConfigs() {
 
 export function ListDOMSnapshots(arg1) {
   return window['go']['main']['App']['ListDOMSnapshots'](arg1);
+}
+
+export function ListPlugins() {
+  return window['go']['main']['App']['ListPlugins']();
 }
 
 export function ListProxies() {
@@ -316,6 +332,10 @@ export function PlayRecordedFlow(arg1, arg2, arg3, arg4, arg5) {
 
 export function PurgeOldData(arg1) {
   return window['go']['main']['App']['PurgeOldData'](arg1);
+}
+
+export function ReloadPlugins() {
+  return window['go']['main']['App']['ReloadPlugins']();
 }
 
 export function ResumeBatch(arg1) {

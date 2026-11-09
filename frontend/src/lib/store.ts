@@ -4,7 +4,7 @@ import type { Task, Proxy, TaskEvent, TaskStatus, RecordedFlow, RecordedStep, We
 export const tasks = writable<Task[]>([]);
 export const proxies = writable<Proxy[]>([]);
 export const selectedTaskId = writable<string | null>(null);
-export const activeTab = writable<'tasks' | 'proxies' | 'recorder' | 'schedules' | 'settings' | 'visual'>('tasks');
+export const activeTab = writable<'tasks' | 'proxies' | 'recorder' | 'schedules' | 'settings' | 'visual' | 'plugins' | 'observability'>('tasks');
 export const statusFilter = writable<TaskStatus | 'all'>('all');
 export const tagFilter = writable<string>('');
 export const recordedFlows = writable<RecordedFlow[]>([]);

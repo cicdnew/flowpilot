@@ -121,6 +121,8 @@ func applySQLitePragmas(conns ...*sql.DB) {
 		"PRAGMA cache_size=-64000",
 		"PRAGMA mmap_size=268435456",
 		"PRAGMA temp_store=MEMORY",
+		"PRAGMA wal_autocheckpoint=1000",
+		"PRAGMA journal_size_limit=67108864",
 	}
 	for _, c := range conns {
 		if c == nil {

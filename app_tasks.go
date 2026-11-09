@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	errCreateTask    = "create task: %w"
-	errUpdateTaskApp = "update task: %w"
+	errCreateTask      = "create task: %w"
+	errUpdateTaskApp   = "update task: %w"
 	errTaskNotFoundApp = "task %s not found"
 	errTaskIDApp       = "task_id must be a non-empty string"
 )
@@ -29,6 +29,7 @@ type CreateTaskParams struct {
 	Tags          []string
 	Timeout       int
 	LoggingPolicy *models.TaskLoggingPolicy
+	Headless      bool
 }
 
 // validateCreateTaskParams validates all create task parameters (S3776 - reduce complexity)
@@ -43,7 +44,7 @@ func (a *App) validateCreateTaskParams(p CreateTaskParams) error {
 		{"proxy", validation.ValidateProxyConfig(p.ProxyConfig)},
 		{"logging", validation.ValidateTaskLoggingPolicy(p.LoggingPolicy)},
 	}
-	
+
 	for _, check := range checks {
 		if check.err != nil {
 			return fmt.Errorf(errCreateTask, check.err)
@@ -61,6 +62,7 @@ func (a *App) CreateTask(p CreateTaskParams) (*models.Task, error) {
 	}
 
 	task := models.Task{
+		Headless:      p.Headless,
 		ID:            uuid.New().String(),
 		Name:          p.Name,
 		URL:           p.URL,
@@ -172,7 +174,7 @@ func (a *App) validateUpdateTaskParams(p database.TaskUpdateParams, priority int
 		{"proxy", validation.ValidateProxyConfig(p.ProxyConfig)},
 		{"logging", validation.ValidateTaskLoggingPolicy(p.LoggingPolicy)},
 	}
-	
+
 	for _, check := range checks {
 		if check.err != nil {
 			return fmt.Errorf(errUpdateTaskApp, check.err)
@@ -247,10 +249,17 @@ func (a *App) CreateBatch(inputs []models.BatchTaskInput, autoStart bool) ([]mod
 		}
 	}
 
+	batchID := uuid.New().String()
+	group := models.BatchGroup{ID: batchID, Name: fmt.Sprintf("Batch of %d tasks", len(inputs)), Total: len(inputs)}
+	if err := a.db.CreateBatchGroup(a.ctx, group); err != nil {
+		return nil, fmt.Errorf("create batch group: %w", err)
+	}
+
 	created := make([]models.Task, 0, len(inputs))
 	for _, input := range inputs {
 		task := models.Task{
 			ID:            uuid.New().String(),
+			BatchID:       batchID,
 			Name:          input.Name,
 			URL:           input.URL,
 			Steps:         input.Steps,

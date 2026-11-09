@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"flowpilot/internal/models"
+	"flowpilot/internal/plugin"
 )
 
 var (
@@ -162,7 +163,7 @@ func ValidateTaskURL(rawURL string) error {
 // validateSingleStep validates a single task step at the given index.
 func validateSingleStep(i int, step models.TaskStep, allowEval bool) error {
 	if !validActions[step.Action] {
-		return fmt.Errorf("step %d: unknown action %s: %w", i+1, step.Action, ErrInvalidStepAction)
+		return validatePluginStep(i, step)
 	}
 	if step.Action == models.ActionEval && !allowEval {
 		return fmt.Errorf(errStepFmt, i, ErrEvalNotAllowed)
@@ -176,6 +177,20 @@ func validateSingleStep(i int, step models.TaskStep, allowEval bool) error {
 		}
 	}
 	if selectorRequiredActions[step.Action] && strings.TrimSpace(step.Selector) == "" {
+		return fmt.Errorf(errStepFmt, i, ErrStepMissingSelector)
+	}
+	return nil
+}
+
+func validatePluginStep(i int, step models.TaskStep) error {
+	spec, ok := plugin.Default().Action(step.Action)
+	if !ok {
+		return fmt.Errorf("step %d: unknown action %s: %w", i+1, step.Action, ErrInvalidStepAction)
+	}
+	if spec.ValueRequired && strings.TrimSpace(step.Value) == "" {
+		return fmt.Errorf(errStepFmt, i, ErrStepMissingValue)
+	}
+	if spec.SelectorRequired && strings.TrimSpace(step.Selector) == "" {
 		return fmt.Errorf(errStepFmt, i, ErrStepMissingSelector)
 	}
 	return nil

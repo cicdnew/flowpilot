@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	errPoolStopped = "browser pool is stopped"
+	errPoolStopped    = "browser pool is stopped"
 	DefaultPoolSize   = 5
 	MaxPoolSize       = 200
 	PoolIdleTimeout   = 5 * time.Minute
@@ -19,9 +19,9 @@ const (
 )
 
 type pooledBrowser struct {
-	allocCtx    context.Context    //nolint:godre:S8242 -- browser allocator lifetime context, not a request context
+	allocCtx    context.Context //nolint:godre:S8242 -- browser allocator lifetime context, not a request context
 	allocCancel context.CancelFunc
-	browserCtx  context.Context    // root browser context; parent for new tab contexts; not a request context
+	browserCtx  context.Context // root browser context; parent for new tab contexts; not a request context
 	lastUsed    time.Time
 	inUse       int
 	maxTabs     int
@@ -35,6 +35,8 @@ type BrowserPool struct {
 	idleTimeout    time.Duration
 	acquireTimeout time.Duration
 	opts           []chromedp.ExecAllocatorOption
+	rootCtx        context.Context
+	rootCancel     context.CancelFunc
 	stopped        bool
 	creating       int
 	stopCh         chan struct{}
@@ -68,6 +70,7 @@ func NewBrowserPool(cfg PoolConfig, opts []chromedp.ExecAllocatorOption) *Browse
 		acquireTimeout = 60 * time.Second
 	}
 
+	rootCtx, rootCancel := context.WithCancel(context.Background())
 	p := &BrowserPool{
 		browsers:       make([]*pooledBrowser, 0, cfg.Size),
 		poolSize:       cfg.Size,
@@ -75,6 +78,8 @@ func NewBrowserPool(cfg PoolConfig, opts []chromedp.ExecAllocatorOption) *Browse
 		idleTimeout:    cfg.IdleTimeout,
 		acquireTimeout: acquireTimeout,
 		opts:           opts,
+		rootCtx:        rootCtx,
+		rootCancel:     rootCancel,
 		stopCh:         make(chan struct{}),
 		notifyCh:       make(chan struct{}, 1),
 	}
@@ -173,6 +178,7 @@ func (p *BrowserPool) waitForSlot(ctx context.Context, deadline time.Time) error
 }
 
 func (p *BrowserPool) acquireReusableBrowserLocked() *pooledBrowser {
+	p.dropDeadBrowsersLocked()
 	var chosen *pooledBrowser
 	for _, b := range p.browsers {
 		if b.inUse >= b.maxTabs {
@@ -187,6 +193,34 @@ func (p *BrowserPool) acquireReusableBrowserLocked() *pooledBrowser {
 		chosen.lastUsed = time.Now()
 	}
 	return chosen
+}
+
+func (b *pooledBrowser) isDead() bool {
+	return contextDone(b.allocCtx) || contextDone(b.browserCtx)
+}
+
+func contextDone(ctx context.Context) bool {
+	return ctx != nil && ctx.Err() != nil
+}
+
+func (p *BrowserPool) dropDeadBrowsersLocked() {
+	alive := p.browsers[:0]
+	removed := false
+	for _, b := range p.browsers {
+		if b.isDead() {
+			if b.allocCancel != nil {
+				b.allocCancel()
+			}
+			removed = true
+			continue
+		}
+		alive = append(alive, b)
+	}
+	clear(p.browsers[len(alive):])
+	p.browsers = alive
+	if removed {
+		p.signalAvailabilityLocked()
+	}
 }
 
 func (p *BrowserPool) signalAvailabilityLocked() {
@@ -216,16 +250,27 @@ func (p *BrowserPool) newTabContext(b *pooledBrowser, _ context.Context) (contex
 }
 
 func (p *BrowserPool) createBrowser(ctx context.Context) (*pooledBrowser, error) {
-	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, p.opts...)
+	lifeCtx, lifeCancel := context.WithCancel(p.rootCtx)
+	allocCtx, execCancel := chromedp.NewExecAllocator(lifeCtx, withAutomationFlags(p.opts)...)
+	allocCancel := func() {
+		execCancel()
+		lifeCancel()
+	}
 
 	// browserCtx is the root browser context; its cancel must NOT be called
 	// while the pool entry is alive — cancelling it would kill the browser.
 	// It is cancelled via allocCancel (which cancels the whole allocator tree)
 	// when the pooled browser is evicted or the pool is stopped.
 	browserCtx, _ := chromedp.NewContext(allocCtx)
-	if err := chromedp.Run(browserCtx); err != nil {
+	stopWatchingCaller := context.AfterFunc(ctx, lifeCancel)
+	runErr := chromedp.Run(browserCtx)
+	if !stopWatchingCaller() {
 		allocCancel()
-		return nil, fmt.Errorf("warm up pooled browser: %w", err)
+		return nil, fmt.Errorf("warm up pooled browser: %w", context.Cause(ctx))
+	}
+	if runErr != nil {
+		allocCancel()
+		return nil, fmt.Errorf("warm up pooled browser: %w", runErr)
 	}
 
 	return &pooledBrowser{
@@ -256,6 +301,7 @@ func (p *BrowserPool) evictIdle() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	p.dropDeadBrowsersLocked()
 	now := time.Now()
 	active := make([]*pooledBrowser, 0, len(p.browsers))
 	for _, b := range p.browsers {
@@ -282,6 +328,9 @@ func (p *BrowserPool) Stop() {
 		b.allocCancel()
 	}
 	p.browsers = nil
+	if p.rootCancel != nil {
+		p.rootCancel()
+	}
 	p.signalAvailabilityLocked()
 	p.mu.Unlock()
 

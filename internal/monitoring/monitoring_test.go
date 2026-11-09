@@ -332,3 +332,48 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+
+func TestAlertStaysActiveDuringCooldown(t *testing.T) {
+	m := New()
+	m.AddAlertRule(AlertRule{
+		ID:       "memory",
+		Metric:   "memoryUsageMb",
+		Cooldown: 10 * time.Minute,
+		Enabled:  true,
+		Condition: func(monitor *Monitor) bool {
+			value, _ := monitor.GetMetricValue("memoryUsageMb")
+			return value > 1024
+		},
+	})
+
+	m.UpdateSystemMetrics(2048, 1, 1)
+	m.CheckAlerts(context.Background())
+	m.CheckAlerts(context.Background())
+	if len(m.GetFiring()) != 1 {
+		t.Fatal("alert resolved during cooldown while its condition is still true")
+	}
+
+	m.UpdateSystemMetrics(512, 1, 1)
+	m.CheckAlerts(context.Background())
+	if len(m.GetFiring()) != 0 {
+		t.Fatal("alert should resolve once its condition is false")
+	}
+}
+
+func TestGetMetricRate(t *testing.T) {
+	m := New()
+	if _, ok := m.GetMetricRate("totalErrors"); ok {
+		t.Fatal("rate should be unavailable without requests")
+	}
+	for i := 0; i < 100; i++ {
+		m.RecordRequest()
+	}
+	m.RecordError()
+	rate, ok := m.GetMetricRate("totalErrors")
+	if !ok || rate != 0.01 {
+		t.Fatalf("error rate: got %v (ok=%v), want 0.01", rate, ok)
+	}
+	if _, ok := m.GetMetricRate("memoryUsageMb"); ok {
+		t.Fatal("memoryUsageMb has no rate form")
+	}
+}

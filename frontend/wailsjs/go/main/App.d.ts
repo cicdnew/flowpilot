@@ -88,9 +88,13 @@ export function GetLogsByTaskID(arg1:string,arg2:number):Promise<Array<monitorin
 
 export function GetMonitoringMetrics():Promise<monitoring.RepeatTaskMetrics>;
 
+export function GetObservabilitySnapshot():Promise<main.ObservabilitySnapshot>;
+
 export function GetPrometheusMetrics():Promise<string>;
 
 export function GetQueueMetrics():Promise<models.QueueMetrics>;
+
+export function GetRecentErrors(arg1:number):Promise<Array<string>>;
 
 export function GetRecentLogs(arg1:number):Promise<Array<monitoring.LogEntry>>;
 
@@ -112,6 +116,8 @@ export function GetVisualDiff(arg1:string):Promise<models.VisualDiff>;
 
 export function ImportFlow(arg1:string):Promise<Array<models.Task>>;
 
+export function ImportFlowFromDialog():Promise<main.FlowImportResult>;
+
 export function ImportFlowWithWarnings(arg1:string):Promise<main.FlowImportResult>;
 
 export function ImportTask(arg1:string):Promise<models.Task>;
@@ -127,6 +133,8 @@ export function ListBatchGroups():Promise<Array<models.BatchGroup>>;
 export function ListCaptchaConfigs():Promise<Array<models.CaptchaConfig>>;
 
 export function ListDOMSnapshots(arg1:string):Promise<Array<models.DOMSnapshot>>;
+
+export function ListPlugins():Promise<main.PluginStatus>;
 
 export function ListProxies():Promise<Array<models.Proxy>>;
 
@@ -163,6 +171,8 @@ export function PauseBatch(arg1:string):Promise<void>;
 export function PlayRecordedFlow(arg1:string,arg2:string,arg3:boolean,arg4:number,arg5:models.TaskLoggingPolicy):Promise<models.Task>;
 
 export function PurgeOldData(arg1:number):Promise<number>;
+
+export function ReloadPlugins():Promise<main.PluginStatus>;
 
 export function ResumeBatch(arg1:string):Promise<void>;
 

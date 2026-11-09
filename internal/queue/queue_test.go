@@ -55,6 +55,7 @@ func setupTestQueue(t *testing.T, maxConcurrency int, events *[]models.TaskEvent
 	}
 
 	q := New(db, runner, maxConcurrency, onEvent)
+	t.Cleanup(q.Stop)
 	return q, db
 }
 
@@ -550,11 +551,11 @@ func TestMetricsRunningAndQueued(t *testing.T) {
 	q.running["r-2"] = func() {}
 	now := time.Now()
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "p-1", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: now})
-	q.heapSet["p-1"] = struct{}{}
+	q.heapSet["p-1"] = heapItemByID(q.pq, "p-1")
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "p-2", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: now})
-	q.heapSet["p-2"] = struct{}{}
+	q.heapSet["p-2"] = heapItemByID(q.pq, "p-2")
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "p-3", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: now})
-	q.heapSet["p-3"] = struct{}{}
+	q.heapSet["p-3"] = heapItemByID(q.pq, "p-3")
 	q.mu.Unlock()
 
 	m := q.Metrics()
@@ -585,7 +586,7 @@ func TestMetricsPendingEqualsQueuedPlusRunning(t *testing.T) {
 	q.mu.Lock()
 	delete(q.running, "r-1")
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "p-1", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.heapSet["p-1"] = struct{}{}
+	q.heapSet["p-1"] = heapItemByID(q.pq, "p-1")
 	q.mu.Unlock()
 
 	m = q.Metrics()
@@ -621,7 +622,7 @@ func TestMetricsAfterStop(t *testing.T) {
 	q.mu.Lock()
 	q.running["r-1"] = func() {}
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "p-1", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.heapSet["p-1"] = struct{}{}
+	q.heapSet["p-1"] = heapItemByID(q.pq, "p-1")
 	q.mu.Unlock()
 
 	q.Stop()
@@ -671,7 +672,7 @@ func TestSubmitDuplicatePending(t *testing.T) {
 
 	q.mu.Lock()
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: task.ID, Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.heapSet[task.ID] = struct{}{}
+	q.heapSet[task.ID] = heapItemByID(q.pq, task.ID)
 	q.mu.Unlock()
 
 	err := q.Submit(context.Background(), task)
@@ -693,9 +694,9 @@ func TestSubmitErrQueueFull(t *testing.T) {
 	q.mu.Lock()
 	q.paused["fill-batch"] = true
 	heap.Push(&q.pausedPQ, &heapItem{task: models.Task{ID: "fill-1", BatchID: "fill-batch", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.pausedSet["fill-1"] = struct{}{}
+	q.pausedSet["fill-1"] = heapItemByID(q.pausedPQ, "fill-1")
 	heap.Push(&q.pausedPQ, &heapItem{task: models.Task{ID: "fill-2", BatchID: "fill-batch", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.pausedSet["fill-2"] = struct{}{}
+	q.pausedSet["fill-2"] = heapItemByID(q.pausedPQ, "fill-2")
 	q.mu.Unlock()
 
 	task := makeTestTask("overflow-1")
@@ -749,7 +750,7 @@ func TestCancelPendingTaskInHeap(t *testing.T) {
 		cancel:  func() { cancelCalled = true },
 		addedAt: time.Now(),
 	})
-	q.heapSet[task.ID] = struct{}{}
+	q.heapSet[task.ID] = heapItemByID(q.pq, task.ID)
 	q.mu.Unlock()
 
 	if err := q.Cancel(task.ID); err != nil {
@@ -1123,9 +1124,9 @@ func TestStopClearsHeapTasks(t *testing.T) {
 	// Use paused heap to prevent workers from popping these items before Stop().
 	q.paused["stop-batch"] = true
 	heap.Push(&q.pausedPQ, &heapItem{task: models.Task{ID: "pend-1", BatchID: "stop-batch", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() { close(cancel1Done) }, addedAt: time.Now()})
-	q.pausedSet["pend-1"] = struct{}{}
+	q.pausedSet["pend-1"] = heapItemByID(q.pausedPQ, "pend-1")
 	heap.Push(&q.pausedPQ, &heapItem{task: models.Task{ID: "pend-2", BatchID: "stop-batch", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() { close(cancel2Done) }, addedAt: time.Now()})
-	q.pausedSet["pend-2"] = struct{}{}
+	q.pausedSet["pend-2"] = heapItemByID(q.pausedPQ, "pend-2")
 	q.mu.Unlock()
 
 	q.Stop()
@@ -1224,11 +1225,11 @@ func TestPriorityOrdering(t *testing.T) {
 	q.mu.Lock()
 	now := time.Now()
 	heap.Push(&q.pq, &heapItem{task: low, ctx: context.Background(), cancel: func() {}, addedAt: now})
-	q.heapSet[low.ID] = struct{}{}
+	q.heapSet[low.ID] = heapItemByID(q.pq, low.ID)
 	heap.Push(&q.pq, &heapItem{task: normal, ctx: context.Background(), cancel: func() {}, addedAt: now.Add(time.Millisecond)})
-	q.heapSet[normal.ID] = struct{}{}
+	q.heapSet[normal.ID] = heapItemByID(q.pq, normal.ID)
 	heap.Push(&q.pq, &heapItem{task: high, ctx: context.Background(), cancel: func() {}, addedAt: now.Add(2 * time.Millisecond)})
-	q.heapSet[high.ID] = struct{}{}
+	q.heapSet[high.ID] = heapItemByID(q.pq, high.ID)
 
 	first := heap.Pop(&q.pq).(*heapItem)
 	second := heap.Pop(&q.pq).(*heapItem)
@@ -1253,11 +1254,11 @@ func TestPauseBatch(t *testing.T) {
 	now := time.Now()
 	q.mu.Lock()
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "b1-t1", BatchID: "batch-1", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: now})
-	q.heapSet["b1-t1"] = struct{}{}
+	q.heapSet["b1-t1"] = heapItemByID(q.pq, "b1-t1")
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "b1-t2", BatchID: "batch-1", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: now})
-	q.heapSet["b1-t2"] = struct{}{}
+	q.heapSet["b1-t2"] = heapItemByID(q.pq, "b1-t2")
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "b2-t1", BatchID: "batch-2", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: now})
-	q.heapSet["b2-t1"] = struct{}{}
+	q.heapSet["b2-t1"] = heapItemByID(q.pq, "b2-t1")
 	q.mu.Unlock()
 
 	q.PauseBatch("batch-1")
@@ -1288,12 +1289,12 @@ func TestResumeBatch(t *testing.T) {
 	// Place batch-1 items directly in paused heap to simulate already-paused state.
 	q.paused["batch-1"] = true
 	heap.Push(&q.pausedPQ, &heapItem{task: models.Task{ID: "b1-t1", BatchID: "batch-1", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: now})
-	q.pausedSet["b1-t1"] = struct{}{}
+	q.pausedSet["b1-t1"] = heapItemByID(q.pausedPQ, "b1-t1")
 	heap.Push(&q.pausedPQ, &heapItem{task: models.Task{ID: "b1-t2", BatchID: "batch-1", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: now})
-	q.pausedSet["b1-t2"] = struct{}{}
+	q.pausedSet["b1-t2"] = heapItemByID(q.pausedPQ, "b1-t2")
 	// batch-2 in paused heap too (not paused, but safe from workers).
 	heap.Push(&q.pausedPQ, &heapItem{task: models.Task{ID: "b2-t1", BatchID: "batch-2", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: now})
-	q.pausedSet["b2-t1"] = struct{}{}
+	q.pausedSet["b2-t1"] = heapItemByID(q.pausedPQ, "b2-t1")
 	q.mu.Unlock()
 
 	q.ResumeBatch("batch-1")
@@ -1325,11 +1326,11 @@ func TestPauseBatchDoesNotAffectOther(t *testing.T) {
 	now := time.Now()
 	q.mu.Lock()
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "b1-t1", BatchID: "batch-1", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: now})
-	q.heapSet["b1-t1"] = struct{}{}
+	q.heapSet["b1-t1"] = heapItemByID(q.pq, "b1-t1")
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "b2-t1", BatchID: "batch-2", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: now})
-	q.heapSet["b2-t1"] = struct{}{}
+	q.heapSet["b2-t1"] = heapItemByID(q.pq, "b2-t1")
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "b2-t2", BatchID: "batch-2", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: now})
-	q.heapSet["b2-t2"] = struct{}{}
+	q.heapSet["b2-t2"] = heapItemByID(q.pq, "b2-t2")
 	q.mu.Unlock()
 
 	q.PauseBatch("batch-1")
@@ -1404,7 +1405,7 @@ func TestStopClearsPausedHeap(t *testing.T) {
 		cancel:  func() { close(cancelDone) },
 		addedAt: time.Now(),
 	})
-	q.pausedSet["paused-1"] = struct{}{}
+	q.pausedSet["paused-1"] = heapItemByID(q.pausedPQ, "paused-1")
 	q.mu.Unlock()
 
 	q.Stop()
@@ -1431,9 +1432,9 @@ func TestStopClearsMainHeapTasks(t *testing.T) {
 	q.mu.Lock()
 	now := time.Now()
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "main-stop-1", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() { close(cancel1Done) }, addedAt: now})
-	q.heapSet["main-stop-1"] = struct{}{}
+	q.heapSet["main-stop-1"] = heapItemByID(q.pq, "main-stop-1")
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "main-stop-2", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() { close(cancel2Done) }, addedAt: now.Add(time.Millisecond)})
-	q.heapSet["main-stop-2"] = struct{}{}
+	q.heapSet["main-stop-2"] = heapItemByID(q.pq, "main-stop-2")
 	q.mu.Unlock()
 
 	q.Stop()
@@ -1479,7 +1480,7 @@ func TestCancelTaskInPausedHeap(t *testing.T) {
 		cancel:  func() { cancelCalled = true },
 		addedAt: time.Now(),
 	})
-	q.pausedSet[task.ID] = struct{}{}
+	q.pausedSet[task.ID] = heapItemByID(q.pausedPQ, task.ID)
 	q.mu.Unlock()
 
 	if err := q.Cancel(task.ID); err != nil {
@@ -1507,11 +1508,11 @@ func TestQueueFullCountsBothHeaps(t *testing.T) {
 
 	q.mu.Lock()
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "m-1", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.heapSet["m-1"] = struct{}{}
+	q.heapSet["m-1"] = heapItemByID(q.pq, "m-1")
 	heap.Push(&q.pausedPQ, &heapItem{task: models.Task{ID: "p-1", BatchID: "b1", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.pausedSet["p-1"] = struct{}{}
+	q.pausedSet["p-1"] = heapItemByID(q.pausedPQ, "p-1")
 	heap.Push(&q.pausedPQ, &heapItem{task: models.Task{ID: "p-2", BatchID: "b1", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.pausedSet["p-2"] = struct{}{}
+	q.pausedSet["p-2"] = heapItemByID(q.pausedPQ, "p-2")
 	q.mu.Unlock()
 
 	task := makeTestTask("overflow-both")
@@ -1527,9 +1528,9 @@ func TestMetricsIncludesPausedInQueued(t *testing.T) {
 
 	q.mu.Lock()
 	heap.Push(&q.pq, &heapItem{task: models.Task{ID: "m-1", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.heapSet["m-1"] = struct{}{}
+	q.heapSet["m-1"] = heapItemByID(q.pq, "m-1")
 	heap.Push(&q.pausedPQ, &heapItem{task: models.Task{ID: "p-1", BatchID: "b1", Priority: models.PriorityNormal}, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.pausedSet["p-1"] = struct{}{}
+	q.pausedSet["p-1"] = heapItemByID(q.pausedPQ, "p-1")
 	q.mu.Unlock()
 
 	m := q.Metrics()
@@ -1551,9 +1552,9 @@ func TestDequeueRunnableLockedSkipsProxyWhenProxySlotsFull(t *testing.T) {
 	q.proxyConcurrencyLimit = 1
 	q.runningProxied = 1
 	heap.Push(&q.pq, &heapItem{task: proxied, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.heapSet[proxied.ID] = struct{}{}
+	q.heapSet[proxied.ID] = heapItemByID(q.pq, proxied.ID)
 	heap.Push(&q.pq, &heapItem{task: normal, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.heapSet[normal.ID] = struct{}{}
+	q.heapSet[normal.ID] = heapItemByID(q.pq, normal.ID)
 
 	item, isProxied, autoProxy := q.dequeueRunnableLocked()
 	q.mu.Unlock()
@@ -1599,9 +1600,9 @@ func TestDequeueRunnableLockedTreatsAutoProxyTasksAsProxyLimited(t *testing.T) {
 	q.proxyConcurrencyLimit = 1
 	q.runningProxied = 1
 	heap.Push(&q.pq, &heapItem{task: autoProxyTask, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.heapSet[autoProxyTask.ID] = struct{}{}
+	q.heapSet[autoProxyTask.ID] = heapItemByID(q.pq, autoProxyTask.ID)
 	heap.Push(&q.pq, &heapItem{task: anotherAutoProxyTask, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.heapSet[anotherAutoProxyTask.ID] = struct{}{}
+	q.heapSet[anotherAutoProxyTask.ID] = heapItemByID(q.pq, anotherAutoProxyTask.ID)
 
 	item, countsAgainstProxyLimit, autoProxy := q.dequeueRunnableLocked()
 	q.mu.Unlock()
@@ -1638,7 +1639,7 @@ func TestDequeueRunnableLockedDoesNotAutoProxyEmptyProxyConfig(t *testing.T) {
 	q.proxyConcurrencyLimit = 1
 	q.runningProxied = 1
 	heap.Push(&q.pq, &heapItem{task: directTask, ctx: context.Background(), cancel: func() {}, addedAt: time.Now()})
-	q.heapSet[directTask.ID] = struct{}{}
+	q.heapSet[directTask.ID] = heapItemByID(q.pq, directTask.ID)
 
 	item, countsAgainstProxyLimit, autoProxy := q.dequeueRunnableLocked()
 	q.mu.Unlock()

@@ -126,7 +126,7 @@ func (r *Runner) getStepHandlerWithResult(action models.StepAction) stepHandlerW
 func (r *Runner) executeStepWithResult(ctx context.Context, step models.TaskStep, result *models.TaskResult) error {
 	handler := r.getStepHandlerWithResult(step.Action)
 	if handler == nil {
-		return fmt.Errorf("unknown action: %s", step.Action)
+		return r.executePluginStep(ctx, -1, step, result)
 	}
 	return handler(ctx, step, result)
 }
@@ -162,6 +162,7 @@ func (r *Runner) execClick(ctx context.Context, step models.TaskStep) error {
 	}
 	return r.exec.Run(ctx,
 		chromedp.WaitVisible(step.Selector, chromedp.ByQuery),
+		waitClickable(step.Selector),
 		chromedp.Click(step.Selector, chromedp.ByQuery),
 	)
 }
@@ -175,7 +176,7 @@ func (r *Runner) execType(ctx context.Context, step models.TaskStep) error {
 	}
 	return r.exec.Run(ctx,
 		chromedp.WaitVisible(step.Selector, chromedp.ByQuery),
-		chromedp.Clear(step.Selector, chromedp.ByQuery),
+		clearField(step.Selector),
 		chromedp.SendKeys(step.Selector, step.Value, chromedp.ByQuery),
 	)
 }
@@ -397,6 +398,7 @@ func (r *Runner) execDoubleClick(ctx context.Context, step models.TaskStep) erro
 	}
 	return r.exec.Run(ctx,
 		chromedp.WaitVisible(step.Selector, chromedp.ByQuery),
+		waitClickable(step.Selector),
 		chromedp.DoubleClick(step.Selector, chromedp.ByQuery),
 	)
 }
@@ -416,11 +418,11 @@ func (r *Runner) execFileUpload(ctx context.Context, step models.TaskStep) error
 }
 
 func (r *Runner) execNavigateBack(ctx context.Context) error {
-	return r.exec.Run(ctx, chromedp.NavigateBack())
+	return r.exec.Run(ctx, navigateHistory(-1))
 }
 
 func (r *Runner) execNavigateForward(ctx context.Context) error {
-	return r.exec.Run(ctx, chromedp.NavigateForward())
+	return r.exec.Run(ctx, navigateHistory(+1))
 }
 
 func (r *Runner) execReload(ctx context.Context) error {
@@ -471,9 +473,7 @@ func (r *Runner) execWaitFunction(ctx context.Context, step models.TaskStep) err
 	if err := validateEvalScript(step.Value); err != nil {
 		return fmt.Errorf("wait_function validation failed: %w", err)
 	}
-	return r.exec.Run(ctx,
-		chromedp.Poll(step.Value, nil),
-	)
+	return r.exec.Run(ctx, pollTruthy(step.Value))
 }
 
 func (r *Runner) execEmulateDevice(ctx context.Context, step models.TaskStep) error {
@@ -951,21 +951,12 @@ func (r *Runner) execHover(ctx context.Context, step models.TaskStep) error {
 	if err := requireSelector("hover", step.Selector); err != nil {
 		return err
 	}
-	hoverJS := fmt.Sprintf(`(function() {
-		var el = document.querySelector(%q);
-		if (!el) return false;
-		var rect = el.getBoundingClientRect();
-		var event = new MouseEvent('mouseover', {
-			bubbles: true, cancelable: true, view: window,
-			clientX: rect.left + rect.width / 2,
-			clientY: rect.top + rect.height / 2
-		});
-		el.dispatchEvent(event);
-		return true;
-	})()`, step.Selector)
-	var success bool
-	if err := r.exec.Run(ctx, chromedp.Evaluate(hoverJS, &success)); err != nil {
-		return fmt.Errorf("hover: execute hover: %w", err)
+	// A real mouse move (not a synthetic JS event) so CSS :hover applies.
+	if err := r.exec.Run(ctx,
+		chromedp.WaitVisible(step.Selector, chromedp.ByQuery),
+		mouseMoveTo(step.Selector),
+	); err != nil {
+		return fmt.Errorf("hover: %w", err)
 	}
 	return nil
 }
@@ -977,39 +968,12 @@ func (r *Runner) execDragDrop(ctx context.Context, step models.TaskStep) error {
 	if step.Target == "" {
 		return fmt.Errorf("drag_drop: target selector is required")
 	}
-	dragJS := fmt.Sprintf(`(function() {
-		var source = document.querySelector(%q);
-		var target = document.querySelector(%q);
-		if (!source || !target) return false;
-		var sourceRect = source.getBoundingClientRect();
-		var targetRect = target.getBoundingClientRect();
-		var sourceX = sourceRect.left + sourceRect.width / 2;
-		var sourceY = sourceRect.top + sourceRect.height / 2;
-		var targetX = targetRect.left + targetRect.width / 2;
-		var targetY = targetRect.top + targetRect.height / 2;
-		var dispatchDragEvent = function(el, type, x, y) {
-			var event = new MouseEvent(type, {
-				bubbles: true, cancelable: true, view: window,
-				clientX: x, clientY: y,
-				detail: 0, button: 0, buttons: 1
-			});
-			el.dispatchEvent(event);
-		};
-		dispatchDragEvent(source, 'mousedown', sourceX, sourceY);
-		dispatchDragEvent(source, 'mousemove', targetX, targetY);
-		dispatchDragEvent(target, 'mouseover', targetX, targetY);
-		dispatchDragEvent(target, 'mouseenter', targetX, targetY);
-		dispatchDragEvent(target, 'dragenter', targetX, targetY);
-		dispatchDragEvent(target, 'drop', targetX, targetY);
-		dispatchDragEvent(source, 'mouseup', targetX, targetY);
-		return true;
-	})()`, step.Selector, step.Target)
-	var success bool
-	if err := r.exec.Run(ctx, chromedp.Evaluate(dragJS, &success)); err != nil {
-		return fmt.Errorf("drag_drop: execute drag: %w", err)
-	}
-	if !success {
-		return fmt.Errorf("drag_drop: drag operation failed")
+	if err := r.exec.Run(ctx,
+		chromedp.WaitVisible(step.Selector, chromedp.ByQuery),
+		chromedp.WaitVisible(step.Target, chromedp.ByQuery),
+		dragAndDrop(step.Selector, step.Target),
+	); err != nil {
+		return fmt.Errorf("drag_drop: %w", err)
 	}
 	return nil
 }

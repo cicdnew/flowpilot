@@ -21,6 +21,7 @@ import (
 	"flowpilot/internal/logs"
 	"flowpilot/internal/models"
 	"flowpilot/internal/monitoring"
+	"flowpilot/internal/plugin"
 
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/fetch"
@@ -140,6 +141,7 @@ type Runner struct {
 	forceHeadless atomic.Bool
 	exec          Executor
 	debugCtrl     *debugController
+	plugins       atomic.Pointer[plugin.Registry]
 
 	mu                   sync.Mutex
 	captchaSolver        captcha.Solver
@@ -279,7 +281,13 @@ func (r *Runner) acquireBrowserContext(ctx context.Context, effectiveProxy model
 		} else if basePool != nil {
 			r.addLog(result, "info", "using shared browser pool")
 		}
-		return browserCtx, func() { poolRelease() }, nil
+		taskTabCtx, cancelTaskTab := context.WithCancel(browserCtx)
+		stopWatchingTask := context.AfterFunc(ctx, cancelTaskTab)
+		return taskTabCtx, func() {
+			stopWatchingTask()
+			cancelTaskTab()
+			poolRelease()
+		}, nil
 	}
 	allocCtx, allocCancel := r.createAllocator(ctx, effectiveProxy, headless)
 	browserCtx, browserCancel := chromedp.NewContext(allocCtx)
@@ -431,7 +439,7 @@ func (r *Runner) createAllocator(ctx context.Context, proxyConfig models.ProxyCo
 		opts = append(opts, chromedp.ProxyServer(proxyAddr))
 	}
 
-	return chromedp.NewExecAllocator(ctx, opts...)
+	return chromedp.NewExecAllocator(ctx, withAutomationFlags(opts)...)
 }
 
 // runSteps executes task steps using a program-counter (PC) based approach
@@ -601,13 +609,13 @@ func (r *Runner) runSteps(browserCtx context.Context, task models.Task, steps []
 		}
 		stepCtx, stepCancel := context.WithTimeout(browserCtx, timeout)
 		stepStart := time.Now()
-		err := r.executeStep(stepCtx, step, result)
-		durationMs := time.Since(stepStart).Milliseconds()
+		err := r.runPluginStep(stepCtx, pc, step, result)
+		stepDuration := time.Since(stepStart)
+		durationMs := stepDuration.Milliseconds()
 		stepCancel()
 
-		// Record step duration to monitor
 		if r.monitor != nil {
-			r.monitor.RecordStepDuration(durationMs)
+			r.monitor.RecordStep(result.TaskID, string(step.Action), pc, stepDuration, err)
 		}
 
 		if stepLogger != nil {

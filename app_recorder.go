@@ -12,7 +12,6 @@ import (
 	"flowpilot/internal/validation"
 
 	"github.com/google/uuid"
-	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 func (a *App) StartRecording(url string) error {
@@ -38,7 +37,7 @@ func (a *App) StartRecording(url string) error {
 		a.recorderMu.Lock()
 		a.recordedSteps = append(a.recordedSteps, step)
 		a.recorderMu.Unlock()
-		wailsRuntime.EventsEmit(a.ctx, "recorder:step", step)
+		safeWailsEmit(a.ctx, "recorder:step", step)
 	})
 	a.recorderCancel = recCancel
 
@@ -56,7 +55,7 @@ func (a *App) StartRecording(url string) error {
 	}
 
 	a.activeRecorder.SetWSCallback(func(log models.WebSocketLog) {
-		wailsRuntime.EventsEmit(a.ctx, "recorder:websocket", log)
+		safeWailsEmit(a.ctx, "recorder:websocket", log)
 	})
 
 	logInfof(a.ctx, "Recording started for flow %s at %s", flowID, url)

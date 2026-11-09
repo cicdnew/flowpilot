@@ -31,7 +31,7 @@ func logErrorf(ctx context.Context, format string, args ...any) {
 var wailsRuntimeLoggingEnabled atomic.Bool
 
 func safeWailsLog(ctx context.Context, logFn func()) {
-	if ctx == nil || !wailsRuntimeLoggingEnabled.Load() {
+	if !isWailsContext(ctx, "logger") || !wailsRuntimeLoggingEnabled.Load() {
 		return
 	}
 	defer func() {
@@ -40,8 +40,12 @@ func safeWailsLog(ctx context.Context, logFn func()) {
 	logFn()
 }
 
+func isWailsContext(ctx context.Context, key string) bool {
+	return ctx != nil && ctx.Value(key) != nil
+}
+
 func safeWailsEmit(ctx context.Context, eventName string, data ...any) {
-	if ctx == nil {
+	if !isWailsContext(ctx, "events") {
 		return
 	}
 	defer func() {

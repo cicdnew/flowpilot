@@ -10,16 +10,25 @@ import (
 	"flowpilot/internal/browser"
 	"flowpilot/internal/logs"
 	"flowpilot/internal/models"
+	"flowpilot/internal/plugin"
 
 	"github.com/google/uuid"
 )
 
 const flowExportVersion = "1.0"
 
+func isKnownStepAction(action models.StepAction) bool {
+	if models.IsKnownAction(action) {
+		return true
+	}
+	_, ok := plugin.Default().Action(action)
+	return ok
+}
+
 // validateStepActions checks that all step actions are known/supported
 func validateStepActions(steps []models.TaskStep) error {
 	for i, step := range steps {
-		if !models.IsKnownAction(step.Action) {
+		if !isKnownStepAction(step.Action) {
 			return fmt.Errorf("step %d: unsupported action type %q", i+1, step.Action)
 		}
 	}
@@ -31,7 +40,7 @@ func validateStepActions(steps []models.TaskStep) error {
 func collectUnknownStepActionWarnings(steps []models.TaskStep, taskIndex int) []string {
 	warnings := make([]string, 0)
 	for i, step := range steps {
-		if !models.IsKnownAction(step.Action) {
+		if !isKnownStepAction(step.Action) {
 			warning := fmt.Sprintf("task %d step %d: unknown action type %q (imported anyway)", taskIndex, i+1, step.Action)
 			logs.Logger.Warn("import flow warning", "warning", warning, "task_index", taskIndex, "step_index", i+1)
 			warnings = append(warnings, warning)

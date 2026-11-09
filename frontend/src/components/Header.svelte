@@ -11,11 +11,16 @@
     totalSubmitted: 0,
     totalCompleted: 0,
     totalFailed: 0,
+    totalCancelled: 0,
     runningProxied: 0,
     proxyConcurrencyLimit: 0,
     persistenceQueueDepth: 0,
     persistenceQueueCapacity: 0,
     persistenceBatchSize: 0,
+    totalRetried: 0,
+    avgStepDurationMs: 0,
+    workerUtilizationPercent: 0,
+    lastUpdated: '',
   };
 
   const metricCards = [

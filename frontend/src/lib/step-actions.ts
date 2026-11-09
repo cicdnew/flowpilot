@@ -111,6 +111,11 @@ export async function ensureStepActionStateLoaded(): Promise<StepActionState> {
   return loadPromise;
 }
 
+export async function refreshStepActionState(): Promise<StepActionState> {
+  stepActionState.update((state) => ({ ...state, loaded: false }));
+  return ensureStepActionStateLoaded();
+}
+
 export function resetStepActionStateForTest(): void {
   loadPromise = null;
   stepActionState.set({

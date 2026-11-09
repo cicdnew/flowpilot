@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { schedules, recordedFlows } from '../lib/store';
-  import type { ProxyConfig, ProxyRoutingFallback, ProxyRoutingPreset } from '../lib/types';
+  import type { ProxyConfig, ProxyRoutingFallback, ProxyRoutingPreset, Schedule } from '../lib/types';
+  import { main } from '../../wailsjs/go/models';
   import { ListSchedules, CreateSchedule, ToggleSchedule, DeleteSchedule, ListRecordedFlows, ListProxyRoutingPresets } from '../../wailsjs/go/main/App';
 
   let name = '';
@@ -33,7 +34,7 @@
     try {
       errorMessage = '';
       const list = await ListSchedules();
-      schedules.set(list || []);
+      schedules.set((list || []) as Schedule[]);
     } catch (err: any) {
       errorMessage = `Failed to load schedules: ${err?.message || err}`;
     }
@@ -99,7 +100,7 @@
       .filter(t => t.length > 0);
     try {
       errorMessage = '';
-      await CreateSchedule(name, cronExpr, selectedFlowId, url, proxy, priority, headless, tags);
+      await CreateSchedule(main.ScheduleParams.createFrom({ Name: name, CronExpr: cronExpr, FlowID: selectedFlowId, URL: url, ProxyConfig: proxy, Priority: priority, Headless: headless, Tags: tags }));
       name = '';
       cronExpr = '';
       selectedFlowId = '';

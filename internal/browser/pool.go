@@ -216,7 +216,7 @@ func (p *BrowserPool) newTabContext(b *pooledBrowser, _ context.Context) (contex
 }
 
 func (p *BrowserPool) createBrowser(ctx context.Context) (*pooledBrowser, error) {
-	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, p.opts...)
+	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, withAutomationFlags(p.opts)...)
 
 	// browserCtx is the root browser context; its cancel must NOT be called
 	// while the pool entry is alive — cancelling it would kill the browser.

@@ -431,7 +431,7 @@ func (r *Runner) createAllocator(ctx context.Context, proxyConfig models.ProxyCo
 		opts = append(opts, chromedp.ProxyServer(proxyAddr))
 	}
 
-	return chromedp.NewExecAllocator(ctx, opts...)
+	return chromedp.NewExecAllocator(ctx, withAutomationFlags(opts)...)
 }
 
 // runSteps executes task steps using a program-counter (PC) based approach

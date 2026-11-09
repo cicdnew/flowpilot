@@ -637,9 +637,19 @@ func TestExecDragDrop(t *testing.T) {
 	mock := &mockExecutor{}
 	r := newMockRunner(t, mock)
 
+	// The drag runs inside one executor call; real drag behaviour (HTML5 and
+	// mouse-based) is covered against Chrome in interaction_fixes_test.go.
+	if err := r.execDragDrop(context.Background(), models.TaskStep{Selector: "#source", Target: "#target"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.callCount() != 1 {
+		t.Fatalf("expected 1 executor call, got %d", mock.callCount())
+	}
+
+	mock.runErr = errors.New("boom")
 	err := r.execDragDrop(context.Background(), models.TaskStep{Selector: "#source", Target: "#target"})
-	if err == nil || !strings.Contains(err.Error(), "drag operation failed") {
-		t.Fatalf("expected drag operation failed, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "drag_drop: boom") {
+		t.Fatalf("expected wrapped executor error, got: %v", err)
 	}
 }
 
